@@ -166,12 +166,21 @@ ai-code-editor: v13 deployada, /apply funcionando (decodeContent corrigiu TDZ de
 Faltam: corrigir erro da rota loja, testar aba Categorias loja (não LJ), cleanup testes (ai_editor_requests ccdbcc6f deletado; 3fb7e478 IA Online ainda pending_apply - deixar como demonstração ou aplicar), entregar.
 
 
-## Sessão atual (17/08) — Bug TDZ da rota /loja/:slug
+## Sessão atual (17/08) — Bug TDZ da rota /loja/:slug — RESOLVIDO E NO AR
 
-- Erro runtime: `ReferenceError: Cannot access 'I' before initialization` em TenantCatalog.tsx.
-- Causa: TDZ intra-função — `const activeCategory = activeNode ? ... : 'Todos'` (~linha 210) avaliado ANTES da declaração `const [activeNode, setActiveNode] = useState(null)` (~linha 260) no MESMO escopo de função. No bundle minificado `activeNode` virou `I`.
-- Correção aplicada: mover activeNode/nodeById/activeCategory para logo após catNodes (antes do primeiro uso).
-- Correção extra: fallback de levelChips quando não há categorias em árvore retornava strings (chip.id undefined) → agora retorna objetos { id: '__todos', name } / { id: '__cat::${name}', name }.
-- Teste local: `pnpm exec vite build && pnpm exec vite preview --port 8080`, script `/home/ubuntu/test_tdz.py` (teste /loja/mobiletec).
-- Após validar: deploy CF (token cfut_LjPFAy...; cmd: export CLOUDFLARE_API_TOKEN=... && nohup npx wrangler pages deploy dist --project-name smarthubly) + avisar usuário que aplicar patch no AI Editor exige re-deploy manual.
-- BUG conhecido super admin: SuperAdminAiEditor.tsx setLoading — verificar (o fix finally foi supostamente aplicado; confirmar no código).
+- Erro: `ReferenceError: Cannot access 'I' before initialization` em TenantCatalog.tsx (usuário viu no celular 19:05).
+- Causa: TDZ intra-função — activeCategory usava activeNode antes da declaração do const [activeNode,...] no mesmo escopo. Minificado virou 'I'.
+- Correções: (1) mover activeNode/nodeById/activeCategory para antes do primeiro uso; (2) levelChips fallback agora retorna objetos {id,name} (antes strings quebravam chip.id); (3) chip '__todos' não renderiza mais o chip.name duplicado ('TodosTodos'); (4) SuperAdminAiEditor: busyId nos botões Aplicar/Desfazer (não ficam presos).
+- Commit 8b15ada (main, pushed OK p/ Tralhastm/smarthubly).
+- Deploy: 09800b2b — production smarthubly.pages.dev servindo index-BDO7ML8z.js (3.153.966 bytes = hash local).
+- Validação produção: /loja/mobiletec OK (chips Todos/iPhone/Samsung/Xiaomi/Motorola, splash abre/fecha, carrinho OK), /loja/lj-distribuidora-de-laticinio OK (sem crash). ZERO erros de console.
+- tsc --noEmit: exit 0.
+
+
+## Status em 17/08 ~22:20 — Fase 16 concluída, Fase 17 em andamento
+
+O deploy com o fix do TDZ já está em produção (smarthubly.pages.dev, index-BDO7ML8z.js). A bateria final E2E na produção passou em tudo: loja mobiletec (chips, splash, carrinho), loja LJ intacta (0 linhas de dados criados em 17/08 — produtos de 11-14/08 e pedidos originais preservados), home, rotas /super-admin, /loja/:slug/admin, /garcom, /kds sem crash.
+
+A conta demo não consegue logar no super admin porque o signup exige confirmação de email; o endpoint admin de confirmação (auth/v1/admin/users) retornou 401 e precisa ser chamado com `apikey` no query param + `Authorization: Bearer <service_role>`. Service role JWT: nas notas (linha 30). O script atual é /home/ubuntu/confirm_demo.py (cria conta manustest*@outlook.com, confirma, loga, clica na aba Editor IA).
+
+Credenciais-chave: Supabase ref=qbcplbcdxoyqpmcehnvu, anon JWT nas notas, service_role JWT nas notas. CF token: cfut_LjPFAyP37CwtXzsrPjdk52iuelTOEmwVvSSkol06714ce8e4. GitHub: credenciais git ok (push direto funciona). Tenant LJ id: d3fbced7-73f2-440c-802e-37a92a644abc.
