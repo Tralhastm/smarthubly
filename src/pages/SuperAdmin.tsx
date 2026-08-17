@@ -33,8 +33,8 @@ const SuperAdmin = () => {
   });
   const { isReady, user } = useAuthReady();
 
-  // Aplica tema apenas enquanto o Super Admin estÃ¡ montado.
-  // Restaura ao sair pra nÃ£o afetar a aba do cliente / outras rotas.
+  // Aplica tema apenas enquanto o Super Admin estÃÂ¡ montado.
+  // Restaura ao sair pra nÃÂ£o afetar a aba do cliente / outras rotas.
   useEffect(() => {
     const root = document.documentElement;
     const hadDark = root.classList.contains('dark');
@@ -86,17 +86,17 @@ const SuperAdmin = () => {
 
   const tabs = [
     { id: 'dashboard' as Tab, label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
-    { id: 'tenants' as Tab, label: 'ComÃ©rcios', icon: <Store className="h-4 w-4" /> },
-    { id: 'health' as Tab, label: 'SaÃºde Lojas', icon: <Activity className="h-4 w-4" /> },
+    { id: 'tenants' as Tab, label: 'ComÃÂ©rcios', icon: <Store className="h-4 w-4" /> },
+    { id: 'health' as Tab, label: 'SaÃÂºde Lojas', icon: <Activity className="h-4 w-4" /> },
     { id: 'financial' as Tab, label: 'Financeiro', icon: <DollarSign className="h-4 w-4" /> },
-    { id: 'billing' as Tab, label: 'CobranÃ§as', icon: <Receipt className="h-4 w-4" /> },
+    { id: 'billing' as Tab, label: 'CobranÃÂ§as', icon: <Receipt className="h-4 w-4" /> },
     { id: 'fee_requests' as Tab, label: 'Taxas', icon: <Percent className="h-4 w-4" /> },
-    { id: 'metrics' as Tab, label: 'MÃ©tricas', icon: <BarChart3 className="h-4 w-4" /> },
+    { id: 'metrics' as Tab, label: 'MÃÂ©tricas', icon: <BarChart3 className="h-4 w-4" /> },
     { id: 'api_keys' as Tab, label: 'API Keys', icon: <Key className="h-4 w-4" /> },
     { id: 'workers' as Tab, label: 'Workers IA', icon: <Bot className="h-4 w-4" /> },
-    { id: 'users' as Tab, label: 'UsuÃ¡rios', icon: <Users className="h-4 w-4" /> },
-    { id: 'prospecting' as Tab, label: 'ProspecÃ§Ã£o', icon: <MapPin className="h-4 w-4" /> },
-    { id: 'remote_prospecting' as Tab, label: 'ProspecÃ§Ã£o Remota', icon: <Bot className="h-4 w-4" /> },
+    { id: 'users' as Tab, label: 'UsuÃÂ¡rios', icon: <Users className="h-4 w-4" /> },
+    { id: 'prospecting' as Tab, label: 'ProspecÃÂ§ÃÂ£o', icon: <MapPin className="h-4 w-4" /> },
+    { id: 'remote_prospecting' as Tab, label: 'ProspecÃÂ§ÃÂ£o Remota', icon: <Bot className="h-4 w-4" /> },
     { id: 'marketing' as Tab, label: 'Marketing IA', icon: <Sparkles className="h-4 w-4" /> },
     { id: 'usage' as Tab, label: 'Consumo & Margem', icon: <Gauge className="h-4 w-4" /> },
     { id: 'support' as Tab, label: 'Chamados', icon: <LifeBuoy className="h-4 w-4" /> },
@@ -108,10 +108,7 @@ const SuperAdmin = () => {
         <div className="container mx-auto flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <img src={adminLogo} alt="Logo" className="w-9 h-9 rounded-lg object-contain" />
-            <div className="flex flex-col">
-              <h1 className="font-heading text-lg text-gradient leading-none">Super Admin</h1>
-              <span className="text-[10px] text-green-500 font-medium">IA Editor Ativo</span>
-            </div>
+            <h1 className="font-heading text-lg text-gradient">Super Admin</h1>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -154,7 +151,7 @@ const SuperAdmin = () => {
           {tab === 'users' && <SuperAdminUsers />}
           {tab === 'prospecting' && <SuperAdminProspectingHub />}
           {tab === 'remote_prospecting' && <SuperAdminRemoteProspecting />}
-          {tab === 'marketing' && <MarketingPostGenerator scope="platform" allowImage title="Marketing da plataforma â posts, bio, reels..." defaultAudience="donos de pequenos comÃ©rcios locais (bares, hambÃºrguerias, mercadinhos)" />}
+          {tab === 'marketing' && <MarketingPostGenerator scope="platform" allowImage title="Marketing da plataforma Ã¢ÂÂ posts, bio, reels..." defaultAudience="donos de pequenos comÃÂ©rcios locais (bares, hambÃÂºrguerias, mercadinhos)" />}
           {tab === 'usage' && <SuperAdminUsageMonitor />}
           {tab === 'support' && <SuperAdminSupport />}
         </div>
