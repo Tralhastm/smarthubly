@@ -53,6 +53,7 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
 const SuperAdminAiEditor = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [requests, setRequests] = useState<ReqRow[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -98,6 +99,8 @@ const SuperAdminAiEditor = () => {
   };
 
   const handleApply = async (id: string) => {
+    if (busyId) return;
+    setBusyId(id);
     try {
       const { data: session } = await supabase.auth.getSession();
       const res = await fetch(`${FN_URL}/apply`, {
@@ -117,11 +120,15 @@ const SuperAdminAiEditor = () => {
       await loadHistory();
     } catch (e: any) {
       toast.error(String(e?.message || e));
+    } finally {
+      setBusyId(null);
     }
   };
 
   const handleRevert = async (id: string) => {
+    if (busyId) return;
     if (!window.confirm('Reverter esta edição? O código volta ao estado anterior.')) return;
+    setBusyId(id);
     try {
       const { data: session } = await supabase.auth.getSession();
       const res = await fetch(`${FN_URL}/revert`, {
@@ -141,6 +148,8 @@ const SuperAdminAiEditor = () => {
       await loadHistory();
     } catch (e: any) {
       toast.error(String(e?.message || e));
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -227,15 +236,17 @@ const SuperAdminAiEditor = () => {
                   {r.status === 'pending_apply' && (
                     <button
                       onClick={() => void handleApply(r.id)}
-                      className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 px-3 py-1.5 text-xs font-medium text-white"
+                      disabled={busyId === r.id}
+                      className="flex items-center gap-1 rounded-lg bg-gradient-to-r from-violet-500 to-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
                     >
-                      Aplicar
+                      {busyId === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Aplicar
                     </button>
                   )}
                   {(r.status === 'applied' || r.status === 'deployed') && (
                     <button
                       onClick={() => void handleRevert(r.id)}
-                      className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-destructive"
+                      disabled={busyId === r.id}
+                      className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-destructive disabled:opacity-60"
                       title="Reverte esta edição no código"
                     >
                       <Undo2 className="h-3.5 w-3.5" /> Desfazer

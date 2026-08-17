@@ -207,9 +207,15 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteProducts(tenantId);
   const { addToCart } = useCart();
   const [search, setSearch] = useState('');
-  const activeCategory = activeNode ? (nodeById.get(activeNode)?.name || '') : 'Todos';
   // Subcategorias ilimitadas: { id, name, parent_id, hidden } do tenant
   const [catNodes, setCatNodes] = useState<{ id: string; name: string; parent_id: string | null; hidden: boolean }[]>([]);
+  // Seleção em árvore: `activeNode` é o ID do nó selecionado (null = Todos).
+  // Chips exibem: raízes quando nenhum nó é selecionado; senão as FILHAS do nó
+  // selecionado (+ botão voltar ao pai). Assim: clicou "Feminino" → aparecem
+  // Blusas, Calças, Vestidos... clicou "Blusas" → aparecem os produtos dela.
+  const [activeNode, setActiveNode] = useState<string | null>(null);
+  const nodeById = useMemo(() => new Map(catNodes.map(n => [n.id, n])), [catNodes]);
+  const activeCategory = activeNode ? (nodeById.get(activeNode)?.name || '') : 'Todos';
   // Categorias raiz exibidas como chips na barra horizontal
   const [rootIds, setRootIds] = useState<string[]>([]);
 
@@ -253,18 +259,13 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     return () => { cancelled = true; };
   }, [tenantId, allProducts.length]);
 
-  // Seleção em árvore: `activeNode` é o ID do nó selecionado (null = Todos).
-  // Chips exibem: raízes quando nenhum nó é selecionado; senão as FILHAS do nó
-  // selecionado (+ botão voltar ao pai). Assim: clicou "Feminino" → aparecem
-  // Blusas, Calças, Vestidos... clicou "Blusas" → aparecem os produtos dela.
-  const [activeNode, setActiveNode] = useState<string | null>(null);
-
-  const nodeById = useMemo(() => new Map(catNodes.map(n => [n.id, n])), [catNodes]);
-
   // Nós exibidos como chips no nível atual
   const levelChips = useMemo(() => {
     if (catNodes.length === 0) {
-      return ['Todos', ...Array.from(new Set(allProducts.map(p => p.category)))];
+      return [
+        { id: '__todos', name: 'Todos' },
+        ...Array.from(new Set(allProducts.map(p => p.category).filter(Boolean))).map(name => ({ id: `__cat::${name}`, name })),
+      ];
     }
     if (!activeNode) {
       // nível raiz: raízes que tenham produtos vinculados
@@ -375,7 +376,12 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                       : 'bg-secondary text-muted-foreground hover:text-foreground'
                 }`}>
                 {chip.id === '__todos' && <><ChevronLeft className="inline h-3 w-3 mr-0.5" />Todos</>}
-                {chip.id === '__todos__node' && <ChevronLeft className="inline h-3 w-3 mr-0.5" />}{chip.name}
+                {chip.id !== '__todos' && (
+                  <>
+                    {chip.id === '__todos__node' && <ChevronLeft className="inline h-3 w-3 mr-0.5" />}
+                    {chip.name}
+                  </>
+                )}
               </button>
             );
           })}

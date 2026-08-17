@@ -12,7 +12,20 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [
+    react(),
+    mode === "development" && componentTagger(),
+    {
+      name: "circular-warn",
+      onwarn(warning: any, defaultHandler: any) {
+        if (warning.code === "CIRCULAR_DEPENDENCY") {
+          console.error("[CIRCULAR DEPENDENCY]", warning.ids.join(" -> "))
+          return
+        }
+        defaultHandler(warning)
+      },
+    },
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

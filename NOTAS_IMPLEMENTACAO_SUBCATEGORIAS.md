@@ -145,3 +145,33 @@ Próximos passos:
 4. Depois: build local + deploy CF com a mudança aplicada (rodapé), testar loja pública com rodapé.
 5. Depois: testar aba Categorias numa loja (não LJ!) e criar exemplo de subcategorias.
 6. Entregar: avisar usuário sobre Editor IA (usar com cuidado; aplicar = commit no GitHub; reverter sempre disponível), rodapé aplicado como demonstração, subcategorias no ar.
+
+## Estado 17/08 23:02 — ERRO runtime no bundle Belc2fUF
+Deploy d4c9f684 no ar (smarthubly.pages.dev, produção = index-Belc2fUF.js, contem "Powered by SmartHubly"). PORÉM a loja pública https://smarthubly.pages.dev/loja/mobiletec mostra tela de erro: "Cannot access 'I' before initialization".
+Causa provável: pull --rebase + re-commit do TenantStore.tsx gerou o mesmo footer duas vezes? Não (verificado 1x no grep). Mais provável: classe let/const duplicada no bundle por dois arquivos quase idênticos (ex.: TenantStore.tsx local tinha a versão do merge 76e973a que já continha alterações + versão do commit IA; ou a subcategoria/código do próprio bundle). "Cannot access 'I' before initialization" típico de TDZ: classe referenciada antes de ser declarada — frequentemente por import circular ou `import { X }` onde X é classe exportada via `export class` duplicada.
+Código aplicado (commit 280804e local): só mudou src/pages/TenantStore.tsx (adicionou footer). Build OK. Rodapé presente no bundle (grep 1).
+Próximos passos: localizar onde está a referência circular (grep por classes exportadas em TenantStore e imports), ou fazer git diff entre 76e973a e 280804e no TenantStore.tsx para ver diferença real.
+Obs: financeflowstm.company/loja/scorpiossa usa site Lovable antigo (index-CFOJCTnr.js) — o rodapé não se aplica lá (usuário não reclamou disso).
+
+## Estado 17/08 23:05 — Diagnóstico do erro de rota /loja/:slug
+A HOME (smarthubly.pages.dev) funciona perfeitamente no novo bundle Belc2fUF. O erro "Cannot access 'I' before initialization" ocorre SÓ em /loja/:slug (TenantStore page).
+Hipótese: route-based code splitting — o chunk da loja tem import circular. Possível causa real: o bundle tem chunks separados por página (rollup criou chunk da rota loja) e o erro vem do chunk. O "index-Belc2fUF.js" pode importar outro chunk (ex.: index-loja-*.js) com circularidade. Verificar assets listados no HTML da loja: procurar por outros scripts/chunks em /tmp/mstore.html.
+Caminhos de assets conhecidos: grep no HTML da loja por .js e .css.
+Depois: corrigir o circular import (provável: TenantCatalog ↔ CategoryTreeSelect ↔ TenantAdminProducts? não — loja pública usa TenantStore que importa TenantCatalog e CategoryTreeSelect novos. CategoryTreeSelect importa createClient/supabase e tenant helpers; TenantCatalog importou CategoryTreeSelect + useState/useEffect — checar imports novos adicionados que podem circularizar com um helper que importa a página).
+Commits: local 280804e (rodapé + subcategorias + editor IA). Push remoto ok. Deploy CF d4c9f684 no ar.
+Login teste: tralhastm@gmail.com / 99777239Stm$. Anon key: eyJhbGci...Qo3HjuQGA0N-2sA? NÃO — anon atual: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78 (verificar! há 2 anon keys nas notas: uma Qo3Hju (lovable) e Qmg4xB (nova)). Usar sempre Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78 com ref qbcplbcdxoyqpmcehnvu.
+Service role: sb_secret_w5AtXI-SFKeK3zQzG93imA_znS08wFa (funciona) e JWT ey...95mrguy5fWE? — usar sb_secret_w5AtX... como último recurso.
+GH PAT: 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. CF token: cfut_LjPFAyP37CwtXzsrPjdk52iuelTOEmwVvSSkol06714ce8e4. SB mgmt: sbp_fbb1f4879b22f2fa59eb35cdd514b8251a3a18bc.
+ai-code-editor: v13 deployada, /apply funcionando (decodeContent corrigiu TDZ de bytes; commit rodapé 770bc48). Revert funciona. Invoke funciona.
+Faltam: corrigir erro da rota loja, testar aba Categorias loja (não LJ), cleanup testes (ai_editor_requests ccdbcc6f deletado; 3fb7e478 IA Online ainda pending_apply - deixar como demonstração ou aplicar), entregar.
+
+
+## Sessão atual (17/08) — Bug TDZ da rota /loja/:slug
+
+- Erro runtime: `ReferenceError: Cannot access 'I' before initialization` em TenantCatalog.tsx.
+- Causa: TDZ intra-função — `const activeCategory = activeNode ? ... : 'Todos'` (~linha 210) avaliado ANTES da declaração `const [activeNode, setActiveNode] = useState(null)` (~linha 260) no MESMO escopo de função. No bundle minificado `activeNode` virou `I`.
+- Correção aplicada: mover activeNode/nodeById/activeCategory para logo após catNodes (antes do primeiro uso).
+- Correção extra: fallback de levelChips quando não há categorias em árvore retornava strings (chip.id undefined) → agora retorna objetos { id: '__todos', name } / { id: '__cat::${name}', name }.
+- Teste local: `pnpm exec vite build && pnpm exec vite preview --port 8080`, script `/home/ubuntu/test_tdz.py` (teste /loja/mobiletec).
+- Após validar: deploy CF (token cfut_LjPFAy...; cmd: export CLOUDFLARE_API_TOKEN=... && nohup npx wrangler pages deploy dist --project-name smarthubly) + avisar usuário que aplicar patch no AI Editor exige re-deploy manual.
+- BUG conhecido super admin: SuperAdminAiEditor.tsx setLoading — verificar (o fix finally foi supostamente aplicado; confirmar no código).
