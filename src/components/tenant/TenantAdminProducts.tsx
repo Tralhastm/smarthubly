@@ -6,6 +6,8 @@ import ImageUploadField from '@/components/shared/ImageUploadField';
 import MediaGalleryField, { type MediaItem } from '@/components/shared/MediaGalleryField';
 import AutoCategorizeButton from '@/components/shared/AutoCategorizeButton';
 import ProductExtrasEditor from './ProductExtrasEditor';
+import CategoryTreeSelect from './CategoryTreeSelect';
+import TenantCategoriesTree from './TenantCategoriesTree';
 import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Sparkles, Loader2, ImageIcon, Link as LinkIcon, AlertTriangle, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,6 +25,19 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const createFeeReq = useCreateFeeRequest();
   const [editing, setEditing] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [nodesById, setNodesById] = useState<Record<string, { name: string }>>({});
+
+  useEffect(() => {
+    let dead = false;
+    void (async () => {
+      const { data } = await supabase
+        .from('product_categories')
+        .select('id, name')
+        .eq('tenant_id', tenantId);
+      if (!dead) setNodesById(Object.fromEntries((data || []).map(n => [n.id, { name: n.name }])));
+    })();
+    return () => { dead = true; };
+  }, [tenantId]);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [form, setForm] = useState({ name: '', price: '', original_price: '', category: '', description: '', image: '', in_stock: true, supplier_id: '', stock_quantity: '', affiliate_url: '', affiliate_network: '', item_type: 'product' as 'product' | 'service', duration_minutes: '', max_concurrent: '', availability_mode: 'both' as 'both' | 'delivery_only' | 'pickup_only', affiliate_coupon_code: '', affiliate_coupon_discount_price: '', affiliate_coupon_expires_at: '', kitchen_sector: '' });
 
@@ -340,6 +355,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       duration_minutes: form.item_type === 'service' && form.duration_minutes ? parseInt(form.duration_minutes) : null,
       max_concurrent: form.item_type === 'service' && form.max_concurrent ? parseInt(form.max_concurrent) : null,
       availability_mode: form.availability_mode,
+      subcategory_ids: (form as any).subcategory_ids || null,
       kitchen_sector: form.kitchen_sector || null,
     } as any);
     setForm({ name: '', price: '', original_price: '', category: '', description: '', image: '', in_stock: true, supplier_id: '', stock_quantity: '', affiliate_url: '', affiliate_network: '', item_type: 'product', duration_minutes: '', max_concurrent: '', availability_mode: 'both', affiliate_coupon_code: '', affiliate_coupon_discount_price: '', affiliate_coupon_expires_at: '', kitchen_sector: '' });
@@ -628,7 +644,14 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               </div>
             </>
           )}
-          <input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="Categoria" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+          <CategoryTreeSelect
+            tenantId={tenantId}
+            value={(form as any).subcategory_ids || []}
+            onChange={(path) => {
+              const rootName = path.length ? nodesById[path[0]]?.name || form.category : '';
+              setForm({ ...form, category: rootName || form.category, subcategory_ids: path } as any);
+            }}
+          />
           <select value={form.kitchen_sector} onChange={e => setForm({ ...form, kitchen_sector: e.target.value })} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground">
             <option value="">Setor de produção (opcional)</option>
             <option value="cozinha">Cozinha</option>
@@ -781,9 +804,16 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
             <input value={(form as any).original_price ?? 0} onChange={e => setForm({ ...form, original_price: parseFloat(e.target.value) || 0 } as any)} type="number" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="Categoria" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
-          <input value={(form as any).subcategory ?? ''} onChange={e => setForm({ ...form, subcategory: e.target.value } as any)} placeholder="Subcategoria" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+        <div className="space-y-2">
+          <CategoryTreeSelect
+            tenantId={tenantId}
+            value={(form as any).subcategory_ids || []}
+            onChange={(path) => {
+              // mantém a raiz em `category` (compatibilidade) e o caminho em `subcategory_ids`
+              const rootName = path.length ? nodesById[path[0]]?.name || form.category : '';
+              setForm({ ...form, category: rootName || form.category, subcategory_ids: path } as any);
+            }}
+          />
         </div>
         <select value={(form as any).kitchen_sector ?? ''} onChange={e => setForm({ ...form, kitchen_sector: e.target.value || null } as any)} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground">
           <option value="">Setor de produção (KDS / impressão) — opcional</option>
@@ -910,7 +940,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => onSave({ ...form, media } as any)} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-3 py-1.5 text-sm"><Check className="h-3 w-3" /> Salvar</button>
+          <button onClick={() => onSave({ ...form, subcategory_ids: (form as any).subcategory_ids || null, media } as any)} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-3 py-1.5 text-sm"><Check className="h-3 w-3" /> Salvar</button>
           <button onClick={onCancel} className="flex items-center gap-1 rounded-lg bg-secondary text-muted-foreground px-3 py-1.5 text-sm"><X className="h-3 w-3" /> Cancelar</button>
         </div>
       </div>

@@ -10,6 +10,7 @@ import StorefrontEditor from '@/components/tenant/StorefrontEditor';
 import TenantAdminDashboard from '@/components/tenant/TenantAdminDashboard';
 import TenantAdminOrders from '@/components/tenant/TenantAdminOrders';
 import TenantAdminProducts from '@/components/tenant/TenantAdminProducts';
+import TenantCategoriesTree from '@/components/tenant/TenantCategoriesTree';
 import TenantAdminUsers from '@/components/tenant/TenantAdminUsers';
 import TenantFinancialManager from '@/components/tenant/TenantFinancialManager';
 // (TenantBusinessPanel agora é renderizado dentro de TenantFinancialManager como sub-aba "🤖 Clara")
@@ -55,10 +56,10 @@ import TenantAdminSupport from '@/components/tenant/TenantAdminSupport';
 import SofiaChat from '@/components/SofiaChat';
 import ClaraChat from '@/components/tenant/ClaraChat';
 import ClaraFab from '@/components/tenant/ClaraFab';
-import { LayoutDashboard, Package, ShoppingBag, DollarSign, ArrowLeft, LogOut, Users, Store, Factory, Bike, Truck, BarChart3, Palette, Megaphone, Tag, Star, Receipt, MousePointerClick, Printer, CalendarClock, ClipboardList, BookOpen, Settings, Sparkles, Calculator, Plug, Zap, Bot, Activity, Sun, Moon, Wand2, AlertTriangle, CheckCircle2, Mail, Percent, ChefHat } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, DollarSign, ArrowLeft, LogOut, Users, Store, Factory, Bike, Truck, BarChart3, Palette, Megaphone, Tag, Star, Receipt, MousePointerClick, Printer, CalendarClock, ClipboardList, BookOpen, Settings, Sparkles, Calculator, Plug, Zap, Bot, Activity, Sun, Moon, Wand2, AlertTriangle, CheckCircle2, Mail, Percent, ChefHat, Layers } from 'lucide-react';
 import { contrastWarning } from '@/lib/color-utils';
 
-type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi';
+type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'categories' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi';
 
 type GroupId = 'dashboard' | 'operation' | 'catalog' | 'finance' | 'marketing' | 'settings';
 
@@ -201,6 +202,7 @@ const TenantAdmin = () => {
     { id: 'drivers', label: 'Motoboys', icon: <Bike className="h-4 w-4" />, group: 'operation' },
     { id: 'printer', label: 'Impressora', icon: <Printer className="h-4 w-4" />, group: 'operation' },
     { id: 'products', label: 'Produtos', icon: <Package className="h-4 w-4" />, group: 'catalog' },
+    { id: 'categories', label: 'Categorias', icon: <Layers className="h-4 w-4" />, group: 'catalog' },
     { id: 'quotes', label: 'Orçamento', icon: <Calculator className="h-4 w-4" />, group: 'catalog' },
     { id: 'ficha', label: 'Ficha Técnica/CMV', icon: <BookOpen className="h-4 w-4" />, group: 'finance' },
     { id: 'stock', label: 'Estoque', icon: <Package className="h-4 w-4" />, group: 'catalog' },
@@ -389,6 +391,7 @@ const TenantAdmin = () => {
             <TenantQuickSale tenantId={tenant.id} printerEnabled={(tenant as any).printer_enabled} />
           )}
           {tab === 'products' && <TenantAdminProducts tenantId={tenant.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate} />}
+          {tab === 'categories' && <TenantCategoriesTree tenantId={tenant.id} />}
           {tab === 'suppliers' && <TenantAdminSuppliers tenantId={tenant.id} slug={slug!} />}
           {tab === 'consultora' && <TenantAdminDropshippingWhatsApp tenantId={tenant.id} />}
           {tab === 'drivers' && <TenantAdminDrivers tenantId={tenant.id} slug={slug!} />}

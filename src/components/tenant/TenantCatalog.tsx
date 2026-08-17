@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useInfiniteProducts, type Product } from '@/hooks/useProducts';
 import { useCart } from '@/contexts/CartContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, ShoppingCart, Package, Loader2, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, ShoppingCart, Package, Loader2, Calendar, ChevronDown, ChevronUp, ChevronLeft } from 'lucide-react';
 import SupplierChatCustomer from './SupplierChatCustomer';
 import ProductOptionsPicker from './ProductOptionsPicker';
 import MediaCarousel from '@/components/shared/MediaCarousel';
@@ -207,7 +207,28 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteProducts(tenantId);
   const { addToCart } = useCart();
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState('Todos');
+  const activeCategory = activeNode ? (nodeById.get(activeNode)?.name || '') : 'Todos';
+  // Subcategorias ilimitadas: { id, name, parent_id, hidden } do tenant
+  const [catNodes, setCatNodes] = useState<{ id: string; name: string; parent_id: string | null; hidden: boolean }[]>([]);
+  // Categorias raiz exibidas como chips na barra horizontal
+  const [rootIds, setRootIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from('product_categories')
+        .select('id, name, parent_id, hidden')
+        .eq('tenant_id', tenantId)
+        .order('sort_order', { ascending: true });
+      if (!cancelled && data) {
+        setCatNodes(data as any);
+        setRootIds(data.filter(n => !n.parent_id && !n.hidden).map(n => n.id));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [tenantId]);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
   const [extrasIds, setExtrasIds] = useState<Set<string>>(new Set());
@@ -232,21 +253,57 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     return () => { cancelled = true; };
   }, [tenantId, allProducts.length]);
 
-  const categories = useMemo(() => ['Todos', ...Array.from(new Set(allProducts.map(p => p.category)))], [allProducts]);
+  // Seleção em árvore: `activeNode` é o ID do nó selecionado (null = Todos).
+  // Chips exibem: raízes quando nenhum nó é selecionado; senão as FILHAS do nó
+  // selecionado (+ botão voltar ao pai). Assim: clicou "Feminino" → aparecem
+  // Blusas, Calças, Vestidos... clicou "Blusas" → aparecem os produtos dela.
+  const [activeNode, setActiveNode] = useState<string | null>(null);
+
+  const nodeById = useMemo(() => new Map(catNodes.map(n => [n.id, n])), [catNodes]);
+
+  // Nós exibidos como chips no nível atual
+  const levelChips = useMemo(() => {
+    if (catNodes.length === 0) {
+      return ['Todos', ...Array.from(new Set(allProducts.map(p => p.category)))];
+    }
+    if (!activeNode) {
+      // nível raiz: raízes que tenham produtos vinculados
+      const used = new Set(allProducts.map(p => (p as any).subcategory_ids?.[0]).filter(Boolean));
+      return [{ id: '__todos', name: 'Todos' }, ...rootIds.filter(id => used.has(id)).map(id => nodeById.get(id)!).filter(Boolean)];
+    }
+    const parent = nodeById.get(activeNode);
+    if (!parent) return [{ id: '__todos', name: 'Todos' }];
+    // filhos visíveis do nó ativo que tenham produtos vinculados
+    const childIds = catNodes.filter(c => c.parent_id === activeNode && !c.hidden).map(c => c.id);
+    // produtos vinculados a descendentes do nó ativo (qualquer nível abaixo dele)
+    const used = new Set(
+      allProducts
+        .map(p => ((p as any).subcategory_ids || []).filter(Boolean))
+        .filter(path => path.includes(activeNode))
+        .flatMap(path => path[path.length - 1] ? [path[path.length - 1]] : [])
+    );
+    const kids = childIds.filter(id => used.has(id)).map(id => nodeById.get(id)!).filter(Boolean);
+    return [parent, { id: '__todos__node', name: `Todos em ${parent.name}` }, ...kids];
+  }, [catNodes, allProducts, activeNode, rootIds, nodeById]);
+
+  const categoryMatches = (p: any): boolean => {
+    if (!activeNode) return true; // Todos
+    const path = (p.subcategory_ids || []).filter(Boolean);
+    return path.includes(activeNode);
+  };
 
   const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
   const filtered = useMemo(() => {
     const q = normalize(search.trim());
     return allProducts.filter(p => {
-      if (!q) return activeCategory === 'Todos' || p.category === activeCategory;
+      if (!q) return categoryMatches(p);
       const words = q.split(/\s+/).filter(Boolean);
       const haystack = normalize(`${p.name} ${p.description || ''} ${p.category || ''}`);
       const matchSearch = words.every(w => haystack.includes(w));
-      const matchCategory = activeCategory === 'Todos' || p.category === activeCategory;
-      return matchSearch && matchCategory;
+      return matchSearch && categoryMatches(p);
     });
-  }, [allProducts, search, activeCategory]);
+  }, [allProducts, search, categoryMatches]);
 
   useEffect(() => {
     if (!sentinelRef.current || !hasNextPage) return;
@@ -262,14 +319,19 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   // IMPORTANTE: este hook precisa ser chamado ANTES de qualquer return condicional
   const grouped = useMemo(() => {
     if (layout !== 'list' && layout !== 'compact') return null;
+    const byId = new Map(catNodes.map(n => [n.id, n]));
     const map = new Map<string, Product[]>();
     filtered.forEach(p => {
-      const c = p.category || 'Outros';
+      // se o produto tem path de subcategoria, usa o nome da FOLHA como seção;
+      // senão usa o texto legado de category.
+      const path = (p as any).subcategory_ids?.filter(Boolean) || [];
+      const leaf = path[path.length - 1];
+      const c = (leaf && byId.has(leaf) ? byId.get(leaf)?.name : p.category) || 'Outros';
       if (!map.has(c)) map.set(c, []);
       map.get(c)!.push(p);
     });
     return Array.from(map.entries());
-  }, [filtered, layout]);
+  }, [filtered, layout, catNodes]);
 
   if (isLoading) {
     return (
@@ -291,15 +353,53 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
         </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-3 mb-6 scrollbar-hide">
-        {categories.map(cat => (
-          <button key={cat} onClick={() => setActiveCategory(cat)}
-            className={`whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-all ${
-              activeCategory === cat ? 'gradient-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
-            }`}>
-            {cat}
-          </button>
-        ))}
+      {/* Navegação em árvore: mostra o nível atual */}
+      <div className="flex flex-col gap-1 mb-5">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          {levelChips.map(chip => {
+            const isTodos = chip.id === '__todos' || chip.id === '__todos__node';
+            const selected = isTodos
+              ? (chip.id === '__todos' ? activeNode === null : activeNode !== null)
+              : activeNode === chip.id;
+            return (
+              <button key={chip.id} onClick={() => {
+                  if (chip.id === '__todos') setActiveNode(null);
+                  else if (chip.id === '__todos__node') {/* mantém o filtro do nível atual */}
+                  else setActiveNode(activeNode === chip.id ? null : chip.id);
+                }}
+                className={`whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-all shrink-0 ${
+                  selected
+                    ? 'gradient-primary text-primary-foreground'
+                    : chip.id === '__todos__node'
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-secondary text-muted-foreground hover:text-foreground'
+                }`}>
+                {chip.id === '__todos' && <><ChevronLeft className="inline h-3 w-3 mr-0.5" />Todos</>}
+                {chip.id === '__todos__node' && <ChevronLeft className="inline h-3 w-3 mr-0.5" />}{chip.name}
+              </button>
+            );
+          })}
+        </div>
+        {/* Breadcrumb clicável quando estiver dentro da árvore */}
+        {activeNode && (() => {
+          const parts: { id: string | null; name: string }[] = [{ id: null, name: 'Todos' }];
+          let cur: typeof catNodes[number] | undefined = nodeById.get(activeNode);
+          const trail: (typeof catNodes[number])[] = [];
+          while (cur) { trail.unshift(cur); cur = cur.parent_id ? nodeById.get(cur.parent_id) : undefined; }
+          return (
+            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              {trail.map((t, i) => (
+                <span key={t.id} className="flex items-center gap-1">
+                  {i > 0 && <span>/</span>}
+                  <button onClick={() => setActiveNode(i === trail.length - 1 ? trail[i - 1]?.id ?? null : t.id)}
+                    className={`hover:text-primary ${i === trail.length - 1 ? 'font-semibold text-primary' : ''}`}>
+                    {t.name}
+                  </button>
+                </span>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {layout === 'grid' && (
