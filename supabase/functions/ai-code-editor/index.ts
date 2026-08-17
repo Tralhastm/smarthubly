@@ -32,6 +32,13 @@ function j(body: unknown, status = 200) {
   });
 }
 
+// Decodifica o conteúdo de um blob do GitHub (base64) em texto UTF-8 correto.
+// atob() puro gera string de bytes que quebra indexOf/replace com caracteres multibyte.
+function decodeContent(b64: string): string {
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+}
+
 const GH_OWNER = "Tralhastm";
 const GH_REPO = "smarthubly";
 const BRANCH_PREFIX = "ai/edit-";
@@ -134,7 +141,7 @@ Deno.serve(async (req) => {
         if (!match) continue;
         try {
           const blob = await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/blobs/${match.sha}`, pat);
-          const content = atob(blob.content);
+          const content = decodeContent(blob.content);
           if (content.length <= 120 * 1024) ctx.push({ path: p, content });
         } catch { /* ignora arquivo ilegível */ }
       }
@@ -234,7 +241,7 @@ Regras:
         let content = "";
         if (existing) {
           const blob = await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/blobs/${existing.sha}`, pat);
-          content = atob(blob.content);
+          content = decodeContent(blob.content);
         }
         // Aplica substituição
         const idx = content.indexOf(p.old);
@@ -296,7 +303,7 @@ Regras:
         const existing = newTree.find((t) => t.path === p.path);
         if (!existing) continue;
         const blob = await gh(`/repos/${GH_OWNER}/${GH_REPO}/git/blobs/${existing.sha}`, pat);
-        let content = atob(blob.content);
+        let content = decodeContent(blob.content);
         const idx = content.indexOf(p.new);
         if (idx === -1) return j({ error: `revert_failed: ${p.path}` }, 422);
         content = content.slice(0, idx) + p.old + content.slice(idx + p.new.length);
