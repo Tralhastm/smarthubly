@@ -109,7 +109,7 @@ const SuperAdmin = () => {
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="container mx-auto flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <img src={adminLogo} alt="Logo" className="w-10 h-10 object-contain brightness-110 contrast-125" />
+            <img src={adminLogo} alt="Logo" className="w-9 h-9 rounded-lg object-contain" />
             <h1 className="font-heading text-lg text-gradient">Super Admin</h1>
           </div>
           <div className="flex items-center gap-2">
