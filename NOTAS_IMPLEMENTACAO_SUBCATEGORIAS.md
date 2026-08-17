@@ -184,3 +184,13 @@ O deploy com o fix do TDZ já está em produção (smarthubly.pages.dev, index-B
 A conta demo não consegue logar no super admin porque o signup exige confirmação de email; o endpoint admin de confirmação (auth/v1/admin/users) retornou 401 e precisa ser chamado com `apikey` no query param + `Authorization: Bearer <service_role>`. Service role JWT: nas notas (linha 30). O script atual é /home/ubuntu/confirm_demo.py (cria conta manustest*@outlook.com, confirma, loga, clica na aba Editor IA).
 
 Credenciais-chave: Supabase ref=qbcplbcdxoyqpmcehnvu, anon JWT nas notas, service_role JWT nas notas. CF token: cfut_LjPFAyP37CwtXzsrPjdk52iuelTOEmwVvSSkol06714ce8e4. GitHub: credenciais git ok (push direto funciona). Tenant LJ id: d3fbced7-73f2-440c-802e-37a92a644abc.
+
+
+## Estado 17/08 23:15 — Bug "Failed to send a request to the Edge Function" CORRIGIDO (relatado pelo usuário no painel admin da CK Collection)
+
+- Causa: edge function `auto-categorize` estava com BOOT_ERROR em runtime (versão 10 corrompida/antiga; entrypoint no /tmp). Todas as funções listadas na plataforma como ACTIVE, mas o runtime falhava só nessa.
+- Fix: redeploy via Management API — POST https://api.supabase.com/v1/projects/{REF}/functions/deploy?slug=auto-categorize com files={"file":("index.ts", SRC)}, data={"metadata": {"name":"auto-categorize","entrypoint_path":"index.ts","import_map":false}}, headers Authorization/apikey=token sbp_fbb1f4879b22f2fa59eb35cdd514b8251a3a18bc. Retornou 201, versão 11 ACTIVE.
+- Validação: invoke com 4 produtos reais da CK (tenant e90309b6, slug ck-collection) → 200 {"ok":true,"results":[...],"provider":"worker"}.
+- Outras functions testadas após redeploy (todas OK em runtime): search-google-images, enhance-image, parse-products-txt, generate-product-description, ai-editor, calculate-distance, estimate-quote, ai-code-editor.
+- Management API de logs (api.supabase.com/v1/projects/{ref}/functions/logs) exige PAT da plataforma (JWT falha com service role/sbp).
+- O usuário relatou no print: painel admin CK Collection OK (subcategorias Feminino › Vestidos › Midi/Linho exibindo), erro vermelho era só a auto-categorize.
