@@ -190,8 +190,8 @@ const TenantStore = () => {
         />
       )}
 
-      <footer className="py-6 mt-auto">
-        <p className="text-center text-xs text-muted-foreground/50 font-medium">
+      <footer className="py-10 mt-auto opacity-40">
+        <p className="text-center text-[10px] tracking-widest uppercase text-muted-foreground font-medium">
           Powered by SmartHubly
         </p>
       </footer>
