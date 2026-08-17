@@ -189,6 +189,12 @@ const TenantStore = () => {
           tenantId={tenant.id}
         />
       )}
+
+      <footer className="py-6 mt-auto">
+        <p className="text-center text-xs text-muted-foreground/50 font-medium">
+          Powered by SmartHubly
+        </p>
+      </footer>
     </div>
   );
 };
