@@ -1,0 +1,1 @@
+ALTER TABLE public.fiscal_settings ADD COLUMN IF NOT EXISTS nfeio_company_id TEXT;

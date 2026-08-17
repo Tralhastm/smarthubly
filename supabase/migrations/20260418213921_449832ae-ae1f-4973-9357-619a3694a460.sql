@@ -1,0 +1,1 @@
+DELETE FROM public.driver_locations WHERE driver_id = '6bf9c635-f90c-4cff-8a2d-28096e97200f';

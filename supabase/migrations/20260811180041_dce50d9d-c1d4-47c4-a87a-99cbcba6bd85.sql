@@ -1,0 +1,1 @@
+update public.tenants set logo_url = 'https://zcnuvemvhhspfrvbttsw.supabase.co/storage/v1/object/public/product-images/logos/lj-distribuidora-transparent.png' where id = 'd3fbced7-73f2-440c-802e-37a92a644abc';

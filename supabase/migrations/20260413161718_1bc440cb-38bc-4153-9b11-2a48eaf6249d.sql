@@ -1,0 +1,1 @@
+ALTER TABLE public.tenants ADD COLUMN mercadopago_token text DEFAULT NULL;

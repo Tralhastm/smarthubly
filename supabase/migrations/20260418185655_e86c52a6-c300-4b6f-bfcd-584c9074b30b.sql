@@ -1,0 +1,2 @@
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS lalamove_payer text NOT NULL DEFAULT 'store';
+COMMENT ON COLUMN public.orders.lalamove_payer IS 'Quem arca com o custo da corrida Lalamove: store (loja) ou supplier (fornecedor)';

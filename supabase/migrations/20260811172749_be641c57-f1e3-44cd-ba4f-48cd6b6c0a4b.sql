@@ -1,0 +1,1 @@
+UPDATE public.tenants SET logo_url = 'https://zcnuvemvhhspfrvbttsw.supabase.co/storage/v1/object/public/product-images/logos/lj-logo-transparente.png' WHERE slug = 'lj-distribuidora-de-laticinio';

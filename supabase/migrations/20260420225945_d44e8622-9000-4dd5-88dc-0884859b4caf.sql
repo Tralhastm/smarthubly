@@ -1,0 +1,2 @@
+ALTER TABLE public.ai_workers ADD COLUMN IF NOT EXISTS worker_type text NOT NULL DEFAULT 'chat';
+CREATE INDEX IF NOT EXISTS idx_ai_workers_type_active ON public.ai_workers(worker_type, is_active, is_exhausted);

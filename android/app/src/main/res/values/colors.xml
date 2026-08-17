@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fallback de fundo para o tema do app — evita tela preta em qualquer
+         situação (abertura, retorno do background, falha da splash) -->
+    <color name="colorPrimary">#10b981</color>
+    <color name="colorPrimaryDark">#059669</color>
+    <color name="colorAccent">#10b981</color>
+    <color name="launchBackground">#10b981</color>
+</resources>

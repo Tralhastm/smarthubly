@@ -1,0 +1,1 @@
+ALTER TABLE public.remote_prospects ADD COLUMN IF NOT EXISTS cnpj TEXT;

@@ -1,0 +1,1 @@
+ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS admin_theme_mode TEXT DEFAULT 'light' CHECK (admin_theme_mode IN ('light','dark'));

@@ -1,0 +1,1 @@
+ALTER TABLE public.ai_workers ADD COLUMN exhausted_at timestamp with time zone DEFAULT NULL;

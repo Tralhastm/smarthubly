@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>SmartHubly Garçom — App</title>
+<style>
+  :root { --primary: #10b981; --bg: #0f172a; --card: #1e293b; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: #f1f5f9; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+  .logo { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+  .logo span { color: var(--primary); }
+  .sub { color: #94a3b8; font-size: 14px; margin-bottom: 28px; text-align: center; }
+  .card { background: var(--card); border-radius: 16px; padding: 24px; width: 100%; max-width: 400px; }
+  label { display: block; font-size: 13px; color: #cbd5e1; margin: 14px 0 6px; font-weight: 600; }
+  input { width: 100%; padding: 14px; border-radius: 10px; border: 1px solid #334155; background: #0f172a; color: #f1f5f9; font-size: 16px; outline: none; }
+  input:focus { border-color: var(--primary); }
+  button { width: 100%; margin-top: 20px; padding: 15px; border-radius: 10px; border: none; background: var(--primary); color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
+  button:active { opacity: .85; }
+  .err { color: #f87171; font-size: 13px; margin-top: 12px; min-height: 18px; text-align: center; }
+  .hint { color: #64748b; font-size: 12px; margin-top: 16px; text-align: center; line-height: 1.5; }
+  .open-note { color: #94a3b8; font-size: 13px; margin-top: 18px; text-align: center; }
+  .spinner { width: 34px; height: 34px; border: 4px solid #334155; border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="logo">SmartHubly <span>Garçom</span></div>
+  <p class="sub" id="status">Abrindo o painel...</p>
+  <div id="setup" class="card" style="display:none">
+    <label>URL do garçom (cole o link completo)</label>
+    <input id="url" type="url" placeholder="https://smarthubly.pages.dev/loja/sua-loja/garcom/abc123..." autocomplete="off">
+    <button id="go">Abrir painel</button>
+    <p class="err" id="err"></p>
+    <p class="hint">O link é gerado em: painel da loja → Mesas → Garçons → copiar "Link do painel do garçom". Ele já contém o token de acesso — não precisa de senha.</p>
+  </div>
+  <div id="boot" class="card" style="display:none">
+    <div class="spinner"></div>
+    <p class="open-note" id="bootNote">Conectando ao último painel...</p>
+  </div>
+  <script>
+    // Ao voltar do background o Android pode suspender o WebView com a
+    // página em estado incompleto (tela branca). Recarrega automaticamente.
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        const t = setTimeout(() => { location.reload(); }, 250);
+        window.addEventListener('beforeunload', () => clearTimeout(t));
+      }
+    });
+    const params = new URLSearchParams(location.search);
+    const pre = params.get('u') || params.get('url');
+    const saved = localStorage.getItem('waiter-app-url');
+    if (pre) {
+      // Deep link vindo de fora: valida e segue direto
+      let u = pre.trim();
+      if (!u.startsWith('http')) u = 'https://' + u;
+      if (/garcom\/[^/]+/.test(new URL(u).pathname)) {
+        localStorage.setItem('waiter-app-url', u);
+        location.replace(u);
+      } else {
+        showSetup('Link inválido. Use o formato /loja/.../garcom/...');
+      }
+    } else if (saved && /garcom\/[^/]+/.test(new URL(saved).pathname)) {
+      // App abre DIRETO no último painel do garçom (sem pedir nada)
+      showBoot();
+      // Dá um tempinho para o usuário ver a transição e então segue
+      setTimeout(() => { location.replace(saved); }, 400);
+    } else {
+      showSetup('');
+    }
+    function showSetup(msg) {
+      document.getElementById('status').textContent = 'Bem-vindo ao app do garçom';
+      document.getElementById('setup').style.display = 'block';
+      if (msg) document.getElementById('err').textContent = msg;
+      const input = document.getElementById('url');
+      const errEl = document.getElementById('err');
+      function go() {
+        let u = input.value.trim();
+        errEl.textContent = '';
+        if (!u) { errEl.textContent = 'Cole o link do garçom.'; return; }
+        if (!u.startsWith('http')) u = 'https://' + u;
+        try {
+          const p = new URL(u);
+          if (!/garcom\/[^/]+/.test(p.pathname)) { errEl.textContent = 'O link precisa ser do formato /loja/.../garcom/...'; return; }
+          localStorage.setItem('waiter-app-url', u);
+          location.href = u;
+        } catch (e) { errEl.textContent = 'Link inválido.'; }
+      }
+      document.getElementById('go').addEventListener('click', go);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+    }
+    function showBoot() {
+      document.getElementById('status').textContent = '';
+      document.getElementById('boot').style.display = 'block';
+    }
+  </script>
+</body>
+</html>

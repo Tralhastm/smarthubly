@@ -1,0 +1,54 @@
+project_id = "zcnuvemvhhspfrvbttsw"
+
+[functions.process-email-queue]
+verify_jwt = false
+
+[functions.send-transactional-email]
+verify_jwt = false
+
+[functions.preview-transactional-email]
+verify_jwt = false
+
+[functions.handle-email-unsubscribe]
+verify_jwt = false
+
+[functions.handle-email-suppression]
+verify_jwt = false
+
+[functions.refresh-affiliate-prices]
+verify_jwt = false
+
+[functions.public-parse-products]
+verify_jwt = false
+
+[functions.public-chat-financial]
+verify_jwt = false
+
+[functions.sync-to-financeflow]
+verify_jwt = false
+
+[functions.public-import-products]
+verify_jwt = false
+
+[functions.pull-for-financeflow]
+verify_jwt = false
+
+[functions.clara-empresarial]
+verify_jwt = false
+
+[functions.driver-manifest]
+verify_jwt = false
+
+[functions.unsubscribe-public]
+verify_jwt = false
+
+[functions.send-marketing-campaign]
+verify_jwt = false
+
+[functions.pagbank-webhook]
+verify_jwt = false
+
+[functions.public-workers-bridge]
+verify_jwt = false
+
+

@@ -1,0 +1,2 @@
+ALTER TABLE public.financial_entries ADD COLUMN IF NOT EXISTS due_date timestamp with time zone;
+CREATE INDEX IF NOT EXISTS idx_financial_entries_due ON public.financial_entries(tenant_id, due_date) WHERE is_credit_card = true AND paid = false;

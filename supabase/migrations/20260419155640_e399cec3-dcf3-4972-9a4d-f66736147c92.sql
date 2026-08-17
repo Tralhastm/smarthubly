@@ -1,0 +1,1 @@
+UPDATE tenants SET lalamove_enabled = false WHERE slug = 'lanchar';

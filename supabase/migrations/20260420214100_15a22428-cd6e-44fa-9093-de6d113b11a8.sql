@@ -1,0 +1,2 @@
+UPDATE public.ai_workers SET is_active = true, is_exhausted = false, exhausted_at = NULL WHERE base_url LIKE '%ai-generate-image';
+UPDATE public.api_keys SET is_exhausted = false WHERE provider = 'google_ai';
