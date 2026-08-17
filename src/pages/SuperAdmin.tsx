@@ -34,8 +34,8 @@ const SuperAdmin = () => {
   });
   const { isReady, user } = useAuthReady();
 
-  // Aplica tema apenas enquanto o Super Admin está montado.
-  // Restaura ao sair pra não afetar a aba do cliente / outras rotas.
+  // Aplica tema apenas enquanto o Super Admin estÃÂ¡ montado.
+  // Restaura ao sair pra nÃÂ£o afetar a aba do cliente / outras rotas.
   useEffect(() => {
     const root = document.documentElement;
     const hadDark = root.classList.contains('dark');
@@ -87,17 +87,17 @@ const SuperAdmin = () => {
 
   const tabs = [
     { id: 'dashboard' as Tab, label: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
-    { id: 'tenants' as Tab, label: 'Comércios', icon: <Store className="h-4 w-4" /> },
-    { id: 'health' as Tab, label: 'Saúde Lojas', icon: <Activity className="h-4 w-4" /> },
+    { id: 'tenants' as Tab, label: 'ComÃÂ©rcios', icon: <Store className="h-4 w-4" /> },
+    { id: 'health' as Tab, label: 'SaÃÂºde Lojas', icon: <Activity className="h-4 w-4" /> },
     { id: 'financial' as Tab, label: 'Financeiro', icon: <DollarSign className="h-4 w-4" /> },
-    { id: 'billing' as Tab, label: 'Cobranças', icon: <Receipt className="h-4 w-4" /> },
+    { id: 'billing' as Tab, label: 'CobranÃÂ§as', icon: <Receipt className="h-4 w-4" /> },
     { id: 'fee_requests' as Tab, label: 'Taxas', icon: <Percent className="h-4 w-4" /> },
-    { id: 'metrics' as Tab, label: 'Métricas', icon: <BarChart3 className="h-4 w-4" /> },
+    { id: 'metrics' as Tab, label: 'MÃÂ©tricas', icon: <BarChart3 className="h-4 w-4" /> },
     { id: 'api_keys' as Tab, label: 'API Keys', icon: <Key className="h-4 w-4" /> },
     { id: 'workers' as Tab, label: 'Workers IA', icon: <Bot className="h-4 w-4" /> },
-    { id: 'users' as Tab, label: 'Usuários', icon: <Users className="h-4 w-4" /> },
-    { id: 'prospecting' as Tab, label: 'Prospecção', icon: <MapPin className="h-4 w-4" /> },
-    { id: 'remote_prospecting' as Tab, label: 'Prospecção Remota', icon: <Bot className="h-4 w-4" /> },
+    { id: 'users' as Tab, label: 'UsuÃÂ¡rios', icon: <Users className="h-4 w-4" /> },
+    { id: 'prospecting' as Tab, label: 'ProspecÃÂ§ÃÂ£o', icon: <MapPin className="h-4 w-4" /> },
+    { id: 'remote_prospecting' as Tab, label: 'ProspecÃÂ§ÃÂ£o Remota', icon: <Bot className="h-4 w-4" /> },
     { id: 'marketing' as Tab, label: 'Marketing IA', icon: <Sparkles className="h-4 w-4" /> },
     { id: 'usage' as Tab, label: 'Consumo & Margem', icon: <Gauge className="h-4 w-4" /> },
     { id: 'support' as Tab, label: 'Chamados', icon: <LifeBuoy className="h-4 w-4" /> },
@@ -153,7 +153,7 @@ const SuperAdmin = () => {
           {tab === 'users' && <SuperAdminUsers />}
           {tab === 'prospecting' && <SuperAdminProspectingHub />}
           {tab === 'remote_prospecting' && <SuperAdminRemoteProspecting />}
-          {tab === 'marketing' && <MarketingPostGenerator scope="platform" allowImage title="Marketing da plataforma — posts, bio, reels..." defaultAudience="donos de pequenos comércios locais (bares, hambúrguerias, mercadinhos)" />}
+          {tab === 'marketing' && <MarketingPostGenerator scope="platform" allowImage title="Marketing da plataforma Ã¢ÂÂ posts, bio, reels..." defaultAudience="donos de pequenos comÃÂ©rcios locais (bares, hambÃÂºrguerias, mercadinhos)" />}
           {tab === 'usage' && <SuperAdminUsageMonitor />}
           {tab === 'support' && <SuperAdminSupport />}
           {tab === 'ai_editor' && <SuperAdminAiEditor />}
