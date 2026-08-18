@@ -8,6 +8,10 @@ import { toast } from 'sonner';
 
 const AGENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sofia-store-agent`;
 
+// Detecta intenção de aplicar direto: "aplica", "aplica tudo", "faz e aplica", "aplica ja"
+const wantsAutoApply = (text: string): boolean =>
+  /\baplica\b/i.test(text) || /\baplicar\b/i.test(text) || /\bj\s*[aá]\s+aplica/i.test(text) || /faz\s+e\s+aplica/i.test(text);
+
 type PlanItem = {
   id: string;
   newName?: string;
@@ -91,9 +95,9 @@ const SofiaStoreAgent = ({ tenantId, tenantName }: { tenantId: string; tenantNam
     setCurrent(null);
     setDetails(null);
     try {
-      const data = await invoke('plan', { tenantId, messages: [{ role: 'user', content: text }] });
+      const data = await invoke('plan', { tenantId, messages: [{ role: 'user', content: text }], autoApply: wantsAutoApply(text) });
       setCurrent(data);
-      toast.success('Sofia montou o plano! Revise antes de aplicar.');
+      toast.success(data.status === 'applied' ? 'Sofia aplicou as mudanças direto!' : 'Sofia montou o plano! Revise antes de aplicar.');
       await loadPlans();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Falha ao gerar o plano');
@@ -181,7 +185,7 @@ const SofiaStoreAgent = ({ tenantId, tenantName }: { tenantId: string; tenantNam
             <h3 className="font-heading text-sm text-foreground">Sofia Agente de Loja — {tenantName}</h3>
             <p className="text-xs text-muted-foreground mt-0.5">
               Peça em linguagem natural (ex: "deixa a loja mais premium", "melhora os preços", "troca as fotos dos produtos").
-              A Sofia monta um plano, você revisa e aprova antes de qualquer mudança.
+              Para aplicar direto sem revisar, diga "aplica" no pedido.
             </p>
           </div>
         </div>

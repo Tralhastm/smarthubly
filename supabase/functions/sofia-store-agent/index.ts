@@ -280,7 +280,7 @@ REGRAS DO PLANO JSON:
   "productChanges": [ { "id": "uuid do produto", "newName": "...", "newDescription": "...", "newPrice": 0.00, "newImagePrompt": "prompt em INGLÊS para gerar foto editorial fotorrealista do produto" } ]
 }
 2. CAMPOS DE tenantChanges: só inclua os que precisam MUDAR. Cores devem ser hex "#RRGGBB".
-   - Paleta: use psicologia das cores + nicho da loja. Fundo claro na maioria dos casos varejo; escuro só pra nicho noturno/premium.
+   - Paleta: use psicologia das cores + nicho da loja. Para eletrônicos/celulares/tecnologia prefira tons modernos e tecnológicos (azul petróleo ex: #0E7490/#134E4A, grafite ex: #262626/#404040, roxo moderno ex: #6D28D9) — evite cores pálidas "infantis". Fundo claro funciona bem na maioria dos casos varejo; escuro só pra nicho noturno/premium.
    - description: textos de vitrine curtos (1 frase), elegantes, vendem o estilo da loja. NUNCA mencione "delivery" como limitação.
 3. productChanges: só inclua produtos que precisam mudar.
    - newPrice: ajuste com lógica de mercado — preserve margem (use original_price quando existir como âncora), preços "premium" +10~25%, "competitivo" -5~15%, nunca zere e nunca crie preço negativo.
@@ -355,13 +355,32 @@ Responda apenas com o JSON do plano. Produtos com imagem faltando e visíveis na
         .single();
       if (planErr) throw planErr;
 
+      const autoApply = Boolean((body as { autoApply?: boolean })?.autoApply);
+      let applyResult: { applied: string[]; errors: string[] } | null = null;
+      if (autoApply) {
+        const { applied, errors } = await applyPlan(admin, safePlan, tenantId);
+        await admin.from("store_agent_plans").update({
+          status: applied.length > 0 ? "applied" : "failed",
+          applied_by: userId,
+          applied_at: new Date().toISOString(),
+          snapshot_after: { applied, errors },
+        }).eq("id", planRow.id);
+        applyResult = { applied, errors };
+      }
+
       return json({
         planId: planRow.id,
         rationale: safePlan.rationale,
         tenantChanges: safePlan.tenantChanges,
         productChanges: safePlan.productChanges,
-        status: "pending",
-        message: "Plano pronto! Revise abaixo e toque em APLICAR quando aprovar.",
+        status: applyResult ? (applyResult.applied.length > 0 ? "applied" : "failed") : "pending",
+        applied: applyResult?.applied,
+        errors: applyResult?.errors,
+        message: applyResult
+          ? (applyResult.applied.length > 0
+              ? `Aplicado direto! ${applyResult.applied.length} mudança(s) na sua loja. Recarregue a loja para ver.`
+              : "Nada foi aplicado — verifique os erros.")
+          : "Plano pronto! Revise abaixo e toque em APLICAR quando aprovar.",
       });
     }
 
