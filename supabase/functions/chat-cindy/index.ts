@@ -86,6 +86,7 @@ async function fetchPlatformContext(supabase: any): Promise<string> {
     platformSettingsRes,
     ghostFlagsRes,
     reviewsRes,
+    openTicketsRes,
   ] = await Promise.all([
     supabase.from("tenants").select("id, name, slug, niche, billing_mode, monthly_fee, platform_fee_percent, mercadopago_token, created_at, store_mode, suspended"),
     supabase.from("orders").select("*", { count: "exact", head: true }).in("status", ["received", "preparing", "out-for-delivery", "ready-for-pickup", "pending_payment"]),
@@ -114,6 +115,7 @@ async function fetchPlatformContext(supabase: any): Promise<string> {
     supabase.from("platform_settings").select("key"),
     supabase.from("ghost_order_flags").select("*", { count: "exact", head: true }),
     supabase.from("order_reviews").select("rating").gte("created_at", monthStart.toISOString()),
+    supabase.from("support_tickets").select("id, subject, description, status, priority, tenant_id, created_at").in("status", ["open", "pending", "waiting"]).order("created_at", { ascending: false }).limit(25),
   ]);
 
   const tenants = tenantsRes.data;
@@ -234,6 +236,7 @@ async function fetchPlatformContext(supabase: any): Promise<string> {
   const text = [
     "## VISÃO GERAL DA PLATAFORMA AGORA",
     `- Lojas: **${totalTenants}** total | ${activeTenants} com Mercado Pago | ${suspendedTenants} suspensas | ${newTenantsThisWeek} novas em 7d`,
+    `- IDs das lojas (pra gerar post por loja): ${(tenants || []).map((t: any) => `${t.name}=${t.id.slice(0, 8)}`).join(" | ") || "—"}`,
     `- Modelo de cobrança: ${perOrderTenants} por pedido (%), ${monthlyTenants} mensalidade fixa`,
     `- Nichos: ${topNiches || "—"}`,
     `- Produtos cadastrados na plataforma toda: ${totalProducts}`,
@@ -294,6 +297,12 @@ async function fetchPlatformContext(supabase: any): Promise<string> {
     "",
     "## CONFIGURAÇÕES (platform_settings)",
     `- Keys salvas: ${settingsKeys}`,
+    "",
+    "## CHAMADOS ABERTOS (aba Suporte) — use os ids pra RESPONDER chamados",
+    (openTicketsRes.data?.length || 0) > 0
+      ? (openTicketsRes.data || []).map((t: any) =>
+          `· id ${t.id.slice(0, 8)} | "${t.subject}" [${t.status}] criado ${new Date(t.created_at).toLocaleString("pt-BR")}`).join("\n")
+      : "(nenhum chamado aberto)",
   ].filter(Boolean).join("\n");
   _ctxCache = { at: Date.now(), text };
   return text;

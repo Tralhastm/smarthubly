@@ -1,18 +1,26 @@
-// Cindy — copiloto IA do super admin (homenagem à namorada do dono).
+// Cindy — copiloto de IA do super admin (agora com AÇÕES REAIS).
 // Visão GLOBAL: vê todas as lojas, faturamento, infra de IA, cobranças, saúde do sistema.
 // Botão flutuante rosa no canto inferior direito do super admin.
+//
+// AÇÕES: quando a Cindy termina a resposta com um bloco ```cindy-action {json}```,
+// o frontend executa a ação de verdade (gera o post / grava resposta no chamado).
 
 import { useState, useRef, useEffect } from 'react';
-import { Heart, X, Send, Loader2, Settings, Save, Sparkles, Star, Zap, Bot, MessageCircle, Flame, Crown, Coffee, Palette } from 'lucide-react';
+import { Heart, X, Send, Loader2, Settings, Save, Sparkles, Star, Zap, Bot, MessageCircle, Flame, Crown, Coffee, Palette, CheckCircle2, Copy, Download, Image as ImageIcon, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-type Msg = { role: 'user' | 'assistant'; content: string };
+type Msg = { role: 'user' | 'assistant'; content: string; action?: CindyAction | null };
+
+type CindyAction =
+  | { tool: 'gen-post'; payload: Record<string, unknown>; result?: any }
+  | { tool: 'reply-ticket'; payload: { ticketId: string; content: string; setResolved?: boolean }; result?: any };
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-cindy`;
+const ACTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cindy-actions`;
 
-const GREETING = 'Opa Erick — sou a Cindy, sua copiloto do super admin. Vejo todas as lojas, pedidos rolando agora, faturamento, cobranças e saúde da IA. Pergunta o que quiser.';
+const GREETING = 'Opa Erick — sou a Cindy, sua copiloto do super admin. Vejo todas as lojas, pedidos rolando agora, faturamento, cobranças e saúde da IA. Posso gerar posts de marketing e responder chamados por você — é só pedir.';
 
 const ICON_OPTIONS = {
   heart: Heart, sparkles: Sparkles, star: Star, zap: Zap, bot: Bot,
@@ -30,6 +38,20 @@ const COLOR_PRESETS: { key: string; label: string; gradient: string; headerBg: s
   { key: 'slate',   label: 'Grafite',  gradient: 'bg-gradient-to-br from-slate-600 to-slate-800',     headerBg: 'bg-gradient-to-r from-slate-600/15 to-slate-800/5',     bubbleBg: 'bg-slate-500/20',   accentText: 'text-slate-300',   accentFill: 'fill-slate-300',   ring: 'focus:ring-slate-500/40',   shadow: 'shadow-slate-500/30 hover:shadow-slate-500/50',     swatch: 'from-slate-600 to-slate-800' },
 ];
 
+const ACTION_BLOCK_RE = /```cindy-action\s*\n(\{[\s\S]*?\})\n```$/m;
+
+function parseActionBlock(text: string): CindyAction | null {
+  const m = text.match(ACTION_BLOCK_RE);
+  if (!m) return null;
+  try {
+    const json = JSON.parse(m[1]);
+    if (json?.tool === 'gen-post' || json?.tool === 'reply-ticket') {
+      return { tool: json.tool, payload: json.payload || {} } as CindyAction;
+    }
+  } catch { /* json inválido — ignora */ }
+  return null;
+}
+
 const CindyChat = () => {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -40,6 +62,7 @@ const CindyChat = () => {
   const [customPrompt, setCustomPrompt] = useState('');
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [loadedPrompt, setLoadedPrompt] = useState(false);
+  const [actionBusy, setActionBusy] = useState<string | null>(null); // id do action executando
   const [iconKey, setIconKey] = useState<IconKey>(() => (localStorage.getItem('cindy-icon') as IconKey) || 'heart');
   const [colorKey, setColorKey] = useState<string>(() => localStorage.getItem('cindy-color') || 'pink');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -92,7 +115,6 @@ const CindyChat = () => {
     setInput('');
     setLoading(true);
     setError(null);
-
     let assistantSoFar = '';
     const upsert = (chunk: string) => {
       assistantSoFar += chunk;
@@ -104,12 +126,10 @@ const CindyChat = () => {
         return [...prev, { role: 'assistant', content: assistantSoFar }];
       });
     };
-
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess?.session?.access_token;
       if (!token) throw new Error('Sessão expirada — faça login de novo.');
-
       const resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -124,7 +144,6 @@ const CindyChat = () => {
         throw new Error('Falha de conexão.');
       }
       if (!resp.body) throw new Error('Sem resposta do servidor');
-
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
@@ -152,6 +171,54 @@ const CindyChat = () => {
           }
         }
       }
+      // ===== Execução de ações: a Cindy terminou com um bloco ```cindy-action```? =====
+      const finalContent = assistantSoFar;
+      const action = parseActionBlock(finalContent);
+      if (action) {
+        const actionId = `${action.tool}-${Date.now()}`;
+        setMessages(prev => prev.map((m, i) =>
+          (i === prev.length - 1 ? { ...(m as Msg & { actionId?: string }), action, actionId } : m)));
+        (async () => {
+          setActionBusy(actionId);
+          try {
+            const { data: sess } = await supabase.auth.getSession();
+            const tok = sess?.session?.access_token;
+            const endpoint = action.tool === 'gen-post' ? '/gen-post' : '/reply-ticket';
+            const res = await fetch(`${ACTIONS_URL}${endpoint}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+              body: JSON.stringify(action.payload),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              const reason = data?.error || `erro ${res.status}`;
+              toast.error(`Ação falhou: ${reason}`);
+              // reescreve o bloco da IA com o motivo
+              setMessages(prev => prev.map((m, i) => {
+                if (i === prev.length - 1 && (m as any).actionId === actionId) {
+                  return { ...m, action: null };
+                }
+                return m;
+              }));
+              return;
+            }
+            setMessages(prev => prev.map((m, i) => {
+              if (i === prev.length - 1 && (m as any).actionId === actionId) {
+                return { ...m, action: { ...m.action, result: data } };
+              }
+              return m;
+            }));
+          } catch (e: any) {
+            toast.error('Falha ao executar a ação');
+            setMessages(prev => prev.map((m, i) => {
+              if (i === prev.length - 1 && (m as any).actionId === actionId) return { ...m, action: null };
+              return m;
+            }));
+          } finally {
+            setActionBusy(null);
+          }
+        })();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro inesperado');
     } finally {
@@ -160,21 +227,41 @@ const CindyChat = () => {
   };
 
   const renderContent = (text: string) => {
+    // remove o bloco de ação da exibição (fica no card da ação)
+    const cleaned = text.replace(/```cindy-action\s*\n[\s\S]*?\n```$/m, '').replace(/\n+$/, '');
     const parts: React.ReactNode[] = [];
     const regex = /\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)]+)\)/g;
     let lastIdx = 0;
     let m: RegExpExecArray | null;
     let key = 0;
-    while ((m = regex.exec(text)) !== null) {
-      if (m.index > lastIdx) parts.push(<span key={key++}>{text.slice(lastIdx, m.index)}</span>);
+    while ((m = regex.exec(cleaned)) !== null) {
+      if (m.index > lastIdx) parts.push(<span key={key++}>{cleaned.slice(lastIdx, m.index)}</span>);
       if (m[1]) parts.push(<strong key={key++} className="text-foreground">{m[1]}</strong>);
       else if (m[2] && m[3]) parts.push(
         <a key={key++} href={m[3]} target="_blank" rel="noopener noreferrer" className="text-pink-400 underline hover:text-pink-300 break-all">{m[2]}</a>
       );
       lastIdx = m.index + m[0].length;
     }
-    if (lastIdx < text.length) parts.push(<span key={key++}>{text.slice(lastIdx)}</span>);
+    if (lastIdx < cleaned.length) parts.push(<span key={key++}>{cleaned.slice(lastIdx)}</span>);
     return parts;
+  };
+
+  const downloadImage = (dataUrl: string, filename: string) => {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('Copiado!');
+    } catch {
+      toast.error('Não consegui copiar');
+    }
   };
 
   return (
@@ -213,7 +300,7 @@ const CindyChat = () => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-heading text-sm leading-tight">Cindy 💗</p>
-              <p className="text-[11px] text-muted-foreground">Copiloto do super admin · visão global</p>
+              <p className="text-[11px] text-muted-foreground">Copiloto do super admin · gera posts e responde chamados</p>
             </div>
             <button onClick={() => setShowSettings(s => !s)} className="p-1.5 rounded-lg hover:bg-secondary transition-colors" aria-label="Ajustes">
               <Settings className="h-4 w-4 text-muted-foreground" />
@@ -318,23 +405,121 @@ const CindyChat = () => {
               </div>
             )}
 
-            {messages.map((m, i) => (
-              <div key={i} className={cn('flex gap-2', m.role === 'user' && 'flex-row-reverse')}>
-                {m.role === 'assistant' && (
-                  <div className={cn('w-7 h-7 rounded-full flex items-center justify-center shrink-0', palette.bubbleBg)}>
-                    <ChosenIcon className={cn('h-3.5 w-3.5', palette.accentText, palette.accentFill)} />
+            {messages.map((m, i) => {
+              const msg = m as Msg & { actionId?: string };
+              const action = msg.action as CindyAction | null | undefined;
+              const actionResult = action?.result;
+              const actionError = actionResult?.error;
+              const isBusy = msg.actionId && actionBusy === msg.actionId;
+              return (
+                <div key={i}>
+                  <div className={cn('flex gap-2', m.role === 'user' && 'flex-row-reverse')}>
+                    {m.role === 'assistant' && (
+                      <div className={cn('w-7 h-7 rounded-full flex items-center justify-center shrink-0', palette.bubbleBg)}>
+                        <ChosenIcon className={cn('h-3.5 w-3.5', palette.accentText, palette.accentFill)} />
+                      </div>
+                    )}
+                    <div className={cn(
+                      'rounded-2xl px-3 py-2 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap break-words',
+                      m.role === 'user'
+                        ? cn(palette.gradient, 'text-white rounded-tr-sm')
+                        : 'bg-secondary text-foreground rounded-tl-sm'
+                    )}>
+                      {m.role === 'assistant' ? renderContent(m.content) : m.content}
+                    </div>
                   </div>
-                )}
-                <div className={cn(
-                  'rounded-2xl px-3 py-2 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap break-words',
-                  m.role === 'user'
-                    ? cn(palette.gradient, 'text-white rounded-tr-sm')
-                    : 'bg-secondary text-foreground rounded-tl-sm'
-                )}>
-                  {m.role === 'assistant' ? renderContent(m.content) : m.content}
+
+                  {/* ===== Card de ação executada ===== */}
+                  {action && (
+                    <div className="mt-2 ml-9 rounded-xl border border-border bg-card/80 overflow-hidden text-xs">
+                      {action.tool === 'gen-post' ? (
+                        actionError ? (
+                          <div className="flex items-start gap-2 p-3 text-destructive">
+                            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-semibold mb-0.5">Post não foi gerado</p>
+                              <p className="text-destructive/80">{actionError}</p>
+                            </div>
+                          </div>
+                        ) : actionResult ? (
+                          <div>
+                            {actionResult.image && (
+                              <img src={actionResult.image} alt="Arte do post" className="w-full aspect-square object-contain bg-black/80" />
+                            )}
+                            <div className="p-3 space-y-2">
+                              <div className="flex items-center gap-1.5 text-emerald-600 font-semibold">
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Post pronto — salvável
+                              </div>
+                              <div className="max-h-48 overflow-y-auto rounded-lg bg-secondary px-2.5 py-2 text-[11px] leading-relaxed whitespace-pre-wrap text-foreground">
+                                {actionResult.content}
+                              </div>
+                              {actionResult.overlay?.title1 && (
+                                <div className="rounded-lg bg-secondary px-2.5 py-2">
+                                  <p className="font-semibold text-foreground">{actionResult.overlay.title1}</p>
+                                  {actionResult.overlay.subtitle && (
+                                    <p className="text-muted-foreground mt-0.5">{actionResult.overlay.subtitle}</p>
+                                  )}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                <button
+                                  onClick={() => copyText(actionResult.content || '')}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-secondary hover:bg-secondary/70 text-muted-foreground hover:text-foreground border border-border"
+                                >
+                                  <Copy className="h-3 w-3" /> Copiar legenda
+                                </button>
+                                {actionResult.image && (
+                                  <button
+                                    onClick={() => downloadImage(actionResult.image, `post-${Date.now()}.png`)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-secondary hover:bg-secondary/70 text-muted-foreground hover:text-foreground border border-border"
+                                  >
+                                    <Download className="h-3 w-3" /> Baixar imagem
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 p-3 text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Gerando o post...
+                          </div>
+                        )
+                      ) : (
+                        actionError ? (
+                          <div className="flex items-start gap-2 p-3 text-destructive">
+                            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-semibold mb-0.5">Resposta não enviada</p>
+                              <p className="text-destructive/80">{actionError}</p>
+                            </div>
+                          </div>
+                        ) : actionResult ? (
+                          <div className="flex items-start gap-2 p-3">
+                            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 text-emerald-600" />
+                            <div>
+                              <p className="font-semibold text-emerald-700 mb-0.5">
+                                Resposta gravada no chamado{actionResult.subject ? ` "${actionResult.subject}"` : ''}
+                              </p>
+                              <p className="text-muted-foreground">
+                                {actionResult.setResolved !== false ? 'Chamado marcado como resolvido.' : 'Aparece na aba Suporte, no fio do ticket.'}
+                              </p>
+                            </div>
+                          </div>
+                        ) : isBusy ? (
+                          <div className="flex items-center gap-2 p-3 text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Gravando a resposta...
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 p-3 text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" /> Enviando...
+                          </div>
+                        )
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {loading && messages[messages.length - 1]?.role === 'user' && (
               <div className="flex gap-2">
@@ -356,7 +541,7 @@ const CindyChat = () => {
 
           {messages.length === 0 && (
             <div className="px-3 pb-2 flex flex-wrap gap-1.5">
-              {['Resumo do dia', 'Top 3 lojas do mês', 'Cobranças vencidas', 'Lojas paradas'].map(s => (
+              {['Gera um post de marketing pra mim', 'Resumo do dia', 'Top 3 lojas do mês', 'Chamados abertos'].map(s => (
                 <button key={s} onClick={() => send(s)}
                   className="text-xs px-2.5 py-1 rounded-full bg-secondary hover:bg-secondary/70 text-muted-foreground hover:text-foreground border border-border transition-colors">
                   {s}
@@ -371,7 +556,7 @@ const CindyChat = () => {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Pergunta pra Cindy..."
+              placeholder="Pede post, análise ou resposta de chamado..."
               disabled={loading}
               className={cn('flex-1 px-3 py-2 rounded-lg bg-secondary text-sm border border-border focus:outline-none focus:ring-2 disabled:opacity-50', palette.ring)}
             />
