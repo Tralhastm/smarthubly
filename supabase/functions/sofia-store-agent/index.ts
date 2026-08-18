@@ -99,27 +99,31 @@ async function buildStoreContext(admin: any, tenantId: string): Promise<StoreCon
 // Pollinations.ai gratuita (sem chave) → baixa bytes → sobe pro bucket product-images → URL pública
 async function generateAndUploadImage(admin: any, prompt: string, tenantId: string): Promise<string | null> {
   try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 90_000);
-    const url =
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1024&height=1024&model=flux&nologo=true&seed=${Math.floor(Math.random() * 1e9)}`;
-    const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
-    if (!r.ok || !r.headers.get("content-type")?.includes("image")) return null;
-    const buf = await r.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    // Converte para base64 via chunking (Deno btoa limita a strings pequenas)
-    let bin = "";
-    const chunk = 8192;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    // Retry interno: até 2 tentativas com seed diferente (Pollinations pode demorar)
+    let lastErr: string | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 75_000);
+      const seed = Math.floor(Math.random() * 1e9);
+      // 768px equilibra qualidade e velocidade do fluxo gratuito
+      const url =
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&model=flux&nologo=true&seed=${seed}`;
+      const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+      if (!r.ok) { lastErr = `http ${r.status}`; continue; }
+      const ct = r.headers.get("content-type") || "";
+      if (!ct.includes("image")) { lastErr = `content-type ${ct}`; continue; }
+      const buf = await r.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      const mime = ct.startsWith("image/png") ? "image/png" : "image/jpeg";
+      const ext = mime === "image/png" ? "png" : "jpg";
+      const path = `${tenantId}/${crypto.randomUUID()}-sofia.${ext}`;
+      const { error } = await admin.storage.from("product-images").upload(path, bytes, { contentType: mime, upsert: true });
+      if (error) { lastErr = error.message; continue; }
+      const { data: urlData } = admin.storage.from("product-images").getPublicUrl(path);
+      return urlData.publicUrl;
     }
-    const mime = r.headers.get("content-type")?.startsWith("image/png") ? "image/png" : "image/jpeg";
-    const ext = mime === "image/png" ? "png" : "jpg";
-    const path = `${tenantId}/${crypto.randomUUID()}-sofia.${ext}`;
-    const { error } = await admin.storage.from("product-images").upload(path, bytes, { contentType: mime, upsert: true });
-    if (error) return null;
-    const { data: urlData } = admin.storage.from("product-images").getPublicUrl(path);
-    return urlData.publicUrl;
+    console.warn("[sofia-agent] image gen gave up:", lastErr);
+    return null;
   } catch (e) {
     console.warn("[sofia-agent] image gen failed:", e instanceof Error ? e.message : e);
     return null;
@@ -131,9 +135,34 @@ async function generateAndUploadImage(admin: any, prompt: string, tenantId: stri
 // tenantChanges: { brand_primary_color?, brand_bg_color?, splash_bg_color?, description?, show_description?, show_title? }
 // productChanges: [ { id, newName?, newDescription?, newPrice?, newImagePrompt? } ]
 
-async function applyPlan(admin: any, plan: any, tenantId: string): Promise<{ applied: string[]; errors: string[] }> {
+async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyImages?: boolean }): Promise<{ applied: string[]; errors: string[] }> {
   const applied: string[] = [];
   const errors: string[] = [];
+
+  const pc = (plan?.productChanges || []).filter((x: any) => x?.id);
+  // onlyImage=true → gera SOMENTE as imagens (usado pelo retry), sem tocar em identidade/nome/preço/descrição
+  const onlyImages = Boolean(opts?.onlyImages);
+  if (onlyImages) {
+    const imageResults = await Promise.allSettled(
+      pc.map(async (item) => {
+        if (!item.newImagePrompt) return { id: item.id, url: null };
+        const url = await generateAndUploadImage(admin, item.newImagePrompt, tenantId);
+        return { id: item.id, url };
+      }),
+    );
+    const byId = new Map(imageResults.map((r, i) => [pc[i].id, r.status === "fulfilled" ? r.value.url : null]));
+    for (const item of pc) {
+      if (!item.newImagePrompt) continue;
+      const imageUrl = byId.get(item.id) || null;
+      if (!imageUrl) errors.push(`foto do produto ${item.id}: geração falhou`);
+      else {
+        const { error } = await admin.from("products").update({ image: imageUrl }).eq("id", item.id).eq("tenant_id", tenantId);
+        if (error) errors.push(`foto do produto ${item.id}: ${error.message}`);
+        else applied.push(`foto do produto ${item.id}`);
+      }
+    }
+    return { applied, errors };
+  }
 
   const tc = plan?.tenantChanges || {};
   const tenantKeys = Object.keys(tc);
@@ -151,15 +180,33 @@ async function applyPlan(admin: any, plan: any, tenantId: string): Promise<{ app
     }
   }
 
-  const pc = plan?.productChanges || [];
+  // Gera todas as imagens EM PARALELO (evita esgotar o compute da Edge Function)
+  const imageResults = await Promise.allSettled(
+    pc.map(async (item) => {
+      if (!item.newImagePrompt) return { id: item.id, url: null };
+      const url = await generateAndUploadImage(admin, item.newImagePrompt, tenantId);
+      return { id: item.id, url };
+    }),
+  );
+  const byId = new Map(imageResults.map((r, i) => [pc[i].id, r.status === "fulfilled" ? r.value.url : null]));
+
   for (const item of pc) {
-    if (!item?.id) continue;
     try {
-      let imageUrl: string | null = null;
+      const imageUrl = byId.get(item.id) || null;
+      if (onlyImages) {
+        if (!item.newImagePrompt) continue;
+        if (!imageUrl) errors.push(`foto do produto ${item.id}: geração falhou`);
+        else {
+          const { error } = await admin.from("products").update({ image: imageUrl }).eq("id", item.id).eq("tenant_id", tenantId);
+          if (error) errors.push(`foto do produto ${item.id}: ${error.message}`);
+          else applied.push(`foto do produto ${item.id}`);
+        }
+        continue;
+      }
+      // apply completo: atualiza tudo exceto imagem já aplicada antes (evita regravar)
       if (item.newImagePrompt) {
-        imageUrl = await generateAndUploadImage(admin, item.newImagePrompt, tenantId);
         if (imageUrl) applied.push(`foto do produto ${item.id}`);
-        else errors.push(`foto do produto ${item.id}: geração falhou (ignorada, resto aplicado)`);
+        else errors.push(`foto do produto ${item.id}: geração falhou (resto aplicado)`);
       }
       const update: Record<string, unknown> = {};
       if (imageUrl) update.image = imageUrl;
@@ -399,7 +446,24 @@ Responda apenas com o JSON do plano. Produtos com imagem faltando e visíveis na
       });
     }
 
-    return json({ error: "rota desconhecida", paths: ["plan", "plans", "apply", "rollback"] }, 404);
+    if (path === "retry-images" && method === "POST") {
+      const { planId } = body as { planId?: string };
+      if (!planId) return json({ error: "planId obrigatório" }, 400);
+      const { data: planRow, error: fErr } = await admin
+        .from("store_agent_plans").select("*").eq("id", planId).single();
+      if (fErr || !planRow) return json({ error: "plano_nao_encontrado" }, 404);
+      await requireTenantAdmin(admin, authHeader, planRow.tenant_id);
+      if (planRow.status !== "applied") return json({ error: "plano_nao_aplicado" }, 409);
+      const { applied, errors } = await applyPlan(admin, planRow.plan, planRow.tenant_id, { onlyImages: true });
+      await admin.from("store_agent_plans").update({
+        snapshot_after: { ...(planRow.snapshot_after || {}), retry: { applied, errors } },
+      }).eq("id", planId);
+      return json({ applied, errors, message: errors.length
+        ? `Parcial: ${applied.length} foto(s) regenerada(s).`
+        : `Fotos regeneradas com sucesso: ${applied.length}` });
+    }
+
+    return json({ error: "rota desconhecida", paths: ["plan", "plans", "apply", "rollback", "retry-images"] }, 404);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "erro";
     console.error("[sofia-store-agent]", e);

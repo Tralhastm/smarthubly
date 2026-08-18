@@ -2,7 +2,7 @@
 // Fluxo: lojista pede algo em linguagem natural → IA gera PLANO → lojista revisa → aplica → pode reverter.
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Sparkles, Loader2, Send, RotateCcw, CheckCircle2, XCircle, History, Eye, Palette, Package, Wand2 } from 'lucide-react';
+import { Sparkles, Loader2, Send, RotateCcw, RefreshCw, CheckCircle2, XCircle, History, Eye, Palette, Package, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -113,6 +113,21 @@ const SofiaStoreAgent = ({ tenantId, tenantName }: { tenantId: string; tenantNam
       await loadPlans();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Falha ao aplicar');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const retryImages = async (planId: string) => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const data = await invoke('retry-images', { planId });
+      toast.success(data.message);
+      await loadPlans();
+      if (current?.planId === planId) setCurrent({ ...current, applied: [...(current.applied || []), ...(data.applied || [])] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falha ao regenerar fotos');
     } finally {
       setLoading(false);
     }
@@ -260,9 +275,20 @@ const SofiaStoreAgent = ({ tenantId, tenantName }: { tenantId: string; tenantNam
             </div>
           )}
           {current?.status === 'applied' && current.applied?.length > 0 && (
-            <p className="text-xs text-emerald-600 flex items-center gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Aplicado! {current.applied.length} mudança(s). Reverta quando quiser no histórico abaixo.
-            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-xs text-emerald-600 flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Aplicado! {current.applied.length} mudança(s). Reverta quando quiser no histórico abaixo.
+              </p>
+              {(current.errors || []).some((e: string) => e.includes('foto')) && (
+                <button
+                  onClick={() => retryImages(current.planId)}
+                  disabled={loading}
+                  className="text-xs flex items-center gap-1 rounded-md border border-amber-500/40 px-2.5 py-1.5 text-amber-700 hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+                >
+                  {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />} Regenerar fotos que falharam
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
