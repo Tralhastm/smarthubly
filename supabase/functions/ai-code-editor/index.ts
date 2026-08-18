@@ -11,9 +11,12 @@
 //      2x com instrução de correção explícita.
 //   body: { request: string, context_files?: string[], auto_context?: boolean }
 //
-// POST /apply     -> aplica o patch no GitHub (com fallback de diff tolerante):
-//   tenta o diff exato; se falhar, tenta casar por âncoras flexíveis;
-//   se tudo falhar, devolve erro explicativo com o trecho problemático.
+// POST /apply     -> aplica o patch no GitHub com 4 camadas de fallback:
+//   1) diff exato
+//   2) diff tolerante por âncoras flexíveis (linha inicial + final + âncoras intermediárias)
+//   3) força bruta local: substitui o maior bloco comum contíguo do "old" no arquivo (match de linhas normalizadas)
+//   4) REBASE VIA IA: reenvia o hunk + conteúdo ATUAL do arquivo para a IA regenerar o diff
+//      contra o código vigente, e tenta aplicar o novo diff. S贸 falha se a IA também não conseguir.
 //   body: { id: string, force?: boolean }
 //
 // POST /notify-deploy -> marca o pedido como "pending_deploy" e dispara
@@ -231,6 +234,7 @@ Deno.serve(async (req) => {
 
   const pat = Deno.env.get("GITHUB_PAT");
   if (!pat) return j({ error: "github_pat_missing" }, 500);
+  const bridgeToken = Deno.env.get("WORKERS_BRIDGE_TOKEN") || "";
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -245,6 +249,8 @@ Deno.serve(async (req) => {
     return j({ error: e.message }, e.message === "super_admin_required" ? 403 : 401);
   }
 
+  // Rebase via IA precisa do header de autorização original (ponte workers)
+  const aiAuthHeader = authHeader || "";
   const url = new URL(req.url);
   let path = url.pathname.replace(/^\/functions\/v1\/ai-code-editor|^\/ai-code-editor/, "").replace(/\/$/, "") || "/invoke";
   if (!path.startsWith("/")) path = "/" + path;
@@ -355,7 +361,7 @@ Deno.serve(async (req) => {
     }
 
     if (path === "/apply") {
-      const { id, force } = body;
+      const { id, force } = body; // force mantém compat, mas agora o pipeline tenta todas as camadas sozinho
       if (!id) return j({ error: "id_required" }, 400);
       const { data: row, error: getErr } = await supabase
         .from("ai_editor_requests").select("*").eq("id", id).single();
@@ -384,14 +390,47 @@ Deno.serve(async (req) => {
 
         // Estratégia 1: diff exato
         let idx = content.indexOf(p.old);
-        if (idx === -1 && !force) {
+        if (idx === -1) {
           // Estratégia 2: diff tolerante — busca por âncoras
           // Pega as primeiras N linhas do "old" e as últimas M linhas e procura
           // um trecho do arquivo que contenha ambas (com conteúdo qualquer entre elas).
           const anchorTry = tolerantMatch(content, p.old);
           if (anchorTry !== null) {
             idx = anchorTry;
-          } else if (existing) {
+          }
+        }
+        if (idx === -1) {
+          // Estratégia 3: força bruta local — maior bloco comum contíguo
+          const forced = forceApplyLocal(content, p.old);
+          if (forced !== null) {
+            idx = forced.offset;
+            p.old = forced.matched; // substitui pelo trecho REAL que foi achado
+          }
+        }
+        if (idx === -1 && existing) {
+          // Estratégia 4: REBASE VIA IA — a IA regenera o diff contra o conteúdo ATUAL do arquivo
+          try {
+            const rebased = await aiRebaseHunk(aiAuthHeader, bridgeToken, p, content, row.request);
+            if (rebased) {
+              p.old = rebased.old;
+              p.new = rebased.new;
+              idx = content.indexOf(p.old);
+              if (idx === -1) {
+                const anchorTry = tolerantMatch(content, p.old);
+                if (anchorTry !== null) idx = anchorTry;
+                else {
+                  const forced = forceApplyLocal(content, p.old);
+                  if (forced !== null) {
+                    idx = forced.offset;
+                    p.old = forced.matched;
+                  }
+                }
+              }
+            }
+          } catch (e: any) {
+            console.warn("[ai-code-editor] rebase falhou:", String(e?.message || e));
+          }
+          if (idx === -1) {
             failedPatches.push(p.path);
             continue;
           }
@@ -522,6 +561,107 @@ Deno.serve(async (req) => {
     return j({ error: String(e?.message || e) }, 500);
   }
 });
+
+/**
+ * Força local: encontra o maior bloco contíguo de linhas do "old" que existe
+ * no arquivo (comparação com espaços normalizados) e devolve o offset e o trecho
+ * real casado. Exige pelo menos 60% de cobertura do bloco original — abaixo disso
+ * o hunk é provavelmente outra coisa e retorna null (segurança).
+ */
+function forceApplyLocal(content: string, old: string): { offset: number; matched: string } | null {
+  const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+  const oldLines = old.split("\n").map(norm);
+  const nonEmptyIdxs = oldLines.map((l, i) => ({ l, i })).filter((x) => x.l.length > 0);
+  const contLines = content.split("\n");
+  const contNorm = contLines.map(norm);
+  if (nonEmptyIdxs.length === 0) return null;
+
+  // Match de SUBSEQUÊNCIA (ordem preservada, tolera linhas alteradas depois):
+  // cada linha não-vazia do old é procurada no arquivo a partir da última posição;
+  // linhas que não existem mais são puladas (máx 40% de falha), o resto continua.
+  const matched: { oldIdx: number; contIdx: number }[] = [];
+  let searchFrom = 0;
+  for (const { l, i } of nonEmptyIdxs) {
+    let found = -1;
+    for (let ci = searchFrom; ci < contNorm.length; ci += 1) {
+      if (contNorm[ci] === l) { found = ci; break; }
+    }
+    if (found === -1) continue; // pula linha alterada/deletada depois da geração
+    if (found < searchFrom && matched.length > 0) continue;
+    matched.push({ oldIdx: i, contIdx: found });
+    searchFrom = found + 1;
+  }
+
+  const nonEmpty = nonEmptyIdxs.length;
+  // cobre pelo menos 60% das linhas não-vazias do old e tem 2+ linhas
+  if (matched.length < 2 || matched.length < nonEmpty * 0.6) return null;
+  // segurança: a distância média entre matches no content não pode ser gigante
+  let totalGap = 0;
+  for (let i = 1; i < matched.length; i += 1) totalGap += matched[i].contIdx - matched[i - 1].contIdx;
+  if (totalGap > nonEmpty * 40) return null;
+
+  const startLine = matched[0].contIdx;
+  const endLine = matched[matched.length - 1].contIdx;
+
+  let offset = 0;
+  for (let n = 0; n < startLine; n += 1) offset += contLines[n].length + 1;
+  let endOffset = offset;
+  for (let n = startLine; n <= endLine; n += 1) endOffset += contLines[n].length + 1;
+  return { offset, matched: content.slice(offset, endOffset) };
+}
+
+/**
+ * Rebase via IA: a IA recebe o hunk original (old/new), o conteúdo ATUAL do
+ * arquivo no GitHub e o pedido original; regenera o diff já adaptado ao código
+ * vigente (2 tentativas). Retorna { old, new } ou null.
+ */
+async function aiRebaseHunk(
+  authHeader: string,
+  bridgeToken: string,
+  hunk: { path: string; old: string; new: string },
+  currentContent: string,
+  request: string,
+): Promise<{ old: string; new: string } | null> {
+  if (!currentContent) return null;
+  const systemPrompt = `Você é engenheiro sênior. Recebeu um patch (old → new) que NÃO casou com o arquivo atual porque o código foi alterado depois da geração. Sua tarefa: REGENERAR o "old" e o "new" para que o "old" exista LITERALMENTE no conteúdo atual do arquivo e o "new" aplique a mesma intenção da mudança original.
+Responda APENAS JSON: {"old": "trecho exato atual do arquivo", "new": "trecho novo"}.
+Regras: "old" deve ser copiado literalmente do conteúdo atual (3-8 linhas, único ponto de ocorrência); "new" mantém a intenção da mudança original; português brasileiro nos textos visíveis.`;
+  const userPrompt = `PEDIDO ORIGINAL DO USUÁRIO:
+${request}
+
+=== ARQUIVO ATUAL (${hunk.path}) ===
+${currentContent}
+
+=== HUNK ORIGINAL (GERADO CONTRA VERSÃO ANTIGA — NÃO EXISTE MAIS NO ARQUIVO) ===
+old:
+${hunk.old}
+
+new:
+${hunk.new}
+
+Regenere o hunk adaptado ao conteúdo atual.`;
+  const res = await fetch(`${Deno.env.get("SUPABASE_URL")!}/functions/v1/public-workers-bridge`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-bridge-token": bridgeToken,
+      Authorization: authHeader,
+    },
+    body: JSON.stringify({ mode: "json", systemPrompt, userPrompt }),
+  });
+  if (!res.ok) throw new Error(`ai_rebase_failed: ${res.status}`);
+  const raw = await res.json();
+  let data: any = raw.data ?? raw;
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch { throw new Error("ai_rebase_invalid_json"); }
+  }
+  const old = typeof data?.old === "string" ? data.old : "";
+  const newStr = typeof data?.new === "string" ? data.new : "";
+  if (!old || !newStr || !currentContent.includes(old)) {
+    throw new Error("ai_rebase_no_literal_match");
+  }
+  return { old, new: newStr };
+}
 
 /**
  * Diff tolerante: acha o intervalo no arquivo que começa com o primeiro
