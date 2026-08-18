@@ -371,7 +371,7 @@ async function tryGoogleStream(messages: any[], systemPrompt: string, keys: ApiK
   const payload = {
     systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
     contents: geminiMessages,
-    generationConfig: { temperature: 0.4, maxOutputTokens: 500, topP: 0.9 },
+    generationConfig: { temperature: 0.4, maxOutputTokens: 2000, topP: 0.9 },
   };
   for (const keyEntry of allKeys) {
     try {
@@ -398,7 +398,7 @@ async function tryLovableStream(messages: any[], systemPrompt: string): Promise<
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "google/gemini-2.5-flash-lite", messages: [{ role: "system", content: systemPrompt }, ...messages], stream: true, temperature: 0.4, max_tokens: 500 }),
+      body: JSON.stringify({ model: "google/gemini-2.5-flash-lite", messages: [{ role: "system", content: systemPrompt }, ...messages], stream: true, temperature: 0.4, max_tokens: 2000 }),
     });
     if (response.status === 429 || response.status === 402) return null;
     if (!response.ok) return null;

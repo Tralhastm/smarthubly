@@ -38,13 +38,19 @@ const COLOR_PRESETS: { key: string; label: string; gradient: string; headerBg: s
   { key: 'slate',   label: 'Grafite',  gradient: 'bg-gradient-to-br from-slate-600 to-slate-800',     headerBg: 'bg-gradient-to-r from-slate-600/15 to-slate-800/5',     bubbleBg: 'bg-slate-500/20',   accentText: 'text-slate-300',   accentFill: 'fill-slate-300',   ring: 'focus:ring-slate-500/40',   shadow: 'shadow-slate-500/30 hover:shadow-slate-500/50',     swatch: 'from-slate-600 to-slate-800' },
 ];
 
-const ACTION_BLOCK_RE = /```cindy-action\s*\n(\{[\s\S]*?\})\n```$/m;
+// Bloco de ação pode vir em QUALQUER posição da resposta final (o modelo às vezes escreve mais depois do bloco)
+const ACTION_BLOCK_RE = /```cindy-action\s*\n([\s\S]*?)```/m;
+const ACTION_JSON_RE = /\{(?:[^{}]|\{[^{}]*\})*\}/;
 
 function parseActionBlock(text: string): CindyAction | null {
   const m = text.match(ACTION_BLOCK_RE);
   if (!m) return null;
+  // Tenta o 1º JSON válido dentro do bloco (aceita texto extra, quebra de linha etc.)
+  const inner = m[1];
+  const jm = inner.match(ACTION_JSON_RE);
+  if (!jm) return null;
   try {
-    const json = JSON.parse(m[1]);
+    const json = JSON.parse(jm[0]);
     if (json?.tool === 'gen-post' || json?.tool === 'reply-ticket') {
       return { tool: json.tool, payload: json.payload || {} } as CindyAction;
     }
@@ -171,7 +177,7 @@ const CindyChat = () => {
           }
         }
       }
-      // ===== Execução de ações: a Cindy terminou com um bloco ```cindy-action```? =====
+      // ===== Execução de ações: a resposta contém um bloco ```cindy-action```? =====
       const finalContent = assistantSoFar;
       const action = parseActionBlock(finalContent);
       if (action) {
@@ -180,6 +186,11 @@ const CindyChat = () => {
           (i === prev.length - 1 ? { ...(m as Msg & { actionId?: string }), action, actionId } : m)));
         (async () => {
           setActionBusy(actionId);
+          // Timeout de segurança: se a geração demorar demais, mostra aviso em vez de ficar infinito
+          const guard = setTimeout(() => {
+            setMessages(prev => prev.map((m, i) =>
+              (i === prev.length - 1 && (m as any).actionId === actionId ? { ...(m as Msg), result: { content: '' } } : m)));
+          }, 45_000);
           try {
             const { data: sess } = await supabase.auth.getSession();
             const tok = sess?.session?.access_token;
@@ -215,6 +226,7 @@ const CindyChat = () => {
               return m;
             }));
           } finally {
+            clearTimeout(guard);
             setActionBusy(null);
           }
         })();
@@ -228,7 +240,7 @@ const CindyChat = () => {
 
   const renderContent = (text: string) => {
     // remove o bloco de ação da exibição (fica no card da ação)
-    const cleaned = text.replace(/```cindy-action\s*\n[\s\S]*?\n```$/m, '').replace(/\n+$/, '');
+    const cleaned = text.replace(/```cindy-action\s*\n[\s\S]*?```/m, '').replace(/\n+$/, '');
     const parts: React.ReactNode[] = [];
     const regex = /\*\*(.+?)\*\*|\[([^\]]+)\]\(([^)]+)\)/g;
     let lastIdx = 0;
