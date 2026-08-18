@@ -4,6 +4,7 @@
 // Pipeline IA: rascunho → revisor → retorna {message, draft, review_notes}.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callAiWithFallback } from "../_shared/ai-fallback.ts";
+import { authorizeCaller, assertProspectAccess, type CallerAuth } from "../_shared/authorize-caller.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -56,9 +57,12 @@ Deno.serve(async (req) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { data: roleRow } = await supabase
-      .from("platform_roles").select("role").eq("user_id", user.id).eq("role", "super_admin").maybeSingle();
-    if (!roleRow) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const caller = await authorizeCaller(supabase, user.id);
+    if ((caller as any).error) {
+      const c = caller as { error: string; status: number };
+      return new Response(JSON.stringify({ error: c.error }), { status: c.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const callerAuth = caller as CallerAuth;
 
     const { prospect_id, instruction } = await req.json() as { prospect_id: string; instruction?: string };
     if (!prospect_id) return new Response(JSON.stringify({ error: "prospect_id obrigatório" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -66,6 +70,11 @@ Deno.serve(async (req) => {
     const { data: p } = await supabase
       .from("street_prospects").select("*").eq("id", prospect_id).maybeSingle();
     if (!p) return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const access = assertProspectAccess(callerAuth, p);
+    if ((access as any).error) {
+      const a = access as { error: string; status: number };
+      return new Response(JSON.stringify({ error: a.error }), { status: a.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     const log = Array.isArray(p.conversation_log) ? p.conversation_log : [];
     const sentTranscript = log.length

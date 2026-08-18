@@ -2,6 +2,7 @@
 // quando a IA falhar (sem créditos, rate limit, erro de rede).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { authorizeCaller, type CallerAuth } from "../_shared/authorize-caller.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -72,9 +73,12 @@ Deno.serve(async (req) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { data: roleRow } = await supabase
-      .from("platform_roles").select("role").eq("user_id", user.id).eq("role", "super_admin").maybeSingle();
-    if (!roleRow) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const caller = await authorizeCaller(supabase, user.id);
+    if ((caller as any).error) {
+      const c = caller as { error: string; status: number };
+      return new Response(JSON.stringify({ error: c.error }), { status: c.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const auth = caller as CallerAuth;
 
     const { city, niche } = await req.json();
     if (!city || !niche) return new Response(JSON.stringify({ error: "city e niche obrigatórios" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -128,13 +132,26 @@ Deno.serve(async (req) => {
       leads = workerGenerate(city, niche, 10);
     }
 
+    // ===== SCORE 0-100 mais inteligente (alvo = loja sem site e com IG ativo) =====
+    const calcScore = (l: any): number => {
+      const hasSite = !!l.has_website;
+      const hasIg = !!l.has_instagram;
+      const rating = Number(l.rating ?? 0) || 0;
+      let score = 30;
+      if (!hasSite && hasIg) score = 95;
+      else if (!hasSite) score = 70;
+      else if (hasIg) score = 50;
+      else score = 25;
+      // Rating baixo = dor comprovada nas avaliações → melhor alvo
+      if (rating > 0 && rating < 3.8) score = Math.min(100, score + 15);
+      // Sem site E sem IG = dono offline = precisa de educação (score médio)
+      if (!hasSite && !hasIg) score = Math.min(100, score + 5);
+      return Math.round(score);
+    };
+
     const rows = leads.map((l: any) => {
       const hasSite = !!l.has_website;
       const hasIg = !!l.has_instagram;
-      let score = 30;
-      if (!hasSite && hasIg) score = 100;
-      else if (!hasSite) score = 70;
-      else if (hasIg) score = 50;
       return {
         business_name: String(l.business_name ?? "").slice(0, 200),
         city, niche,
@@ -143,12 +160,13 @@ Deno.serve(async (req) => {
         has_instagram: hasIg,
         instagram_handle: null, // sempre null no início — só é populado pelo prospect-enrich após validação real
         phone: null,
-        priority_score: score,
+        priority_score: calcScore(l),
         status: "new",
         notes: l.reasoning ?? null,
         source: usedFallback ? "worker_fallback" : "ai_search",
         raw_data: l,
         created_by: user.id,
+        tenant_id: auth.isSuperAdmin ? null : auth.tenantId,
       };
     }).filter((r: any) => r.business_name);
 

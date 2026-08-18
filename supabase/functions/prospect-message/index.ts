@@ -2,6 +2,7 @@
 // Pipeline: 1) gera rascunho   2) revisor IA refina   3) salva e retorna versão final + notas.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { callAiWithFallback } from "../_shared/ai-fallback.ts";
+import { authorizeCaller, assertProspectAccess, type CallerAuth } from "../_shared/authorize-caller.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -95,9 +96,12 @@ Deno.serve(async (req) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { data: roleRow } = await supabase
-      .from("platform_roles").select("role").eq("user_id", user.id).eq("role", "super_admin").maybeSingle();
-    if (!roleRow) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const caller = await authorizeCaller(supabase, user.id);
+    if ((caller as any).error) {
+      const c = caller as { error: string; status: number };
+      return new Response(JSON.stringify({ error: c.error }), { status: c.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const callerAuth = caller as CallerAuth;
 
     const { prospect_id, mode } = await req.json() as { prospect_id: string; mode: "initial" | "reply" | "followup" };
     if (!prospect_id) return new Response(JSON.stringify({ error: "prospect_id obrigatório" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -105,6 +109,11 @@ Deno.serve(async (req) => {
     const { data: prospect } = await supabase
       .from("remote_prospects").select("*").eq("id", prospect_id).maybeSingle();
     if (!prospect) return new Response(JSON.stringify({ error: "prospect_not_found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const access = assertProspectAccess(callerAuth, prospect);
+    if ((access as any).error) {
+      const a = access as { error: string; status: number };
+      return new Response(JSON.stringify({ error: a.error }), { status: a.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // IMPORTANTE: conversation_log SÓ é alimentado quando uma mensagem é ENVIADA via WhatsApp
     // (ver SuperAdminRemoteProspecting.tsx → openWhatsApp / markAsSent). Rascunhos NÃO entram aqui.

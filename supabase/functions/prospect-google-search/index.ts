@@ -6,6 +6,7 @@
 // 5) Scrape DuckDuckGo HTML (versão "lite" que ainda devolve HTML real)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { authorizeCaller, type CallerAuth } from "../_shared/authorize-caller.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -341,9 +342,12 @@ Deno.serve(async (req) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-    const { data: roleRow } = await supabase
-      .from("platform_roles").select("role").eq("user_id", user.id).eq("role", "super_admin").maybeSingle();
-    if (!roleRow) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const caller = await authorizeCaller(supabase, user.id);
+    if ((caller as any).error) {
+      const c = caller as { error: string; status: number };
+      return new Response(JSON.stringify({ error: c.error }), { status: c.status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const callerAuth = caller as CallerAuth;
 
     const body = await req.json().catch(() => ({}));
     const city = String(body.city ?? "").trim();
@@ -439,6 +443,7 @@ Deno.serve(async (req) => {
       notes: !l.website_url ? "Sem site detectado — alvo prioritário." : "Tem site, mas pode ter dor com taxas de marketplace.",
       raw_data: l as any,
       created_by: user.id,
+      tenant_id: callerAuth.isSuperAdmin ? null : callerAuth.tenantId,
     }));
 
     const { data: inserted, error: insErr } = await supabase

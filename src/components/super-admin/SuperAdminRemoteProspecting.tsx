@@ -53,6 +53,8 @@ type Prospect = {
   competitor_stack: string[] | null;
   stack_summary: string | null;
   stack_scraped_at: string | null;
+  reminder_at?: string | null;
+  suggested_next_message?: string | null;
 };
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -88,8 +90,14 @@ const SECTORS = [
 
 const UFS = ['','AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
-const SuperAdminRemoteProspecting = () => {
+type ProspectingScope = 'super' | 'client';
+
+const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantId?: string; label?: string }) => {
   const qc = useQueryClient();
+  const scope = props?.scope ?? 'super';
+  const tenantId = props?.tenantId ?? null;
+  const uiTitle = props?.label ?? 'Prospecção remota';
+  const isClient = scope === 'client';
   // View principal
   const [view, setView] = useState<'leads' | 'conversar'>('leads');
   const [pipelineStatus, setPipelineStatus] = useState<'ready' | 'sent' | 'replied' | 'closed_won' | 'closed_lost'>('ready');
@@ -117,12 +125,13 @@ const SuperAdminRemoteProspecting = () => {
   const [websiteDraft, setWebsiteDraft] = useState<Record<string, string>>({});
 
   const { data: prospects = [], isLoading } = useQuery({
-    queryKey: ['remote_prospects', filterStatus],
+    queryKey: ['remote_prospects', filterStatus, isClient ? tenantId : 'global'],
     queryFn: async () => {
       let q = supabase.from('remote_prospects').select('*')
         .order('priority_score', { ascending: false })
         .order('created_at', { ascending: false });
       if (filterStatus !== 'all') q = q.eq('status', filterStatus);
+      if (isClient && tenantId) q = q.eq('tenant_id', tenantId);
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as Prospect[];
@@ -328,13 +337,19 @@ const SuperAdminRemoteProspecting = () => {
       const newLog = p.initial_message
         ? [...log, { from: 'me', text: p.initial_message, at: new Date().toISOString() }]
         : log;
-      const followupAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+      // Seguência automática de follow-up: agendar lembretes D+2 e D+5
+      const now = Date.now();
+      const followup2 = new Date(now + 2 * 24 * 60 * 60 * 1000).toISOString();
+      const followup5 = new Date(now + 5 * 24 * 60 * 60 * 1000).toISOString();
       const { error } = await supabase.from('remote_prospects').update({
         status: 'sent',
         conversation_log: newLog as any,
         last_sent_at: new Date().toISOString(),
-        next_followup_at: followupAt,
+        next_followup_at: followup2,
         followup_count: (p.followup_count ?? 0),
+        reminder_at: followup5,
+        suggested_next_message: `Re-bater ${p.business_name}: mensagem anterior sem resposta. Oferecer condição especial da semana e agendar conversa.`,
+        ...(isClient ? { tenant_id: tenantId } : {}),
       }).eq('id', id);
       if (error) throw error;
     },
@@ -347,7 +362,8 @@ const SuperAdminRemoteProspecting = () => {
 
   const updateProspect = useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<Prospect> }) => {
-      const { error } = await supabase.from('remote_prospects').update(patch as any).eq('id', id);
+      const patchSafe = isClient ? { ...(patch as object), tenant_id: tenantId } : (patch as object);
+      const { error } = await supabase.from('remote_prospects').update(patchSafe).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['remote_prospects'] }),
@@ -355,7 +371,9 @@ const SuperAdminRemoteProspecting = () => {
 
   const deleteProspect = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('remote_prospects').delete().eq('id', id);
+      let q = supabase.from('remote_prospects').delete().eq('id', id);
+      if (isClient && tenantId) q = q.eq('tenant_id', tenantId);
+      const { error } = await q;
       if (error) throw error;
     },
     onSuccess: () => {
@@ -367,7 +385,9 @@ const SuperAdminRemoteProspecting = () => {
   const deleteBulk = useMutation({
     mutationFn: async (ids: string[]) => {
       if (ids.length === 0) return 0;
-      const { error } = await supabase.from('remote_prospects').delete().in('id', ids);
+      let q = supabase.from('remote_prospects').delete().in('id', ids);
+      if (isClient && tenantId) q = q.eq('tenant_id', tenantId);
+      const { error } = await q;
       if (error) throw error;
       return ids.length;
     },

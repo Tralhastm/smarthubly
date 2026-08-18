@@ -7,6 +7,7 @@
 // Valida o DDD pela UF da cidade quando possível.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { authorizeCaller, assertProspectAccess, type CallerAuth } from "../_shared/authorize-caller.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -131,14 +132,23 @@ Deno.serve(async (req) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return new Response(JSON.stringify({ error: "unauthenticated" }), { status: 401, headers: { ...corsHeaders, "Content-Type":"application/json" } });
-    const { data: roleRow } = await supabase.from("platform_roles").select("role").eq("user_id", user.id).eq("role","super_admin").maybeSingle();
-    if (!roleRow) return new Response(JSON.stringify({ error: "forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type":"application/json" } });
+    const caller = await authorizeCaller(supabase, user.id);
+    if ((caller as any).error) {
+      const c = caller as { error: string; status: number };
+      return new Response(JSON.stringify({ error: c.error }), { status: c.status, headers: { ...corsHeaders, "Content-Type":"application/json" } });
+    }
+    const callerAuth = caller as CallerAuth;
 
     const { prospect_id } = await req.json();
     if (!prospect_id) return new Response(JSON.stringify({ error: "missing_prospect_id" }), { status: 400, headers: { ...corsHeaders, "Content-Type":"application/json" } });
 
     const { data: p } = await supabase.from("remote_prospects").select("*").eq("id", prospect_id).maybeSingle();
     if (!p) return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: { ...corsHeaders, "Content-Type":"application/json" } });
+    const access = assertProspectAccess(callerAuth, p);
+    if ((access as any).error) {
+      const a = access as { error: string; status: number };
+      return new Response(JSON.stringify({ error: a.error }), { status: a.status, headers: { ...corsHeaders, "Content-Type":"application/json" } });
+    }
 
     const name = String(p.business_name).trim();
     const city = String(p.city ?? "").trim();

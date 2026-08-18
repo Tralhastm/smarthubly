@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Trash2, Save, MapPin, Search, Phone, Crosshair, Loader2, FileText, Target, MessageCircle, CheckCircle2, Flame, TrendingUp, AlertTriangle, Bot, Send, Pencil, Copy, Sparkles, X, Bell, BrainCircuit, Clock } from 'lucide-react';
+import { Plus, Trash2, Save, MapPin, Search, Phone, Crosshair, Loader2, FileText, Target, MessageCircle, CheckCircle2, Flame, TrendingUp, AlertTriangle, Bot, Send, Pencil, Copy, Sparkles, X, Bell, BrainCircuit, Clock, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 
 type ConvMsg = { from: 'me' | 'lead'; text: string; at: string };
@@ -59,6 +59,40 @@ const STATUS_OPTIONS = [
   { value: 'failed', label: 'Deu errado', color: 'bg-rose-500/20 text-rose-300' },
 ];
 
+// Templates de abordagem prontos — lojista usa ou manda pra IA aprimorar.
+const APPROACH_TEMPLATES: { id: string; label: string; text: string }[] = [
+  {
+    id: 'primeiro-contato',
+    label: 'Primeiro contato',
+    text: 'Olá! Tudo bem? Vi que a {loja} tem um público ótimo e queria te mostrar algo que está ajudando vários comércios da região a vender mais todos os dias. Posso te enviar um vídeo rapidinho de 2 minutos?',
+  },
+  {
+    id: 'followup-2d',
+    label: 'Re-bater (D+2)',
+    text: 'Oi! Só passando pra saber se conseguiu dar uma olhada naquele vídeo que te mandei. Ele mostra como comércios parecidos com o seu estão aumentando os pedidos. Quer que eu te mostre com números?',
+  },
+  {
+    id: 'followup-5d',
+    label: 'Re-bater (D+5)',
+    text: 'Olá! Não quero ficar te incomodando, mas guardei uma condição especial pra loja da sua rua que expira essa semana. Posso te explicar em 3 minutos? É só escolher o melhor horário.',
+  },
+  {
+    id: 'objecao-preco',
+    label: 'Quebrar objeção: preço',
+    text: 'Entendo perfeitamente! O mais legal é que o sistema se paga sozinho: em média os lojistas ganham mais pedidos na primeira semana do que o custo do plano. Se quiser, a gente faz um teste por 7 dias e você vê o resultado antes de decidir.',
+  },
+  {
+    id: 'objecao-ja-tenho',
+    label: 'Quebrar objeção: “já tenho sistema”',
+    text: 'Ótimo, isso mostra que você já leva o negócio a sério! A maioria dos nossos clientes também já tinha sistema. O que eles gostam aqui é que a gente cobre o que falta: divulgação automática, reativação de clientes parados e painel de vendas completo. Posso te mostrar a diferença lado a lado em 5 minutos?',
+  },
+  {
+    id: 'fechamento',
+    label: 'Fechamento',
+    text: 'Perfeito! Vou te mandar o link de ativação e já te mostro como começar. Nossa equipe te acompanha na implantação sem custo. Qual a melhor forma de te enviar? Posso agendar a ativação pra amanhã?',
+  },
+];
+
 const PLAN_OPTIONS = [
   { value: '', label: '—' },
   { value: 'per_order', label: '% por pedido' },
@@ -77,8 +111,15 @@ const emptyDraft = (): Partial<Prospect> => ({
   notes: '',
 });
 
-const SuperAdminProspecting = () => {
+type ProspectingScope = 'super' | 'client';
+
+const SuperAdminProspecting = (props?: { scope?: ProspectingScope; tenantId?: string; label?: string }) => {
   const qc = useQueryClient();
+  const scope = props?.scope ?? 'super';
+  const tenantId = props?.tenantId ?? null;
+  const uiTitle = props?.label ?? (scope === 'client' ? 'Mapeamento de ruas' : 'Mapeamento');
+  const isClient = scope === 'client';
+  const [templateOpenFor, setTemplateOpenFor] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<Prospect>>(emptyDraft());
   const [filterStreet, setFilterStreet] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -129,13 +170,15 @@ const SuperAdminProspecting = () => {
   };
 
   const { data: prospects = [], isLoading } = useQuery({
-    queryKey: ['street-prospects'],
+    queryKey: ['street-prospects', isClient ? tenantId : 'global'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      let q = (supabase as any)
         .from('street_prospects')
         .select('*')
         .order('street_name', { ascending: true })
         .order('created_at', { ascending: false });
+      if (isClient && tenantId) q = q.eq('tenant_id', tenantId);
+      const { data, error } = await q;
       if (error) throw error;
       return (data || []) as Prospect[];
     },
@@ -143,20 +186,24 @@ const SuperAdminProspecting = () => {
 
   const create = useMutation({
     mutationFn: async (payload: Partial<Prospect>) => {
-      const { error } = await (supabase as any).from('street_prospects').insert(payload);
+      const withTenant = isClient ? { ...payload, tenant_id: tenantId } : payload;
+      const { error } = await (supabase as any).from('street_prospects').insert(withTenant);
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success('Loja adicionada');
       setDraft(emptyDraft());
-      qc.invalidateQueries({ queryKey: ['street-prospects'] });
+      qc.invalidateQueries({ queryKey: ['street-prospects', isClient ? tenantId : 'global'] });
     },
     onError: (e: any) => toast.error(e.message || 'Erro ao salvar'),
   });
 
   const update = useMutation({
     mutationFn: async ({ id, patch }: { id: string; patch: Partial<Prospect> }) => {
-      const { error } = await (supabase as any).from('street_prospects').update(patch).eq('id', id);
+      const patchSafe = isClient
+        ? { ...(patch as object), tenant_id: tenantId }
+        : patch;
+      const { error } = await (supabase as any).from('street_prospects').update(patchSafe).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['street-prospects'] }),
@@ -165,12 +212,14 @@ const SuperAdminProspecting = () => {
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await (supabase as any).from('street_prospects').delete().eq('id', id);
+      let q = (supabase as any).from('street_prospects').delete().eq('id', id);
+      if (isClient && tenantId) q = q.eq('tenant_id', tenantId);
+      const { error } = await q;
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success('Removido');
-      qc.invalidateQueries({ queryKey: ['street-prospects'] });
+      qc.invalidateQueries({ queryKey: ['street-prospects', isClient ? tenantId : 'global'] });
     },
   });
 
@@ -183,7 +232,7 @@ const SuperAdminProspecting = () => {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('Rascunho gerado pela IA');
-      qc.invalidateQueries({ queryKey: ['street-prospects'] });
+      qc.invalidateQueries({ queryKey: ['street-prospects', isClient ? tenantId : 'global'] });
     } catch (e: any) {
       toast.error(e.message || 'Erro ao gerar mensagem');
     } finally {
@@ -200,7 +249,7 @@ const SuperAdminProspecting = () => {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('Conversa analisada');
-      qc.invalidateQueries({ queryKey: ['street-prospects'] });
+      qc.invalidateQueries({ queryKey: ['street-prospects', isClient ? tenantId : 'global'] });
     } catch (e: any) {
       toast.error(e.message || 'Erro ao analisar');
     } finally {
@@ -222,10 +271,10 @@ const SuperAdminProspecting = () => {
     });
     setNewTagLabel(s => ({ ...s, [p.id]: '' }));
     try {
-      const { error } = await (supabase as any).from('street_prospects').update({ tags }).eq('id', p.id);
+      const { error } = await (supabase as any).from('street_prospects').update({ ...(tags as object), ...(isClient ? { tenant_id: tenantId } : {}) }).eq('id', p.id);
       if (error) throw error;
       toast.success('Marcador adicionado');
-      qc.invalidateQueries({ queryKey: ['street-prospects'] });
+      qc.invalidateQueries({ queryKey: ['street-prospects', isClient ? tenantId : 'global'] });
     } catch (e: any) {
       console.error('[addTag] erro:', e);
       toast.error(e.message || 'Erro ao salvar marcador');
@@ -245,8 +294,9 @@ const SuperAdminProspecting = () => {
       ai_draft: '',
       message_sent: true,
       status: p.status === 'not_contacted' ? 'message_sent_no_reply' : p.status,
+      ...(isClient ? { tenant_id: tenantId } : {}),
     }).eq('id', p.id);
-    qc.invalidateQueries({ queryKey: ['street-prospects'] });
+    qc.invalidateQueries({ queryKey: ['street-prospects', isClient ? tenantId : 'global'] });
   };
 
   const addLeadReply = async (p: Prospect, text: string) => {
@@ -256,8 +306,9 @@ const SuperAdminProspecting = () => {
     await (supabase as any).from('street_prospects').update({
       conversation_log: log,
       status: p.status === 'message_sent_no_reply' ? 'message_sent_replied' : p.status,
+      ...(isClient ? { tenant_id: tenantId } : {}),
     }).eq('id', p.id);
-    qc.invalidateQueries({ queryKey: ['street-prospects'] });
+    qc.invalidateQueries({ queryKey: ['street-prospects', isClient ? tenantId : 'global'] });
   };
 
   const openWA = (phone: string, text?: string) => {
@@ -393,7 +444,7 @@ const SuperAdminProspecting = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="font-heading text-lg text-foreground">Mapeamento</h2>
+        <h2 className="font-heading text-lg text-foreground">{uiTitle}</h2>
         <button
           onClick={copyReport}
           disabled={prospects.length === 0}
@@ -947,6 +998,24 @@ const SuperAdminProspecting = () => {
                       </div>
                     )}
 
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTemplateOpenFor(s => (s === p.id ? null : p.id))}
+                        className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-xs font-medium border ${templateOpenFor === p.id ? 'bg-purple-500/15 border-purple-500/40 text-purple-300' : 'bg-card border-border text-muted-foreground hover:text-foreground'}`}
+                      >
+                        <BookOpen className="h-3 w-3" /> Templates de abordagem
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openWA(p.contact_phone)}
+                        disabled={!p.contact_phone}
+                        className="flex-1 flex items-center justify-center gap-2 rounded-md bg-green-500/15 hover:bg-green-500/25 border border-green-500/30 text-green-300 px-3 py-2 text-xs font-medium disabled:opacity-40"
+                      >
+                        <MessageCircle className="h-3 w-3" /> Chamar no WhatsApp
+                      </button>
+                    </div>
+
                     <div>
                       <label className="text-[11px] font-medium text-primary">Instrução pra IA (opcional)</label>
                       <input
@@ -1000,6 +1069,35 @@ const SuperAdminProspecting = () => {
                           >
                             Descartar
                           </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {templateOpenFor === p.id && (
+                      <div className="rounded-md border border-purple-500/30 bg-purple-500/5 p-3 space-y-2">
+                        <p className="text-xs font-semibold text-purple-300 flex items-center gap-1">📋 Templates de abordagem — toque pra copiar, depois cole no WhatsApp ou use "Gerar IA" pra aprimorar</p>
+                        <div className="grid gap-2">
+                          {APPROACH_TEMPLATES.map(t => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={async () => {
+                                const text = t.text.replace('{loja}', p.store_name || '');
+                                const { error } = await (supabase as any).from('street_prospects').update({
+                                  ai_draft: text,
+                                  ...(isClient ? { tenant_id: tenantId } : {}),
+                                }).eq('id', p.id);
+                                if (error) { toast.error('Erro ao aplicar template'); return; }
+                                qc.invalidateQueries({ queryKey: ['street-prospects', isClient ? tenantId : 'global'] });
+                                toast.success(`Template "${t.label}" aplicado — edite e envie no WhatsApp`);
+                                setTemplateOpenFor(null);
+                              }}
+                              className="text-left rounded-md bg-card border border-border hover:border-purple-500/50 px-3 py-2 transition-all"
+                            >
+                              <p className="text-xs font-medium text-foreground">{t.label}</p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{t.text}</p>
+                            </button>
+                          ))}
                         </div>
                       </div>
                     )}

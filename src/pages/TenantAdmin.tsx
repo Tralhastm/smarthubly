@@ -55,12 +55,14 @@ import TenantAdminReports from '@/components/tenant/TenantAdminReports';
 import TenantAdminSupport from '@/components/tenant/TenantAdminSupport';
 import SofiaChat from '@/components/SofiaChat';
 import SofiaStoreAgent from '@/components/super-admin/SofiaStoreAgent';
+import SuperAdminProspecting from '@/components/super-admin/SuperAdminProspecting';
+import SuperAdminRemoteProspecting from '@/components/super-admin/SuperAdminRemoteProspecting';
 import ClaraChat from '@/components/tenant/ClaraChat';
 import ClaraFab from '@/components/tenant/ClaraFab';
-import { LayoutDashboard, Package, ShoppingBag, DollarSign, ArrowLeft, LogOut, Users, Store, Factory, Bike, Truck, BarChart3, Palette, Megaphone, Tag, Star, Receipt, MousePointerClick, Printer, CalendarClock, ClipboardList, BookOpen, Settings, Sparkles, Calculator, Plug, Zap, Bot, Activity, Sun, Moon, Wand2, AlertTriangle, CheckCircle2, Mail, Percent, ChefHat, Layers } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, DollarSign, ArrowLeft, LogOut, Users, Store, Factory, Bike, Truck, BarChart3, Palette, Megaphone, Tag, Star, Receipt, MousePointerClick, Printer, CalendarClock, ClipboardList, BookOpen, Settings, Sparkles, Calculator, Plug, Zap, Bot, Activity, Sun, Moon, Wand2, AlertTriangle, CheckCircle2, Mail, Percent, ChefHat, Layers, Radar } from 'lucide-react';
 import { contrastWarning } from '@/lib/color-utils';
 
-type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'categories' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi' | 'sofia-agent';
+type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'categories' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi' | 'sofia-agent' | 'prospecting' | 'remote-prospecting';
 
 type GroupId = 'dashboard' | 'operation' | 'catalog' | 'finance' | 'marketing' | 'settings';
 
@@ -221,6 +223,8 @@ const TenantAdmin = () => {
     { id: 'billing', label: 'Cobranças', icon: <Receipt className="h-4 w-4" />, group: 'finance' },
     { id: 'promo', label: 'Promoção', icon: <Megaphone className="h-4 w-4" />, group: 'marketing' },
     { id: 'sofia-agent', label: '🤖 Sofia Agente', icon: <Sparkles className="h-4 w-4" />, group: 'marketing' },
+    { id: 'remote-prospecting', label: 'Prospecção Remota', icon: <Radar className="h-4 w-4" />, group: 'marketing' },
+    { id: 'prospecting', label: 'Prospecção', icon: <Radar className="h-4 w-4" />, group: 'marketing' },
     { id: 'posts', label: 'Posts IA', icon: <Sparkles className="h-4 w-4" />, group: 'marketing' },
     { id: 'coupons', label: 'Cupons', icon: <Tag className="h-4 w-4" />, group: 'marketing' },
     { id: 'reviews', label: 'Avaliações', icon: <Star className="h-4 w-4" />, group: 'marketing' },
@@ -407,6 +411,8 @@ const TenantAdmin = () => {
           {tab === 'clicks' && <TenantAffiliateClicksRanking tenantId={tenant.id} />}
           {tab === 'promo' && <TenantPromoManager tenantId={tenant.id} niche={(tenant as any).niche} />}
           {tab === 'sofia-agent' && <SofiaStoreAgent tenantId={tenant.id} tenantName={(tenant as any).name || tenant.slug} />}
+          {tab === 'prospecting' && <SuperAdminProspecting scope="client" tenantId={tenant.id} label="Prospecção" />}
+          {tab === 'remote-prospecting' && <SuperAdminRemoteProspecting scope="client" tenantId={tenant.id} label="Prospecção Remota" />}
           {tab === 'posts' && <MarketingPostGenerator scope="tenant" tenantId={tenant.id} title="Posts do dia (Instagram, Stories, Reels...)" />}
           {tab === 'coupons' && <TenantAdminCoupons tenantId={tenant.id} />}
           {tab === 'coupons-test' && <TenantAdminCouponsTest tenantId={tenant.id} tenantSlug={slug!} />}
