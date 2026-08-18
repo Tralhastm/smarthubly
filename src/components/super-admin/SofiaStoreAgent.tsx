@@ -2,7 +2,7 @@
 // Fluxo: lojista pede algo em linguagem natural → IA gera PLANO → lojista revisa → aplica → pode reverter.
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Sparkles, Loader2, Send, RotateCcw, RefreshCw, CheckCircle2, XCircle, History, Eye, Palette, Package, Wand2 } from 'lucide-react';
+import { Sparkles, Loader2, Send, RotateCcw, RefreshCw, CheckCircle2, XCircle, History, Eye, Palette, Package, Wand2, MapPin, Store, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -197,7 +197,42 @@ const SofiaStoreAgent = ({ tenantId, tenantName }: { tenantId: string; tenantNam
                   <Wand2 className="h-3.5 w-3.5 text-primary" /> O que a Sofia vai mudar:
                 </p>
                 <p className="text-muted-foreground mt-1 text-xs italic">{current.rationale || current.message}</p>
-                {current.tenantChanges && Object.keys(current.tenantChanges).length > 0 && (
+                {current.prospecting && (
+                  <div className="mt-2">
+                    <p className="text-xs font-medium text-foreground flex items-center gap-1"><Store className="h-3 w-3 text-primary" /> Prospecção {current.query && `— ${current.query}`}</p>
+                    {current.leads?.length > 0 ? (
+                      <>
+                        <p className="text-xs text-emerald-600 mt-1">{current.leads.length} empresas encontradas em {current.city}{current.state ? `, ${current.state}` : ''}</p>
+                        <div className="mt-1.5 max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                          {(current.leads || []).slice(0, 15).map((l: any) => (
+                            <div key={l.id} className="rounded border border-border bg-background px-2.5 py-1.5 text-xs">
+                              <p className="font-medium text-foreground flex items-center gap-1">
+                                <MapPin className="h-3 w-3 text-primary shrink-0" />
+                                {l.business_name}
+                                {l.priority_score ? <span className="ml-auto text-[10px] text-muted-foreground">score {l.priority_score}</span> : null}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                                {[l.neighborhood, l.city, l.state].filter(Boolean).join(' — ') || l.address}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px]">
+                                {l.phone && <span className="text-muted-foreground">📞 {l.phone}</span>}
+                                {l.instagram_handle && <span className="text-muted-foreground">📷 @{l.instagram_handle}</span>}
+                                {l.website_url && <a href={l.website_url} target="_blank" rel="noreferrer" className="text-primary flex items-center gap-0.5">🌐 site <ExternalLink className="h-2.5 w-2.5" /></a>}
+                                {l.maps_url && <a href={l.maps_url} target="_blank" rel="noreferrer" className="text-primary flex items-center gap-0.5">🗺️ mapa</a>}
+                              </div>
+                            </div>
+                          ))}
+                          {(current.leads || []).length > 15 && (
+                            <p className="text-[10px] text-muted-foreground">+ {(current.leads || []).length - 15} outras empresas</p>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground mt-1">{current.message}</p>
+                    )}
+                  </div>
+                )}
+                {!current.prospecting && current.tenantChanges && Object.keys(current.tenantChanges).length > 0 && (
                   <div className="mt-2 space-y-1">
                     <p className="text-xs font-medium text-foreground flex items-center gap-1"><Palette className="h-3 w-3" /> Identidade da loja</p>
                     {(Object.entries(current.tenantChanges) as [string, any][]).map(([k, v]) => (

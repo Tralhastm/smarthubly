@@ -265,9 +265,117 @@ serve(async (req) => {
       const ctx = await buildStoreContext(admin, tenantId);
       const lastMsg = [...messages].reverse().find((m: any) => m?.role === "user")?.content || "";
 
+      // ===== FERRAMENTA: PROSPECÇÃO REAL =====
+      // Se o pedido pedir para ACHAR empresas/clientes em uma cidade (prospecção),
+      // executa a prospecção real via EF prospect-google-search e devolve os leads.
+      const prospectRe = /\b(ache|encontr|prospect|busc|liste|monte uma lista de|empresas que precisam|empresas que compram|potenciais clientes|negócio[s]? em|clientes em)\b/i;
+      const cityRe = /\b(belo horizonte|bh|são paulo|rio de janeiro|contagem|betim|betim|uberlândia|londrina|curitiba|salvador|recife|fortaleza|manaus|porto alegre|florianópolis|campinas|goiânia|niterói|juiz de fora|vila velha|serra|itabira|ituiutaba|uberaba|montes claros|sete lagoas|divinópolis|poços de caldas|pouso alegre|patos de minas|caxias do sul|pelotas|cascavel|maringá|foz do iguaçu|guarulhos|osasco|santo andré|são bernardo|são josé dos campos|ribeirão preto|sorocaba|niterói|são gonçalo|duque de caxias|nova iguaçu|belford roxo|petrópolis|volta redonda|campos dos goytacazes|são joão de meriti)\b/gi;
+      if (prospectRe.test(lastMsg)) {
+        try {
+          // Extrai cidade e nicho com ajuda da IA
+          const route: any = await callAiJson(admin, {
+            systemPrompt: "Você é um roteador. Extraia de um pedido de prospecção: city (cidade principal, normalize: Belo Horizonte, São Paulo, Rio de Janeiro etc; se for 'BH' use 'Belo Horizonte'), state (UF da cidade, ex MG, SP, RJ), niche (o tipo de negócio procurado, ex 'distribuidora de laticínios', 'pizzaria', 'conveniência', 'supermercado'), neighborhood (bairro, se citado), sector (segmento de atuação do lojista, se citado). Responda só JSON.",
+            userPrompt: `PEDIDO: "${lastMsg}"
+Loja do lojista: ${ctx.summary}
+Retorne: {"city":"","state":"","niche":"","neighborhood":"","sector":"","query":"frase curta da busca"}`,
+            temperature: 0.3,
+            maxTokens: 600,
+          });
+          let pCity = String(route?.city || "").trim();
+          if (!pCity) {
+            // Tenta pegar a cidade do próprio pedido via IA (a store context não tem cidade)
+            const cityOnly: any = await callAiJson(admin, {
+              systemPrompt: "Diga em que CIDADE o lojista quer achar clientes. Responda só JSON: {\"city\":\"\",\"state\":\"\"} (normalize ex: Belo Horizonte MG). Se o pedido não mencionar cidade, deixe vazio.",
+              userPrompt: `PEDIDO: "${lastMsg}"`,
+              temperature: 0.3,
+              maxTokens: 200,
+            });
+            pCity = String(cityOnly?.city || "").trim();
+            if (pCity && !String(route?.state || "").trim()) {
+              const st = String(cityOnly?.state || "").trim().toUpperCase();
+              route.state = st;
+            }
+          }
+          if (!pCity) {
+            return json({
+              prospecting: true,
+              query: "",
+              city: "",
+              state: "",
+              inserted: 0,
+              leads: [],
+              status: "needs_city",
+              message: "Entendi, você quer achar clientes! Mas não identifiquei a CIDADE no pedido. Me fala a cidade (ex: \"ache pizzarias em Belo Horizonte\") que eu já executo a prospecção.",
+            });
+          }
+          const pState = String(route?.state || "").trim().toUpperCase();
+          const pNiche = String(route?.niche || "").trim();
+          const pNb = String(route?.neighborhood || "").trim();
+          const pSector = String(route?.sector || "").trim();
+
+          // Chama a EF de prospecção real com a sessão do usuário (super admin: leads ficam globais; lojista: ficam no tenant dele)
+          const pAuth = authHeader;
+          const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
+          const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/prospect-google-search?apikey=${encodeURIComponent(anonKey)}`, {
+            method: "POST",
+            headers: {
+              Authorization: pAuth || "",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              city: pCity,
+              state: pState,
+              niche: pNiche,
+              neighborhood: pNb || undefined,
+              sector: pSector || undefined,
+              tenantId,
+            }),
+          });
+          const pRes = await r.json().catch(() => ({}));
+          if (pRes?.error) throw new Error(pRes.error);
+          const pLeads: any[] = pRes?.leads || [];
+          return json({
+            prospecting: true,
+            query: pRes?.query || String(route?.query || ""),
+            city: pCity,
+            state: pState,
+            inserted: pRes?.inserted || 0,
+            leads: pLeads.map((l: any) => ({
+              id: l.id,
+              business_name: l.business_name,
+              category: l.category,
+              neighborhood: l.neighborhood,
+              address: l.address,
+              city: l.city,
+              state: l.state,
+              phone: l.phone,
+              whatsapp: l.whatsapp,
+              email: l.email,
+              website_url: l.website_url,
+              instagram_handle: l.instagram_handle,
+              maps_url: l.maps_url,
+              rating: l.rating,
+              reviews_count: l.reviews_count,
+              priority_score: l.priority_score,
+              source: l.scrape_source || l.source,
+            })),
+            status: "applied",
+            message: pLeads.length
+              ? `Prospecção concluída! Achei ${pLeads.length} empresas em ${pCity}${pState ? ", " + pState : ""}. Os leads já estão salvos na sua aba Prospecção Remota — vá lá ver e chamar no WhatsApp.`
+              : "Busquei mas não achei empresas com esses termos nessa região. Tente um termo mais comum (ex: 'pizzaria', 'conveniência') ou outra cidade.",
+          });
+        } catch (e) {
+          // Falha na prospecção: cai de volta para o plano de loja explicando o que acontece
+          console.error("[sofia] prospecção falhou:", e);
+        }
+      }
+
       const SYSTEM = `Você é a SOFIA AGENTE DE LOJA — agente autônomo de repaginação de lojas da plataforma SmartHubly.
 SUA MISSÃO: transformar a loja do lojista a partir do pedido dele (linguagem natural), devolvendo SEMPRE um PLANO estruturado JSON.
 O plano NÃO altera nada — ele será revisado e aprovado pelo lojista antes da aplicação.
+
+REGRAS DE ROTEAMENTO (o lojista pode pedir OUTRAS coisas além de loja):
+- Se o pedido for sobre ACHAR EMPRESAS/CLIENTES em alguma cidade (ex: "ache empresas que precisam de laticínios em Belo Horizonte", "prospecta restaurantes em BH"), a Sofia já executa a prospecção sozinha — NÃO trate isso como pedido de repaginação. Responda o JSON padrão com prospecting: true, query (frase da busca), city, state e leads (lista de empresas encontradas com nome, bairro, endereço, telefone, site, instagram, maps, score). Se não souber a cidade, pergunte em rationale. Não invente leads: os leads vêm da ferramenta de prospecção real executada antes.
 
 CONTEXTO REAL DA LOJA (dados ao vivo do banco):
 ${ctx.summary}
@@ -276,6 +384,8 @@ REGRAS DO PLANO JSON:
 1. Responda APENAS com JSON válido nesta estrutura exata:
 {
   "rationale": "2-3 frases em PT-BR explicando as escolhas",
+  "prospecting": true/false,
+  "query": "frase curta da busca", "city": "", "state": "", "leads": [ {"business_name":"","neighborhood":"","address":"","phone":"","whatsapp":"","email":"","website_url":"","instagram_handle":"","maps_url":"","rating":0,"reviews_count":0,"priority_score":0,"source":""} ],
   "tenantChanges": { "brand_primary_color": "#RRGGBB", "brand_bg_color": "#RRGGBB", "splash_bg_color": "#RRGGBB", "description": "string", "show_description": true/false, "show_title": true/false },
   "productChanges": [ { "id": "uuid do produto", "newName": "...", "newDescription": "...", "newPrice": 0.00, "newImagePrompt": "prompt em INGLÊS para gerar foto editorial fotorrealista do produto" } ]
 }
@@ -285,9 +395,10 @@ REGRAS DO PLANO JSON:
 3. productChanges: só inclua produtos que precisam mudar.
    - newPrice: ajuste com lógica de mercado — preserve margem (use original_price quando existir como âncora), preços "premium" +10~25%, "competitivo" -5~15%, nunca zere e nunca crie preço negativo.
    - newImagePrompt: escreva em INGLÊS, estilo "editorial product photography", fotorrealista, 8k, sem texto/labels/watermark. Inclua o nome do produto e contexto coerente com o nicho.
-4. Se o lojista pedir só UMA coisa (ex: só paleta), não invente mudanças em outros campos.
+4. Se o lojista pedir só UMA coisa (ex: só paleta ou só prospecção), não invente mudanças em outros campos.
 5. Jamais invente produtos que não estão no contexto. Use apenas os IDs listados.
-6. Responda só o JSON, sem markdown, sem comentários.`;
+6. Jamais INVENTE leads de empresas — leads só existem se a ferramenta de prospecção trouxe. Se não houver prospecção no pedido, leads deve ser lista vazia [].
+7. Responda só o JSON, sem markdown, sem comentários.`;
 
       const userPrompt = `PEDIDO DO LOJISTA: "${lastMsg}"
 
