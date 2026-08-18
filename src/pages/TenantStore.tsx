@@ -9,6 +9,7 @@ import StoreSplash from '@/components/tenant/StoreSplash';
 import SupermarketStorefront from '@/components/tenant/SupermarketStorefront';
 import StoreQuoteCalculator from '@/components/tenant/StoreQuoteCalculator';
 import StoreChatbot from '@/components/tenant/StoreChatbot';
+import { useSplashOverlay } from '@/hooks/useSplashOverlay';
 import { ClipboardList, Store, MessageCircle, Heart, Calculator, ShoppingBag } from 'lucide-react';
 import { deriveBrandTokens, applyBrandTokens, clearBrandTokens } from '@/lib/color-utils';
 
@@ -17,6 +18,8 @@ const TenantStore = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [view, setView] = useState<'catalog' | 'quote'>('catalog');
   const hideSplash = useCallback(() => setShowSplash(false), []);
+  // Oculta os botões flutuantes enquanto o splash de detalhes do produto está aberto.
+  useSplashOverlay();
   const { data: tenant, isLoading } = useTenantBySlug(slug);
   // Per-store PWA manifest: instalar a loja mostra o nome+logo dela.
   useStoreManifest({
@@ -122,8 +125,12 @@ const TenantStore = () => {
         <>
       <section className="relative py-12 overflow-hidden">
         <div className="container mx-auto px-4 text-center relative z-10">
-          <h1 className="font-heading text-3xl md:text-4xl text-foreground mb-3">{tenant.name}</h1>
-          {tenant.description && <p className="text-muted-foreground text-base max-w-xl mx-auto mb-6">{tenant.description}</p>}
+          {(tenant as any).show_title !== false && (
+            <h1 className="font-heading text-3xl md:text-4xl text-foreground mb-3">{tenant.name}</h1>
+          )}
+          {(tenant as any).show_description !== false && tenant.description && (
+            <p className="font-luxury text-2xl md:text-3xl text-foreground/80 italic max-w-2xl mx-auto mb-6 leading-snug">{tenant.description}</p>
+          )}
           <div className="h-0.5 w-24 gradient-primary rounded-full mx-auto" />
         </div>
       </section>

@@ -69,7 +69,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
                 if (!product.in_stock) return;
                 if (hasExtras) onOpenPicker(product); else addToCart(product);
               }} disabled={!product.in_stock}
-              className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium gradient-primary text-primary-foreground transition-all duration-200 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
+              className="splash-add-btn flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium gradient-primary text-primary-foreground transition-all duration-200 hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
               <Icon className="h-4 w-4" /> {hasExtras ? 'Personalizar' : cta}
             </button>
           </div>
@@ -117,7 +117,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
                 if (!product.in_stock) return;
                 if (hasExtras) onOpenPicker(product); else addToCart(product);
               }} disabled={!product.in_stock}
-              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium gradient-primary text-primary-foreground hover:opacity-90 disabled:opacity-40">
+              className="splash-add-btn flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium gradient-primary text-primary-foreground hover:opacity-90 disabled:opacity-40">
               <ShoppingCart className="h-3.5 w-3.5" /> {hasExtras ? 'Personalizar' : cta}
             </button>
           </div>
@@ -184,7 +184,7 @@ const MagazineCard = ({ product, addToCart, niche, hasExtras, onOpenPicker, onOp
               if (!product.in_stock) return;
               if (hasExtras) onOpenPicker(product); else addToCart(product);
             }} disabled={!product.in_stock}
-            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium gradient-primary text-primary-foreground hover:opacity-90 disabled:opacity-40">
+            className="splash-add-btn flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium gradient-primary text-primary-foreground hover:opacity-90 disabled:opacity-40">
             <ShoppingCart className="h-3 w-3" /> {hasExtras ? 'Personalizar' : cta}
           </button>
         </div>
@@ -241,6 +241,14 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     const [detail, setDetail] = useState<Product | null>(null);
   const allProducts = useMemo(() => data?.pages.flatMap(p => p.data) ?? [], [data]);
   const openDetails = splashEnabled ? setDetail : null;
+
+  // Notifica a página quando o splash de detalhes abre/fecha para que os botões
+  // flutuantes (carrinho, WhatsApp, chat, tema) sejam ocultados e não cubram o texto.
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('splash:open', { detail: detail !== null }));
+    }
+  }, [detail !== null]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -475,28 +483,49 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
       )}
 
       {splashEnabled && detail && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-0 sm:p-4 sm:items-center"
+        <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-0 sm:p-4 sm:items-center splash-overlay"
           onClick={() => setDetail(null)} role="dialog" aria-modal="true">
           <div className="slide-in-from-bottom w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-t-2xl bg-background shadow-2xl sm:rounded-2xl animate-in duration-300"
             onClick={(e) => e.stopPropagation()}>
-            <div className="relative rounded-t-2xl bg-black">
-              <MediaCarousel
-                items={Array.isArray((detail as any).media) && (detail as any).media.length > 0
-                  ? (detail as any).media
-                  : (detail as any).image ? [{ kind: 'image', url: (detail as any).image, alt: detail.name }] : []}
-                className="max-h-[45vh] w-full"
-                imgClassName="max-h-[45vh] w-full object-contain"
-                videoClassName="max-h-[45vh] w-full object-contain"
-              />
-              <button onClick={() => setDetail(null)} aria-label="Fechar"
-                className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80">
-                <ChevronDown className="h-5 w-5 rotate-45" />
-              </button>
-              {(detail as any).original_price != null && (detail as any).original_price > detail.price && (
-                <span className="absolute left-3 top-3 rounded-full bg-destructive px-3 py-1 text-xs font-bold text-destructive-foreground">Promoção</span>
-              )}
-            </div>
-            <div className="space-y-3 p-6 text-foreground">
+            {(() => {
+              const hasMedia = Array.isArray((detail as any).media) && (detail as any).media.length > 0;
+              const img = (detail as any).image;
+              const hasImage = hasMedia || (img && !isAiGeneratedImage(img));
+              return hasImage ? (
+                <div className="relative shrink-0 rounded-t-2xl bg-black">
+                  <MediaCarousel
+                    items={hasMedia
+                      ? (detail as any).media
+                      : [{ kind: 'image', url: img, alt: detail.name }]}
+                    className="max-h-[32vh] sm:max-h-[45vh] w-full"
+                    imgClassName="max-h-[32vh] sm:max-h-[45vh] w-full object-contain"
+                    videoClassName="max-h-[32vh] sm:max-h-[45vh] w-full object-contain"
+                  />
+                  <button onClick={() => setDetail(null)} aria-label="Fechar"
+                    className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80">
+                    <ChevronDown className="h-5 w-5 rotate-45" />
+                  </button>
+                  {(detail as any).original_price != null && (detail as any).original_price > detail.price && (
+                    <span className="absolute left-3 top-3 rounded-full bg-destructive px-3 py-1 text-xs font-bold text-destructive-foreground">Promoção</span>
+                  )}
+                </div>
+              ) : null;
+            })()}
+            {(() => {
+              const hasMedia = Array.isArray((detail as any).media) && (detail as any).media.length > 0;
+              const img = (detail as any).image;
+              const hasImage = hasMedia || (img && !isAiGeneratedImage(img));
+              return !hasImage ? (
+                <div className="relative rounded-t-2xl flex items-center justify-center bg-secondary">
+                  <Package className="h-20 w-20 text-primary/40" />
+                  <button onClick={() => setDetail(null)} aria-label="Fechar"
+                    className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80">
+                    <ChevronDown className="h-5 w-5 rotate-45" />
+                  </button>
+                </div>
+              ) : null;
+            })()}
+            <div className="relative space-y-3 px-6 pt-5 text-foreground">
               <div>
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{detail.category || 'Produto'}</span>
                 <h2 className="font-heading text-2xl mt-1">{detail.name}</h2>
@@ -515,8 +544,9 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                   <span className="rounded-full bg-yellow-400/15 px-3 py-1 text-xs font-medium text-yellow-500">Restam {(detail as any).stock_quantity}</span>
                 ) : null}
               </div>
+              <div className="h-4" />
               <button onClick={() => { addToCart(detail); setDetail(null); }} disabled={!detail.in_stock}
-                className="flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold uppercase tracking-wider gradient-primary text-primary-foreground transition hover:opacity-90 disabled:opacity-40">
+                className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold uppercase tracking-wider gradient-primary text-primary-foreground transition hover:opacity-90 disabled:opacity-40">
                 <ShoppingCart className="h-5 w-5" />
                 {detail.in_stock ? 'Adicionar ao carrinho' : 'Indisponível'}
               </button>

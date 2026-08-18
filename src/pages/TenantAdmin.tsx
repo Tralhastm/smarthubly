@@ -54,12 +54,13 @@ import TenantAdminFinanceDeep from '@/components/tenant/TenantAdminFinanceDeep';
 import TenantAdminReports from '@/components/tenant/TenantAdminReports';
 import TenantAdminSupport from '@/components/tenant/TenantAdminSupport';
 import SofiaChat from '@/components/SofiaChat';
+import SofiaStoreAgent from '@/components/super-admin/SofiaStoreAgent';
 import ClaraChat from '@/components/tenant/ClaraChat';
 import ClaraFab from '@/components/tenant/ClaraFab';
 import { LayoutDashboard, Package, ShoppingBag, DollarSign, ArrowLeft, LogOut, Users, Store, Factory, Bike, Truck, BarChart3, Palette, Megaphone, Tag, Star, Receipt, MousePointerClick, Printer, CalendarClock, ClipboardList, BookOpen, Settings, Sparkles, Calculator, Plug, Zap, Bot, Activity, Sun, Moon, Wand2, AlertTriangle, CheckCircle2, Mail, Percent, ChefHat, Layers } from 'lucide-react';
 import { contrastWarning } from '@/lib/color-utils';
 
-type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'categories' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi';
+type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'categories' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi' | 'sofia-agent';
 
 type GroupId = 'dashboard' | 'operation' | 'catalog' | 'finance' | 'marketing' | 'settings';
 
@@ -219,6 +220,7 @@ const TenantAdmin = () => {
     { id: 'bi', label: 'BI / Previsão', icon: <Activity className="h-4 w-4" />, group: 'finance' },
     { id: 'billing', label: 'Cobranças', icon: <Receipt className="h-4 w-4" />, group: 'finance' },
     { id: 'promo', label: 'Promoção', icon: <Megaphone className="h-4 w-4" />, group: 'marketing' },
+    { id: 'sofia-agent', label: '🤖 Sofia Agente', icon: <Sparkles className="h-4 w-4" />, group: 'marketing' },
     { id: 'posts', label: 'Posts IA', icon: <Sparkles className="h-4 w-4" />, group: 'marketing' },
     { id: 'coupons', label: 'Cupons', icon: <Tag className="h-4 w-4" />, group: 'marketing' },
     { id: 'reviews', label: 'Avaliações', icon: <Star className="h-4 w-4" />, group: 'marketing' },
@@ -404,6 +406,7 @@ const TenantAdmin = () => {
           {tab === 'bi' && <TenantBIDashboard tenantId={tenant.id} />}
           {tab === 'clicks' && <TenantAffiliateClicksRanking tenantId={tenant.id} />}
           {tab === 'promo' && <TenantPromoManager tenantId={tenant.id} niche={(tenant as any).niche} />}
+          {tab === 'sofia-agent' && <SofiaStoreAgent tenantId={tenant.id} tenantName={(tenant as any).name || tenant.slug} />}
           {tab === 'posts' && <MarketingPostGenerator scope="tenant" tenantId={tenant.id} title="Posts do dia (Instagram, Stories, Reels...)" />}
           {tab === 'coupons' && <TenantAdminCoupons tenantId={tenant.id} />}
           {tab === 'coupons-test' && <TenantAdminCouponsTest tenantId={tenant.id} tenantSlug={slug!} />}
@@ -498,10 +501,13 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
   const [uberSandbox, setUberSandbox] = useState(true);
   const [catalogLayout, setCatalogLayout] = useState<'grid'|'list'|'compact'|'magazine'>('grid');
   const [splashEnabled, setSplashEnabled] = useState(true);
+  const [showDescription, setShowDescription] = useState(true);
+  const [showTitle, setShowTitle] = useState(true);
+  const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    supabase.from('tenants').select('splash_bg_color, brand_primary_color, brand_bg_color, is_dropshipping, auto_dropshipping_enabled, dropshipping_review_mode, store_mode, pickup_enabled, pix_key, pix_key_type, lalamove_enabled, lalamove_api_key, lalamove_api_secret, lalamove_market, lalamove_sandbox, uber_direct_enabled, uber_direct_customer_id, uber_direct_client_id, uber_direct_client_secret, uber_direct_sandbox, catalog_layout, product_splash_enabled, whatsapp_show_pix, dropshipping_submode, whatsapp_consultora_phone, whatsapp_default_address_source, whatsapp_store_address, whatsapp_store_cep').eq('id', tenantId).single().then(({ data }) => {
+    supabase.from('tenants').select('splash_bg_color, brand_primary_color, brand_bg_color, is_dropshipping, auto_dropshipping_enabled, dropshipping_review_mode, store_mode, pickup_enabled, pix_key, pix_key_type, lalamove_enabled, lalamove_api_key, lalamove_api_secret, lalamove_market, lalamove_sandbox, uber_direct_enabled, uber_direct_customer_id, uber_direct_client_id, uber_direct_client_secret, uber_direct_sandbox, catalog_layout, product_splash_enabled, whatsapp_show_pix, dropshipping_submode, whatsapp_consultora_phone, whatsapp_default_address_source, whatsapp_store_address, whatsapp_store_cep, show_description, show_title, description').eq('id', tenantId).single().then(({ data }) => {
       if (data) {
         setSplashColor((data as any).splash_bg_color || '#0F172A');
         setPrimaryColor((data as any).brand_primary_color || '#3B82F6');
@@ -531,6 +537,9 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
         setDefaultAddrSrc(((data as any).whatsapp_default_address_source as any) || 'customer');
         setStoreAddress((data as any).whatsapp_store_address || '');
         setStoreCep((data as any).whatsapp_store_cep || '');
+        setShowDescription((data as any).show_description !== false);
+        setShowTitle((data as any).show_title !== false);
+        setDescription((data as any).description || '');
       }
     });
   }, [tenantId]);
@@ -563,6 +572,9 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
       is_dropshipping: storeMode === 'dropshipping' || storeMode === 'hybrid',
       catalog_layout: catalogLayout,
       product_splash_enabled: splashEnabled,
+      show_description: showDescription,
+      show_title: showTitle,
+      description: description.trim(),
       dropshipping_submode: (storeMode === 'dropshipping' || storeMode === 'hybrid') ? dropshippingSubmode : 'standard',
       whatsapp_consultora_phone: consultoraPhone.trim(),
       whatsapp_default_address_source: defaultAddrSrc,
@@ -649,6 +661,34 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
       />
 
       <CatalogLayoutPanel layout={catalogLayout} setLayout={setCatalogLayout} splashEnabled={splashEnabled} setSplashEnabled={setSplashEnabled} />
+
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <h3 className="font-heading text-sm text-foreground flex items-center gap-2">
+          ✍️ Texto da loja (vitrine)
+        </h3>
+        <p className="text-xs text-muted-foreground">O que aparece em cima do texto da sua loja na vitrine pública. Você escolhe o que aparece ou não.</p>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" checked={showTitle} onChange={e => setShowTitle(e.target.checked)} className="mt-1 accent-primary" />
+          <div>
+            <p className="text-sm text-foreground font-medium">Mostrar nome da loja na vitrine</p>
+            <p className="text-xs text-muted-foreground">Desligado: a vitrine não mostra o título em cima do texto.</p>
+          </div>
+        </label>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" checked={showDescription} onChange={e => setShowDescription(e.target.checked)} className="mt-1 accent-primary" />
+          <div>
+            <p className="text-sm text-foreground font-medium">Mostrar texto na vitrine</p>
+            <p className="text-xs text-muted-foreground">Desligado: a vitrine mostra só o nome e a logo, sem texto embaixo.</p>
+          </div>
+        </label>
+        <div>
+          <label className="text-xs text-muted-foreground block mb-1">Texto da vitrine</label>
+          <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} maxLength={300}
+            placeholder="Ex: Moda contemporânea para ela e para ele — elegância em cada peça."
+            className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground disabled:opacity-50 resize-y" />
+          <p className="text-[10px] text-muted-foreground text-right mt-1">{description.length}/300</p>
+        </div>
+      </div>
 
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <h3 className="font-heading text-sm text-foreground flex items-center gap-2">
