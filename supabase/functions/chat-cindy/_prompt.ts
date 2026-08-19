@@ -80,6 +80,7 @@ Quando ele pedir pra "responder o chamado X", localize o ticket pelo assunto no 
 - **Dashboard**: visão geral — KPIs (lojas ativas, GMV, pedidos abertos, receita plataforma), gráficos de evolução.
 - **Comércios**: lista de tenants. Criar loja, editar nome/slug/nicho/cores/logo, suspender, deletar, ver dados de Mercado Pago, ver billing_mode (per_order ou monthly_fixed), definir % da plataforma ou mensalidade fixa, alternar store_mode (own/affiliate).
 - **Saúde Lojas**: lojas com problema — sem MP conectado, sem pedido em X dias, sem produto cadastrado, sem horário, sem frete configurado. Cada card mostra o que falta e botão pra avisar o lojista.
+- **Sofia Agente**: IA executiva que edita a loja inteira por comando natural. Monta plano de mudanças (paleta, textos, preços, fotos) pro lojista aprovar; se ele falar "aplica" no prompt, executa sozinha (autoApply). Faz prospecção remota: encontra e aborda clientes na região. Aba tem histórico de planos e painel de leads.
 - **Financeiro**: receita agregada da PLATAFORMA (não das lojas) — lançamentos (financial_entries: income/expense), dívidas (debts), categorias (taxa_plataforma, venda, etc), relatório PDF mensal.
 - **Cobranças**: faturas mensais (billing_invoices) por lojista. Status: pending, payment_declared (lojista marcou que pagou Pix, aguarda confirmação), paid, cancelled. Gerar fatura, confirmar pagamento declarado, marcar vencida.
 - **Taxas (fee_requests)**: pedidos do lojista pra reduzir % da plataforma em produto específico. Status: pending, approved, rejected. Aprova/rejeita com clique.
@@ -88,8 +89,9 @@ Quando ele pedir pra "responder o chamado X", localize o ticket pelo assunto no 
 - **Workers IA**: workers externos de fallback (ai_workers) — chat, image, parse TXT. Cada worker é uma URL de edge function de OUTRO projeto Supabase. Cadastrar URL, ativar/desativar, ver esgotamento. Tem também os "generated_workers" (auto-criados pela própria plataforma).
 - **Usuários**: gerencia contas. Super admins (platform_roles.role='super_admin') e admins de loja (user_roles com approved=true/false). Aprovar pedido de admin pendente.
 - **Prospecção (street_prospects)**: leads coletados na rua / Google Maps. Cada card tem status (a_visitar, em_negociacao, fechado, perdido), tags manuais e tags geradas por IA (🤖), lembretes, notas. Pode rodar análise IA por lead.
-- **Prospecção Remota**: leads gerados/abordados por IA automaticamente (remote_prospects).
-- **Marketing IA**: gera post pro Insta/Facebook da plataforma (texto + imagem opcional).
+- **Prospecção Remota**: leads gerados/abordados por IA automaticamente (remote_prospects). Atenção: abordagem fria sem contexto assusta e gera bloqueio — mensagens precisam de apresentação curta, motivo claro e tom seguro.
+- **Garçom / Mesas**: controle da ativação do painel do garçom por loja (um clique em Configurações liga o app/QR automaticamente; desligado, o link mostra "indisponível"). Mesas ocupadas mostram comanda, pedidos por mesa e garçom responsável; chamados registrados por mesa (nada sobrepõe).
+- **Marketing IA**: gera post pro Insta/Facebook da plataforma (texto + imagem editorial em cascata automática Google Gemini → Lovable AI → OpenRouter → rede de workers de imagem). Post 1:1 pronto pra baixar, âncora no produto real (nada genérico), estilos visuais (Realista, Cartoon, 3D, Minimal, Vintage, Anime).
 - **Consumo & Margem (Usage Monitor)**: monitora custo de IA (tokens consumidos, $ gasto) vs receita por lojista, pra ver margem real.
 
 # AJUSTES PERSONALIZADOS DO ${OWNER_NAME.toUpperCase()}

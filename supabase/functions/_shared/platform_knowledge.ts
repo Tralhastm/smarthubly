@@ -1,5 +1,9 @@
 // Conhecimento COMPLETO da plataforma — usado por Sofia, Clara, Cindy e o Vendedor IA.
 // Atualize este arquivo sempre que adicionar uma feature relevante para clientes/lojistas.
+// ÚLTIMA ATUALIZAÇÃO: 18/08/2026 — inclui comanda de mesa + QR, painel do garçom (PWA),
+// KDS, maquininha Stone/conciliação, fiscal NF-e, subcategorias ilimitadas, carrossel de
+// fotos/vídeo, splash opcional, Sofia Agente com aplicação automática, prospecção avançada
+// e motor de imagens editorial em cascata.
 
 export const PLATFORM_NAME = "SmartHubly";
 
@@ -7,16 +11,20 @@ export const PLATFORM_KNOWLEDGE = `
 # A PLATAFORMA INTEIRA (visão geral pra você decorar)
 
 ## O QUE É
-Plataforma multi-tenant pra dono de comércio ter loja própria de delivery / pedidos online.
+Plataforma multi-tenant pra dono de comércio ter loja própria de delivery / pedidos online / atendimento por mesa.
 Cada lojista ganha:
-- Loja com link próprio: /loja/{slug}
+- Loja com link próprio: /loja/{slug} (o cliente nunca vê a marca SmartHubly — vê a marca da loja)
 - Painel admin completo: /loja/{slug}/admin
-- App-like (PWA): cliente "instala" na home do celular
-- Cardápio digital com fotos, categorias, descrições, variantes, adicionais
+- App-like (PWA): cliente "instala" na home do celular; o painel do garçom também tem app instalado via link
+- Cardápio digital com fotos (carrossel com várias fotos e vídeo por produto), categorias e subcategorias ilimitadas, descrições, variantes, adicionais
 - Carrinho, checkout, pagamento online (Mercado Pago/Pix/Cartão) ou na entrega (dinheiro/maquininha)
 - Cupom de desconto, fidelidade (pontos por compra), fiado (crédito controlado)
 - WhatsApp do cliente integrado (recebe link do pedido, status, confirmações)
 - Painel de pedidos em tempo real (cozinha vê chegar, status: recebido → preparando → pronto/saindo → entregue)
+- KDS (tela da cozinha) sincronizado com os pedidos, além do painel de operação
+- Atendimento por MESA: cliente escaneia QR code na mesa, abre a comanda, pede pelo cardápio, fecha a conta — o garçom recebe o pedido no app e a mesa aparece em "mesas ocupadas"
+- App do garçom: link/PWA por loja com QR code próprio; recebe pedidos e chamados de mesa em tempo real (push), vê mesas ocupadas e pode transferir comandas entre garçons
+- Painel do garçom controlado pelo admin: o lojista ATIVA/desativa o painel do garçom em Configurações; desativado, o link mostra "indisponível"; ativado, o app abre direto na tela do garçom
 - Impressão térmica Bluetooth ou via app
 - Calendário de agendamento (pra serviços / horários)
 - Comanda de mesa (garçom abre comanda, soma item, fecha)
@@ -26,21 +34,31 @@ Cada lojista ganha:
 Restaurante, lanchonete, pizzaria, hamburgueria, bebidas, mercadinho, padaria, hortifruti,
 açaiteria, sorveteria, doces/confeitaria, salgados, marmitaria, farmácia, pet shop,
 floricultura, materiais de construção, papelaria, óticas, salão/barbearia (agendamento),
-estética/manicure (agendamento), serviços em geral. O sistema se adapta automaticamente.
+estética/manicure (agendamento), vestuário/moda (com categorias e subcategorias), serviços em geral.
+O sistema se adapta automaticamente ao nicho.
 
 ## OPERAÇÃO PRO LOJISTA
+- **Painel**: visão geral (pedidos hoje vs ontem, faturamento, gráfico 7d, top 3 produtos, ticket médio, taxa plataforma)
 - **Pedidos**: aba com TODOS os pedidos por status (Recebidos, Preparando, Saindo, Prontos pra retirada, Entregues, Cancelados)
   - Cancelados mostram MOTIVO (ex: "Pagamento Pix expirado")
-- **Catálogo**: produtos, categorias, fotos, estoque, variantes (tamanho, sabor), adicionais (extras pagos)
+  - Novo pedido avisa o painel E o garçom (se painel ativo) em tempo real, sem precisar recarregar
+- **Mesas ocupadas**: mesas com comanda aberta, pedidos da mesa e garçom responsável — cada chamado de garçom fica registrado na mesa que chamou (não sobrepõe)
+- **KDS**: tela da cozinha sincronizada com os pedidos; quando o painel marca "em preparo" o KDS acompanha
+- **Catálogo**: produtos, categorias, subcategorias (quantas quiser, organizadas hierárquicas), fotos em carrossel (várias fotos + vídeo por produto), estoque, variantes (tamanho, sabor), adicionais (extras pagos)
   - Auto-categorização por IA do nome do produto
-  - Foto gerada por IA se o lojista não tiver
-  - Importação em massa por TXT (cole o cardápio, IA parseia)
+  - Foto gerada por IA em estilo editorial/profissional (motor novo) se o lojista não tiver
+  - Importação em massa por TXT (cole o cardápio, IA parseia) e por XML de NF-e
 - **Financeiro**: caixa diário, contas a pagar/receber, dívidas, investimentos, relatório PDF
+- **Maquininha / Conciliação Stone**: importa o CSV da maquininha Stone (transaction_date, authorization_code, nsu, card_brand, installments, gross_amount, fee_amount, net_amount, expected_settlement_date) e concilia com as vendas — mostra pendentes e divergentes
+- **Fiscal**: emissão de NF-e em homologação via gateway Focus NFe (sem upload de XML avulso)
 - **Fiado**: lista de clientes com saldo aberto, lembrete automático por WhatsApp/email
-- **Marketing**: cupons, programa de fidelidade, gerador de post pra Insta, banner de promoção
-- **Configurações**: cores, logo, capa, horário de funcionamento, raio de entrega, frete por bairro/CEP, métodos de pagamento, modo da loja (delivery/pickup/ambos/comanda)
-- **Aparência**: customiza tema (cor primária, fonte, layout)
-- **Integrações**: Mercado Pago, Lalamove, Uber Direct, FinanceFlow externo
+- **Marketing**: cupons, programa de fidelidade, gerador de post pra Insta com IA (texto + imagem editorial), banner de promoção, e-mails de campanha
+- **Configurações**: cores, logo, capa, horário de funcionamento, raio de entrega, frete por bairro/CEP, métodos de pagamento, modo da loja (delivery/pickup/ambos/comanda), ATIVAÇÃO DO PAINEL DO GARÇOM (liga/desliga o app do garçom; quando ativa, atualiza o link/QR automaticamente)
+- **Aparência**: customiza tema (cor primária, fonte, layout), splash da loja (abre no carregamento, opcional — o lojista pode desativar), título e descrição da loja (opcionais), descrição com texto estilo "Invertexto" (decorativo)
+- **Integrações**: Mercado Pago, Lalamove, Uber Direct, Stone, Focus NFe
+- **Usuários**: convida funcionários (garçom, motoboy, gerente)
+- **Sofia Agente**: IA do super admin que edita a loja por comando natural — o lojista diz "deixa a loja premium", "melhora os preços", "troca as fotos" e a Sofia gera um PLANO de mudanças (paleta, textos, fotos, preços). O lojista pode (a) revisar e clicar "Aplicar mudanças" ou (b) falar "aplica" na conversa e ela aplica automaticamente (autoApply). Prospecting embutido: pode pedir pra encontrar clientes na região (ex: "acha lanchonetes que precisam de laticínio em BH") e ela busca e lista leads
+- **Prospecção**: duas abas — Prospecção de rua (leads coletados na rua/Maps) e Prospecção Remota (IA gera e aborda leads automaticamente com mensagens calibradas pra não parecer golpe: apresentação curta, contexto claro, sem frieza de spam)
 - **Automações** (Onda 1 ativas, Onda 2 opcionais, Onda 3 avançadas):
   1. Cancelar Pix não pago após X min (cliente é avisado pra refazer)
   2. Lembrete de fiado por email/WhatsApp
@@ -54,18 +72,20 @@ estética/manicure (agendamento), serviços em geral. O sistema se adapta automa
   10. Detecção de pedido fantasma (cliente abandona)
   11. Match de afiliados por IA (sugere produtos parceiros)
   12. Backup noturno do catálogo
+  13. Notificação de novo pedido pro garçom/KDS em tempo real (sem recarregar)
 - **Monitor**: vê o que cada automação fez nas últimas 24h
 - **Diagnóstico**: testa cada automação ao vivo
-- **Usuários**: convida funcionários (garçom, motoboy, gerente)
 
 ## EXPERIÊNCIA DO CLIENTE FINAL
-- Abre o link da loja, vê banner de promoção, capa, horário
-- Cardápio responsivo, busca, filtro por categoria
+- Abre o link da loja, vê splash da marca (opcional), banner de promoção, capa, horário e descrição
+- Cardápio responsivo com estilos de card e carrossel; busca e filtro por categoria/subcategoria
+- Clicou no CARD do produto → card expande (splash) com preço, fotos/vídeo e botão "adicionar ao carrinho"
 - Adiciona ao carrinho, escolhe variante e adicionais
 - Login por telefone/email (rápido, sem senha pesada)
 - Endereço por CEP (autocomplete) ou marca no mapa
 - Frete calculado automático (raio, bairro, ou Lalamove/Uber sob demanda)
 - Pagamento: Pix (com QR), Cartão (Mercado Pago), Dinheiro/Maquininha na entrega
+- Mesa: escaneia o QR da mesa, a comanda abre sozinha, pede e fecha — garçom vê tudo no app
 - Aplica cupom, vê desconto, vê pontos de fidelidade ganhos
 - Recebe link do pedido pra acompanhar em tempo real (status, ETA, mapa do motoboy se tiver)
 - Confirmação por WhatsApp automática
@@ -79,12 +99,14 @@ NUNCA cobramos os dois. Sem taxa escondida. Fatura mensal, declarável por Pix.
 Estratégia de retenção: oferecer 9,90 por 2 meses pra entrar; depois 60 reais/mês.
 
 ## INTELIGÊNCIA ARTIFICIAL EMBUTIDA
-- **Sofia**: chat de suporte do lojista (tira dúvida do painel)
+- **Sofia**: chat de suporte do lojista e do visitante (tira dúvida do painel)
+- **Sofia Agente**: IA executiva no super admin — monta planos de mudança na loja e APLICA sozinha (texto, preço, foto, paleta) e faz prospecção remota
 - **Clara**: consultora de negócio da loja (analisa vendas, sugere ações)
-- **Cindy**: copiloto do super admin (eu)
+- **Cindy**: copiloto do super admin (eu) — gera posts de marketing com imagem e responde chamados por ação direta
 - **Vendedor IA (você)**: ajuda a vender a plataforma, gera abordagem e respostas
 - **Chatbot da loja**: atende cliente final no site (tira dúvida, sugere produto)
-- IA gera: foto de produto, descrição, post de marketing, parse de cardápio TXT
+- **Motor de imagens editorial**: gera fotos de produto e posts com padrão profissional estilo foto editorial — tema ancorado no produto real (evita imagens genéricas), sem texto distorcido na arte. A geração roda em cascata automática: Google Gemini → Lovable AI → OpenRouter → rede de workers de imagem (24 ativos, com retry e fallback de prompt). Se um provedor esgota a cota, o próximo assume sozinho. Imagens vão direto pro storage da plataforma e aparecem na loja
+- IA gera: foto de produto (editorial), descrição, post de marketing, parse de cardápio TXT, análise de lead
 
 ## PARA O CLIENTE FINAL DO LOJISTA, A PLATAFORMA APARECE COMO
 A marca da LOJA. O cliente nunca vê "SmartHubly" — vê o nome do comércio,
@@ -94,8 +116,8 @@ as cores do comércio, o domínio que o lojista quiser (custom domain disponíve
 - iFood cobra 12-27% por pedido + assinatura. Aqui o lojista decide entre % BAIXA ou mensalidade.
 - iFood é dono do cliente. Aqui o cliente é do lojista (lista de WhatsApp, email, fidelidade).
 - iFood ranqueia quem paga mais. Aqui o lojista controla a vitrine.
-- iFood não tem fiado, agendamento, comanda de mesa, integração com financeiro próprio.
-- Aqui tem TUDO num lugar só: pedido + financeiro + marketing + fidelidade + automação.
+- iFood não tem fiado, agendamento, comanda de mesa, garçom no celular, KDS, conciliação de maquininha, NF-e, integração com financeiro próprio.
+- Aqui tem TUDO num lugar só: pedido + mesa + cozinha + financeiro + marketing + fidelidade + automação.
 `.trim();
 
 // Estratégia / vocabulário do dono — pra usar no Vendedor IA principalmente.
@@ -132,6 +154,9 @@ Como vender SEM mentir:
 - "Como funciona?" → "Monto sua loja com seu cardápio em 1-2 dias, você ganha um link próprio, divulga no Insta/WhatsApp. Pedido cai direto pra você, sem intermediário."
 - "Vocês chamam iFood/99/Uber pra mim?" → "Não, nenhum deles libera integração pra fora. O que a gente integra direto é só a Lalamove (botão único). Pros outros (Uber, 99, inDrive), você chama pelo app deles e cola o link aqui — o cliente acompanha sozinho."
 - "Não confio em IA" / "qual IA usa?" → "A melhor do mercado. Se insistir muito: usamos Claude também (acaba o argumento)." NUNCA mencione que tem várias IAs ou workers — pro cliente é UMA só.
+
+## TOQUE DE VENDA — SALÃO E RESTAURANTE (comanda + garçom)
+- "Aquele gargalo de perder venda no salão? Aqui o cliente pede pelo QR da mesa e o pedido cai direto no celular do garçom e na cozinha ao mesmo tempo — ninguém fica esperando garçom pra pedir, a conta fecha no celular, e você ainda vê quais mesas estão ocupadas em tempo real."
 
 ## VOZ
 - Brasileira, casual, descontraída. "tá", "pra", "tipo", "pô", emojis com moderação.

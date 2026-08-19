@@ -174,7 +174,19 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
     return prospects.filter(p => p.status === pipelineStatus && (p.initial_message || (p.conversation_log?.length ?? 0) > 0));
   }, [prospects, pipelineStatus]);
 
-  const displayedProspects = view === 'conversar' ? conversarProspects : filteredProspects;
+  // Deduplicação de exibição: leads com mesmo nome normalizado na mesma cidade
+  const displayedProspects = useMemo(() => {
+    if (view === 'conversar') return conversarProspects;
+    const seen = new Set<string>();
+    const out: Prospect[] = [];
+    for (const p of filteredProspects) {
+      const key = `${norm(p.business_name ?? '')}|${norm(p.city ?? '')}`;
+      if (!key || key.length < 5 || seen.has(key)) continue;
+      seen.add(key);
+      out.push(p);
+    }
+    return out;
+  }, [view, conversarProspects, filteredProspects]);
 
   const search = useMutation({
     mutationFn: async () => {

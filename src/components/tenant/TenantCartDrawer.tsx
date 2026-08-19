@@ -33,6 +33,10 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   // Modo da loja determina se aceita delivery e/ou pickup
   const storeMode = ((tenant as any).store_mode as string) || 'delivery';
   const pickupEnabledFlag = (tenant as any).pickup_enabled ?? true;
+  // Retirada quando não há motoboy: o lojista pode desativar o fallback de retirada.
+  // Quando desativado, o pedido de delivery segue mesmo sem motoboy online
+  // (cliente organiza a própria entrega, ex.: Uber Moto) — o frete calculado é cobrado.
+  const pickupAsFallback = (tenant as any).pickup_as_delivery_fallback ?? true;
   const isLocalOnly = storeMode === 'local';
   const isAffiliate = storeMode === 'affiliate';
   const isDropshipping = storeMode === 'dropshipping';
@@ -61,10 +65,23 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const hasOnlinePayment = !isWhatsAppMode && !!((tenant as any).has_online_payment ?? (tenant as any).mercadopago_token ?? (tenant as any).pagbank_token);
 
   
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [address, setAddress] = useState('');
+  const [name, setName] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lastCustomer:' + tenant.slug) || '{}')?.name || ''; } catch { return ''; }
+  });
+  const [phone, setPhone] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lastCustomer:' + tenant.slug) || '{}')?.phone || ''; } catch { return ''; }
+  });
+  const [email, setEmail] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lastCustomer:' + tenant.slug) || '{}')?.email || ''; } catch { return ''; }
+  });
+  const [address, setAddress] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lastCustomer:' + tenant.slug) || '{}')?.address || ''; } catch { return ''; }
+  });
+  // Persiste os dados do cliente a cada alteração (lembrar dados do checkout)
+  useEffect(() => {
+    if (!name && !phone && !email && !address) return;
+    try { localStorage.setItem('lastCustomer:' + tenant.slug, JSON.stringify({ name, phone, email, address })); } catch { /* ignore */ }
+  }, [name, phone, email, address, tenant.slug]);
   const requireEmail = !!(tenant as any).require_customer_email;
   const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
@@ -423,7 +440,11 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             }
           }
           if (data.has_delivery === false) {
-            setShowPickupOnlyModal(true);
+            if (pickupAsFallback) setShowPickupOnlyModal(true);
+            else if (typeof distance !== 'number') {
+              // Sem motoboy e sem distância calculada: usar a distância do cálculo como estimativa
+              setDistance((data as any).distance_km ?? null);
+            }
           }
         }
       }
@@ -494,7 +515,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
 
     // Bloqueia delivery se sistema confirmou que não há motoboy/Lalamove disponíveis
     // (a menos que o cliente já tenha confirmado mudar pra retirada)
-    if (deliveryType === 'delivery' && deliveryCheck && !deliveryCheck.has_delivery && !pickupOnlyConfirmed) {
+    // Quando o lojista desativa o fallback de retirada (pickup_as_delivery_fallback=false),
+    // o pedido segue como delivery mesmo sem motoboy — cliente organiza a própria retirada.
+    if (pickupAsFallback && deliveryType === 'delivery' && deliveryCheck && !deliveryCheck.has_delivery && !pickupOnlyConfirmed) {
       setShowPickupOnlyModal(true);
       return;
     }
@@ -535,7 +558,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           ? PENDING_PAYMENT_STATUS
           : ((tenant as any).dropshipping_review_mode && isDropshipping ? 'pending_review' : 'received');
 
-      // Salva telefone pra auto-carregar em "Meus Pedidos"
+      // Salva dados do cliente pra auto-carregar no próximo checkout (e "Meus Pedidos")
+      try { localStorage.setItem('lastCustomer:' + tenant.slug, JSON.stringify({ name, phone, email, address })); } catch { /* ignore */ }
       try { localStorage.setItem(`lastPhone:${tenant.slug}`, phone.replace(/\D/g, '')); } catch { /* ignore */ }
 
       const orderResult = await addOrderMutation.mutateAsync({
@@ -864,7 +888,11 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                           <p className="text-muted-foreground">
                             {deliveryCheck.lalamove_failed && 'A cotação Lalamove falhou. '}
                             {deliveryCheck.driver_offline && 'Nenhum motoboy da loja está online. '}
-                            Você pode retirar na loja: <strong className="text-foreground">{deliveryCheck.pickup_address}</strong>
+                            {pickupAsFallback ? (
+                              <>Você pode retirar na loja: <strong className="text-foreground">{deliveryCheck.pickup_address}</strong></>
+                            ) : (
+                              <>Seu pedido será preparado e você organiza a retirada da entrega (ex.: Uber Moto). O frete calculado é cobrado normalmente.</>
+                            )}
                           </p>
                         </div>
                       )}
@@ -1075,24 +1103,39 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
               <p className="font-medium text-foreground mb-1">📍 Retire na loja (frete grátis):</p>
               <p className="text-muted-foreground text-xs">{deliveryCheck.pickup_address}</p>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => { setShowPickupOnlyModal(false); }}
-                className="py-2.5 rounded-lg text-sm font-medium bg-secondary text-foreground hover:bg-muted"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => {
-                  setDeliveryType('pickup');
-                  setPickupOnlyConfirmed(true);
-                  setShowPickupOnlyModal(false);
-                  toast({ title: 'Modo retirada ativado', description: 'Frete zerado. Confirme o pedido.' });
-                }}
-                className="py-2.5 rounded-lg text-sm font-medium gradient-primary text-primary-foreground hover:opacity-90"
-              >
-                Aceitar retirada
-              </button>
+            <div className={pickupAsFallback ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-1 gap-2'}>
+              {!pickupAsFallback ? (
+                <button
+                  onClick={() => {
+                    setPickupOnlyConfirmed(true);
+                    setShowPickupOnlyModal(false);
+                    toast({ title: 'Frete confirmado', description: 'Pedido seguirá com o valor calculado. Organize a retirada da entrega (ex.: Uber Moto).' });
+                  }}
+                  className="py-2.5 rounded-lg text-sm font-medium gradient-primary text-primary-foreground hover:opacity-90"
+                >
+                  Entender, seguir com entrega
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => { setShowPickupOnlyModal(false); }}
+                    className="py-2.5 rounded-lg text-sm font-medium bg-secondary text-foreground hover:bg-muted"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDeliveryType('pickup');
+                      setPickupOnlyConfirmed(true);
+                      setShowPickupOnlyModal(false);
+                      toast({ title: 'Modo retirada ativado', description: 'Frete zerado. Confirme o pedido.' });
+                    }}
+                    className="py-2.5 rounded-lg text-sm font-medium gradient-primary text-primary-foreground hover:opacity-90"
+                  >
+                    Aceitar retirada
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

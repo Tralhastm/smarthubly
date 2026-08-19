@@ -13,6 +13,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { callAiJson } from "../_shared/ai-fallback.ts";
+import { generateImageCascade } from "../_shared/image-gen.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -96,37 +97,16 @@ async function buildStoreContext(admin: any, tenantId: string): Promise<StoreCon
 }
 
 // ============ GERAÇÃO DE IMAGEM ============
-// Pollinations.ai gratuita (sem chave) → baixa bytes → sobe pro bucket product-images → URL pública
-async function generateAndUploadImage(admin: any, prompt: string, tenantId: string): Promise<string | null> {
+// Cascata profissional (sem Pollinations): Google Gemini 2.5 Flash Image → Lovable AI → ai_workers (image)
+// Política do dono: imagem sempre pelos Workers/cascata de APIs, nunca Pollinations (qualidade ruim).
+async function generateAndUploadImage(admin: any, prompt: string, tenantId: string, productName?: string): Promise<{ url: string | null; err: string | null }> {
   try {
-    // Retry interno: até 2 tentativas com seed diferente (Pollinations pode demorar)
-    let lastErr: string | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 75_000);
-      const seed = Math.floor(Math.random() * 1e9);
-      // 768px equilibra qualidade e velocidade do fluxo gratuito
-      const url =
-        `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=768&height=768&model=flux&nologo=true&seed=${seed}`;
-      const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
-      if (!r.ok) { lastErr = `http ${r.status}`; continue; }
-      const ct = r.headers.get("content-type") || "";
-      if (!ct.includes("image")) { lastErr = `content-type ${ct}`; continue; }
-      const buf = await r.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      const mime = ct.startsWith("image/png") ? "image/png" : "image/jpeg";
-      const ext = mime === "image/png" ? "png" : "jpg";
-      const path = `${tenantId}/${crypto.randomUUID()}-sofia.${ext}`;
-      const { error } = await admin.storage.from("product-images").upload(path, bytes, { contentType: mime, upsert: true });
-      if (error) { lastErr = error.message; continue; }
-      const { data: urlData } = admin.storage.from("product-images").getPublicUrl(path);
-      return urlData.publicUrl;
-    }
-    console.warn("[sofia-agent] image gen gave up:", lastErr);
-    return null;
+    const res = await generateImageCascade(admin, prompt, tenantId, "sofia", { productName });
+    if (res?.url) return { url: res.url, err: null };
+    console.error("[sofia] cascata retornou null — workers/google/lovable todos falharam, prompt:", (prompt || "").slice(0, 60));
+    return { url: null, err: "cascata de imagem falhou em todos os estagios (prompt: " + (prompt || "").slice(0, 80) + ")" };
   } catch (e) {
-    console.warn("[sofia-agent] image gen failed:", e instanceof Error ? e.message : e);
-    return null;
+    return { url: null, err: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -146,15 +126,16 @@ async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyI
     const imageResults = await Promise.allSettled(
       pc.map(async (item) => {
         if (!item.newImagePrompt) return { id: item.id, url: null };
-        const url = await generateAndUploadImage(admin, item.newImagePrompt, tenantId);
-        return { id: item.id, url };
+        const r = await generateAndUploadImage(admin, item.newImagePrompt, tenantId, item.productName);
+        return { id: item.id, url: r.url, err: r.err };
       }),
     );
-    const byId = new Map(imageResults.map((r, i) => [pc[i].id, r.status === "fulfilled" ? r.value.url : null]));
+    const byId = new Map(imageResults.map((r, i) => [pc[i].id, r.status === "fulfilled" ? r.value : null]));
     for (const item of pc) {
       if (!item.newImagePrompt) continue;
-      const imageUrl = byId.get(item.id) || null;
-      if (!imageUrl) errors.push(`foto do produto ${item.id}: geração falhou`);
+      const rec = byId.get(item.id);
+      const imageUrl = rec?.url || null;
+      if (!imageUrl) errors.push(`foto do produto ${item.id}: ${rec?.err ?? "geração falhou"}`);
       else {
         const { error } = await admin.from("products").update({ image: imageUrl }).eq("id", item.id).eq("tenant_id", tenantId);
         if (error) errors.push(`foto do produto ${item.id}: ${error.message}`);
@@ -184,18 +165,19 @@ async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyI
   const imageResults = await Promise.allSettled(
     pc.map(async (item) => {
       if (!item.newImagePrompt) return { id: item.id, url: null };
-      const url = await generateAndUploadImage(admin, item.newImagePrompt, tenantId);
-      return { id: item.id, url };
+      const r = await generateAndUploadImage(admin, item.newImagePrompt, tenantId, item.productName);
+      return { id: item.id, url: r.url, err: r.err };
     }),
   );
-  const byId = new Map(imageResults.map((r, i) => [pc[i].id, r.status === "fulfilled" ? r.value.url : null]));
+  const byId = new Map(imageResults.map((r, i) => [pc[i].id, r.status === "fulfilled" ? r.value : null]));
 
   for (const item of pc) {
     try {
-      const imageUrl = byId.get(item.id) || null;
+      const rec = byId.get(item.id);
+      const imageUrl = rec?.url || null;
       if (onlyImages) {
         if (!item.newImagePrompt) continue;
-        if (!imageUrl) errors.push(`foto do produto ${item.id}: geração falhou`);
+        if (!imageUrl) errors.push(`foto do produto ${item.id}: ${rec?.err ?? "geração falhou"}`);
         else {
           const { error } = await admin.from("products").update({ image: imageUrl }).eq("id", item.id).eq("tenant_id", tenantId);
           if (error) errors.push(`foto do produto ${item.id}: ${error.message}`);
@@ -206,7 +188,7 @@ async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyI
       // apply completo: atualiza tudo exceto imagem já aplicada antes (evita regravar)
       if (item.newImagePrompt) {
         if (imageUrl) applied.push(`foto do produto ${item.id}`);
-        else errors.push(`foto do produto ${item.id}: geração falhou (resto aplicado)`);
+        else errors.push(`foto do produto ${item.id}: ${rec?.err ?? "geração falhou (resto aplicado)"}`);
       }
       const update: Record<string, unknown> = {};
       if (imageUrl) update.image = imageUrl;
@@ -427,6 +409,9 @@ Responda apenas com o JSON do plano. Produtos com imagem faltando e visíveis na
               newDescription: p?.newDescription != null ? String(p.newDescription) : undefined,
               newPrice: typeof p?.newPrice === "number" ? p.newPrice : undefined,
               newImagePrompt: p?.newImagePrompt != null ? String(p.newImagePrompt) : undefined,
+              // productName ancora o tema da imagem no worker (evita fotos genéricas)
+              productName: p?.productName != null ? String(p.productName).slice(0, 40)
+                : String(p?.newName || ctx.products.find((x: any) => x.id === String(p?.id))?.name || "").slice(0, 40) || undefined,
             })).filter((p: any) => p.id)
           : [],
         userRequest: lastMsg,

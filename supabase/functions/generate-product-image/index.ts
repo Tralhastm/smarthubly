@@ -195,7 +195,11 @@ async function tryGoogle(prompt: string, keys: ApiKeyEntry[], supabase: any, ten
         console.error(`Google image API ${response.status} for key ${keyEntry.id}:`, errText.slice(0, 200));
       }
       if (response.status === 429 || response.status === 403) {
-        if (keyEntry.id !== "__env__") await supabase.from("api_keys").update({ is_exhausted: true }).eq("id", keyEntry.id);
+        // Marcar como exausto SOMENTE para erros definitivos (401/403 = chave inválida).
+        // 429 é quota temporária (renova ~1h) — não marcar, a função inteira falha de todo jeito.
+        if (keyEntry.id !== "__env__" && (response.status === 401 || response.status === 403)) {
+          await supabase.from("api_keys").update({ is_exhausted: true, exhausted_at: new Date().toISOString() }).eq("id", keyEntry.id);
+        }
         continue;
       }
       if (!response.ok) { allQuotaExhausted = false; continue; }
@@ -268,6 +272,39 @@ async function tryWorker(productName: string, category: string, tenantId: string
       }
       if (!response.ok) {
         console.warn(`Worker ${worker.name} returned ${response.status}`);
+        // Fallback: o Gemini por trás dos workers rejeita prompts longos com 400/500
+        // aleatórios (safety). Tentar de novo com prompt MÍNIMO (sem detalhes longos).
+        if ((response.status === 400 || response.status === 500) && prompt.length > 120) {
+          console.log(`[gen] worker ${worker.name}: retry com prompt mínimo...`);
+          const shortPrompt = `${productName} (category: ${category || 'general'})`;
+          const ctrl2 = new AbortController();
+          const timer2 = setTimeout(() => ctrl2.abort(), 25_000);
+          const response2 = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ productName, category, tenantId, prompt: shortPrompt }),
+            signal: ctrl2.signal,
+          }).finally(() => clearTimeout(timer2));
+          if (response2.ok) {
+            const data2 = await response2.json().catch(() => null);
+            if (data2?.imageUrl || data2?.image) {
+              const candidate = (typeof data2.imageUrl === "string" && data2.imageUrl.startsWith("data:image")) ? data2.imageUrl : (typeof data2.image === "string" && data2.image.startsWith("data:image") ? data2.image : null);
+              if (candidate) {
+                const match2 = candidate.match(/^data:image\/(png|jpeg|jpg|webp);base64,(.+)$/);
+                if (match2) {
+                  const imageUrl2 = await uploadImage(supabase, match2[2], `image/${match2[1]}`, tenantId);
+                  await supabase.from("ai_workers").update({ last_used_at: new Date().toISOString() }).eq("id", worker.id);
+                  return { url: imageUrl2, reason: 'ok' };
+                }
+              }
+              if (typeof data2.imageUrl === "string" && /^https?:\/\//i.test(data2.imageUrl)) {
+                await supabase.from("ai_workers").update({ last_used_at: new Date().toISOString() }).eq("id", worker.id);
+                return { url: data2.imageUrl, reason: 'ok' };
+              }
+            }
+          }
+          console.warn(`Worker ${worker.name}: retry mínimo também falhou (${response2.status})`);
+        }
         allExhausted = false;
         continue;
       }
@@ -413,6 +450,16 @@ serve(async (req) => {
 
     const r1 = await tryGoogle(prompt, keys, supabase, tenantId);
     if (r1.url) return new Response(JSON.stringify({ imageUrl: r1.url }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    if (r1.reason === 'google_quota' && keys.length > 0) {
+      // Quota gratuita do Gemini renova lentamente; a espera longa de 60s consome o
+      // orçamento de tempo da Edge Function (150s). Estratégia: espera curta (15s) e
+      // tentativa rápida única — se renovou, ganha de graça; senão, segue adiante.
+      console.log(`[gen] google em quota, esperando 15s para renovação rápida...`);
+      await new Promise((res) => setTimeout(res, 15_000));
+      const r1q = await tryGoogle(prompt, keys, supabase, tenantId);
+      if (r1q.url) return new Response(JSON.stringify({ imageUrl: r1q.url, quickRetry: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     console.log(`Google failed (${r1.reason}), trying Lovable AI...`);
     const r2 = await tryLovable(prompt, supabase, tenantId);

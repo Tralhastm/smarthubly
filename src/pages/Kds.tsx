@@ -38,8 +38,15 @@ function timeAgo(dateStr: string) {
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
   if (diff < 1) return "agora";
   if (diff < 60) return `${diff} min`;
-  const h = Math.floor(diff / 60);
-  return `${h}h ${diff % 60}min`;
+  if (diff < 48 * 60) {
+    const h = Math.floor(diff / 60);
+    return `${h}h ${diff % 60}min`;
+  }
+  const d = Math.floor(diff / (24 * 60));
+  const hd = Math.floor((diff % (24 * 60)) / 60);
+  if (d < 14) return `${d}d ${hd}h`;
+  const w = Math.floor(d / 7);
+  return `${w} sem${w > 1 ? "" : ""} · ${d}d`;
 }
 
 export default function Kds() {

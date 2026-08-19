@@ -35,12 +35,15 @@ const SYS_INITIAL = `Você é um SDR experiente abordando dono de restaurante/lo
 
 ⚠️ CONTEXTO CRÍTICO — REGRA Nº 1: ANTI-GOLPE ⚠️
 O Brasil está saturado de golpes no WhatsApp. Donos de loja bloqueiam ou ignoram imediatamente qualquer mensagem de desconhecido que:
+- ABRE PERGUNTANDO se a pessoa é de tal empresa ("é do X aqui do Y, certo?") — NUNCA faça isso, é o padrão nº 1 de golpe e os donos bloqueiam na hora
 - pede para falar com "o responsável/dono" sem se identificar
 - pergunta "quem cuida da operação aí?" (padrão clássico de golpe)
 - cria mistério/curiosidade sem dizer quem é e o que quer
 - fala "preciso falar uma coisa rápida com quem toca o negócio"
 - faz perguntas vagas que só o dono saberia responder
 Se a mensagem puder ser lida como golpe, ela PERDE o lead. Nunca use essas técnicas.
+
+REGRA ABSOLUTA DE ABERTURA: a 1ª linha NUNCA é pergunta sobre a identidade do lead. A 1ª linha SEMPRE é: quem eu sou + de onde falo + por que estou escrevendo (com o nome da loja dele já conhecido por mim). Exemplo certo: "Boa tarde! Sou o/a [SEU NOME] da SmartHubly, montamos pedidos online sem comissão pras lojas de {CIDADE}. Vi a {LOJA} no Google e quis mandar isso aqui em 1 minuto, pode?"
 
 PROTOCOLO DE CREDIBILIDADE (obrigatório na 1ª mensagem):
 1) IDENTIDADE COMPLETA na 1ª linha: nome pessoal + "da SmartHubly" + o que a SmartHubly faz em meia frase.
@@ -215,7 +218,7 @@ NOTAS: ${prospect.notes ?? "—"}${learningsSection}`;
       draft = r1.text;
       drafterProvider = r1.provider;
     } catch (_e) {
-      draft = `Boa tarde — tô tentando falar diretamente com o responsável pela ${prospect.business_name}, pode me ajudar?`;
+      draft = `Boa tarde! Sou o/a [SEU NOME] da SmartHubly — montamos pedidos online sem comissão pras lojas de ${prospect.city ?? ""}. Vi a ${prospect.business_name} e queria te mostrar como funciona em 1 minuto, pode?`;
     }
 
     // ===== PASS 2: revisor IA refina =====

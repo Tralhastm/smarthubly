@@ -59,11 +59,23 @@ function fmtPhone(raw: string | null | undefined): string | null {
   return raw;
 }
 
+// Envolve um fetch com timeout: aborta a requisição se exceder `ms`.
+function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit & { timeout?: number } | undefined,
+): Promise<Response> {
+  const timeout = init?.timeout ?? 12000;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error(`timeout ${timeout}ms`)), timeout);
+  const p = fetch(input, { ...(init ?? {}), signal: ctrl.signal });
+  return p.finally(() => clearTimeout(timer));
+}
+
 // ============== NOMINATIM (POIs do OSM) ==============
 async function searchNominatim(query: string): Promise<Lead[]> {
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&extratags=1&namedetails=1&limit=50&countrycodes=br`;
-    const r = await fetch(url, {
+    const r = await fetchWithTimeout(url, {
       headers: { "User-Agent": "LovableProspectBot/1.0 (contato@plataforma.com.br)", "Accept-Language": "pt-BR" },
     });
     if (!r.ok) { console.warn("nominatim status:", r.status); return []; }
@@ -104,7 +116,7 @@ async function searchNominatim(query: string): Promise<Lead[]> {
 async function geocodeCity(city: string, state: string): Promise<{lat:number; lon:number; bbox: [number,number,number,number]} | null> {
   try {
     const q = `${city}${state ? ", " + state : ""}, Brasil`;
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=br`, {
+    const r = await fetchWithTimeout(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=br`, {
       headers: { "User-Agent": "LovableProspectBot/1.0", "Accept-Language": "pt-BR" },
     });
     const arr = await r.json();
@@ -161,7 +173,7 @@ async function searchOverpass(city: string, state: string, niche: string, neighb
   }).join("");
   const ql = `[out:json][timeout:25];(${tagFilters});out tags center 80;`;
   try {
-    const r = await fetch("https://overpass-api.de/api/interpreter", {
+    const r = await fetchWithTimeout("https://overpass-api.de/api/interpreter", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -169,6 +181,7 @@ async function searchOverpass(city: string, state: string, niche: string, neighb
         "Accept": "application/json",
       },
       body: "data=" + encodeURIComponent(ql),
+      timeout: 30000,
     });
     if (!r.ok) { console.warn("overpass status:", r.status); return []; }
     const j = await r.json();
@@ -211,7 +224,7 @@ Retorne APENAS JSON puro (sem markdown, sem \`\`\`), formato:
 {"leads":[{"business_name":"","phone":"(XX) XXXXX-XXXX","address":"","neighborhood":"","rating":0,"reviews_count":0,"website_url":"","instagram_handle":"","hours":"","category":"","description":""}]}
 Mínimo 8, máximo 25 empresas. Use só dados encontrados na busca, nunca invente. Se não tiver um campo, deixe null.`;
   try {
-    const r = await fetch(
+    const r = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${googleKey}`,
       {
         method: "POST",
@@ -221,6 +234,7 @@ Mínimo 8, máximo 25 empresas. Use só dados encontrados na busca, nunca invent
           tools: [{ google_search: {} }],
           generationConfig: { temperature: 0.2, maxOutputTokens: 8000 },
         }),
+        timeout: 25000,
       },
     );
     if (!r.ok) { console.warn("gemini grounded status:", r.status, (await r.text()).slice(0,200)); return []; }
@@ -236,7 +250,7 @@ Mínimo 8, máximo 25 empresas. Use só dados encontrados na busca, nunca invent
 // ============== LOVABLE AI (fallback sem grounding) ==============
 async function lovableAiLeads(query: string, lovableKey: string): Promise<Lead[]> {
   try {
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const r = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -247,6 +261,7 @@ async function lovableAiLeads(query: string, lovableKey: string): Promise<Lead[]
         ],
         response_format: { type: "json_object" },
       }),
+      timeout: 25000,
     });
     if (!r.ok) { console.warn("lovable ai status:", r.status, (await r.text()).slice(0,200)); return []; }
     const j = await r.json();
@@ -261,7 +276,7 @@ async function lovableAiLeads(query: string, lovableKey: string): Promise<Lead[]
 // ============== DUCKDUCKGO HTML (último recurso) ==============
 async function duckScrape(query: string): Promise<Lead[]> {
   try {
-    const r = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+    const r = await fetchWithTimeout(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
       headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/121.0 Safari/537.36" },
     });
     if (!r.ok) return [];

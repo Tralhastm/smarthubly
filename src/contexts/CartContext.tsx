@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { Tables } from '@/integrations/supabase/types';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -60,7 +60,17 @@ const lineUnitPrice = (item: CartItem): number => {
 };
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
-  const [items, setItems] = useState<CartItem[]>([]);
+  // Persistência: o carrinho sobrevive a reloads e instabilidade de rede no mobile
+  const [items, setItems] = useState<CartItem[]>(() => {
+    try {
+      const raw = localStorage.getItem('cart');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed as CartItem[];
+      }
+    } catch { /* ignore */ }
+    return [];
+  });
 
   const addToCart = (product: Product, opts?: AddOptions) => {
     const key = buildKey(product.id, opts);
@@ -99,7 +109,18 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     }));
   };
 
-  const clearCart = () => setItems([]);
+  const clearCart = () => {
+    setItems([]);
+    try { localStorage.removeItem('cart'); } catch { /* ignore */ }
+  };
+
+  // Sincroniza o carrinho com localStorage a cada mudança
+  useEffect(() => {
+    try {
+      if (items.length === 0) localStorage.removeItem('cart');
+      else localStorage.setItem('cart', JSON.stringify(items));
+    } catch { /* storage indisponível */ }
+  }, [items]);
 
   const decrementStock = async () => {
     // Soma quantidade total por product_id (todas as variantes contam pro mesmo estoque)

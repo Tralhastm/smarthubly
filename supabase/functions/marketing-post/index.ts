@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { generateImageCascade } from "../_shared/image-gen.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -366,29 +367,7 @@ Responda só o JSON.`;
   return { scene: briefing, style: forcedStyle === "auto" ? "realistic" : forcedStyle };
 }
 
-async function tryPollinations(fullPrompt: string): Promise<string | null> {
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 45_000);
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=1024&height=1024&model=flux&nologo=true&seed=${Math.floor(Math.random() * 1e9)}`;
-    const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
-    if (!r.ok || !r.headers.get("content-type")?.includes("image")) return null;
-    const buf = await r.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-    const b64 = b64FromBytes(bytes);
-    const mime = r.headers.get("content-type")?.startsWith("image/png") ? "image/png" : "image/jpeg";
-    return `data:${mime};base64,${b64}`;
-  } catch (e) { console.warn("pollinations error:", e instanceof Error ? e.message : e); return null; }
-}
-
-function b64FromBytes(bytes: Uint8Array): string {
-  let bin = "";
-  const chunk = 8192;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(bin);
-}
+// Política do dono: imagem sempre pelos Workers/cascata de APIs, nunca Pollinations (qualidade ruim).
 
 async function generatePostImage(briefing: string, postText: string, niche: string | undefined, forcedStyle: ImageStyle, supabase: any): Promise<string | null> {
   const { scene, style } = await distillImageScene(briefing, postText, niche, forcedStyle, supabase);
@@ -397,15 +376,10 @@ async function generatePostImage(briefing: string, postText: string, niche: stri
   const fullPrompt = `Square 1:1 image for an Instagram post.
 Subject: ${scene}
 ${styleLine}
-Composition: hero subject centered or rule-of-thirds, clean readable background, social-media ready.
-STRICT RULES: absolutely NO text, NO letters, NO words, NO logos, NO typography, NO numbers, NO captions, NO watermarks anywhere in the image.`;
-  const lov = await tryLovableImage(fullPrompt);
-  if (lov) return lov;
-  console.log("Lovable image falhou, tentando pollinations...");
-  const pol = await tryPollinations(fullPrompt);
-  if (pol) return pol;
-  console.log("Pollinations falhou, tentando workers de imagem...");
-  return await tryImageWorkers(fullPrompt, supabase);
+Composition: hero subject centered or rule-of-thirds, clean readable background, social-media ready.`;
+  const res = await generateImageCascade(supabase, fullPrompt, "marketing", "post");
+  if (!res) console.error("[marketing-post] cascata de imagem falhou, prompt:", fullPrompt.slice(0, 150));
+  return res?.url ?? null;
 }
 
 serve(async (req) => {
@@ -483,12 +457,14 @@ Responda só o JSON.`;
       ? { mode: "editorial_overlay", style: body.imageStyle || "auto", title1: ovTitle, title2: "", subtitle: ovSub.slice(0, 160) }
       : null;
 
-    return new Response(JSON.stringify({
+    const resData: Record<string, unknown> = {
       content,
       image: imageDataUrl,
       overlay,
       context_used: ctx ? { topSold: ctx.topSold, totalOrders: ctx.totalOrders, tenantName: ctx.tenant?.name } : null,
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    };
+
+    return new Response(JSON.stringify(resData), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }

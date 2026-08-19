@@ -22,6 +22,21 @@ const SuperAdminUsageMonitor = () => {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const CACHE_KEY = "smarthubly-usage-monitor";
+  const CACHE_TTL = 5 * 60_000;
+
+  const readCache = (): { data: typeof data; at: number } | null => {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      const { at, payload } = JSON.parse(raw);
+      if (Date.now() - at > CACHE_TTL) return null;
+      return payload;
+    } catch { return null; }
+  };
+
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
+
   const load = async () => {
     setLoading(true); setErr(null);
     try {
@@ -29,12 +44,25 @@ const SuperAdminUsageMonitor = () => {
       if (error) throw error;
       if (res?.error) throw new Error(res.error);
       setData(res);
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), payload: { data: res } }));
+      } catch { /* storage indisponível */ }
     } catch (e: any) {
       setErr(e.message ?? String(e));
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { void load(); }, []);
+  // Cache 5min: a função conta EXACT em 12 tabelas × lojas e pode levar ~10s
+  useEffect(() => {
+    const cached = readCache();
+    if (cached?.data) {
+      setData(cached.data);
+      setCachedAt(cached.at);
+      // Recalcula em background sem spinner (os dados em cache já aparecem)
+      setLoading(false);
+    }
+    void load();
+  }, []);
 
   if (loading && !data) {
     return <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
@@ -50,7 +78,7 @@ const SuperAdminUsageMonitor = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-heading text-xl text-foreground">Consumo & Margem por Loja</h2>
-          <p className="text-xs text-muted-foreground">Estimativa baseada em dados reais (rows + pedidos 30d). Atualizado: {new Date(data.generated_at).toLocaleString("pt-BR")}</p>
+          <p className="text-xs text-muted-foreground">Estimativa baseada em dados reais (rows + pedidos 30d). Atualizado: {new Date(data.generated_at).toLocaleString("pt-BR")}{cachedAt && cachedAt < Date.now() - 60_000 ? " · dados salvos por até 5 min" : ""}</p>
         </div>
         <button onClick={load} disabled={loading} className="flex items-center gap-1 rounded-lg bg-secondary px-3 py-2 text-sm text-foreground hover:bg-secondary/80 disabled:opacity-50">
           <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Atualizar

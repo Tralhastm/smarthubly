@@ -510,6 +510,9 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
   const [showDescription, setShowDescription] = useState(true);
   const [showTitle, setShowTitle] = useState(true);
   const [description, setDescription] = useState('');
+  // Quando não há motoboy online, oferecer retirada na loja (padrão) ou seguir o
+  // pedido de delivery cobrando o frete calculado (cliente organiza a própria retirada, ex.: Uber Moto).
+  const [pickupAsFallback, setPickupAsFallback] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -546,6 +549,7 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
         setShowDescription((data as any).show_description !== false);
         setShowTitle((data as any).show_title !== false);
         setDescription((data as any).description || '');
+        setPickupAsFallback((data as any).pickup_as_delivery_fallback !== false);
       }
     });
   }, [tenantId]);
@@ -581,6 +585,7 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
       show_description: showDescription,
       show_title: showTitle,
       description: description.trim(),
+      pickup_as_delivery_fallback: pickupAsFallback,
       dropshipping_submode: (storeMode === 'dropshipping' || storeMode === 'hybrid') ? dropshippingSubmode : 'standard',
       whatsapp_consultora_phone: consultoraPhone.trim(),
       whatsapp_default_address_source: defaultAddrSrc,
@@ -685,6 +690,13 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
           <div>
             <p className="text-sm text-foreground font-medium">Mostrar texto na vitrine</p>
             <p className="text-xs text-muted-foreground">Desligado: a vitrine mostra só o nome e a logo, sem texto embaixo.</p>
+          </div>
+        </label>
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input type="checkbox" checked={pickupAsFallback} onChange={e => setPickupAsFallback(e.target.checked)} className="mt-1 accent-primary" />
+          <div>
+            <p className="text-sm text-foreground font-medium">Oferecer retirada na loja quando não houver motoboy online</p>
+            <p className="text-xs text-muted-foreground">Ligado: sem motoboy, o cliente pode retirar na loja (frete grátis). Desligado: o pedido de delivery segue mesmo assim cobrando o frete calculado — o cliente organiza a própria retirada da entrega (ex.: Uber Moto).</p>
           </div>
         </label>
         <div>
