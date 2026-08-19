@@ -92,6 +92,8 @@ const UFS = ['','AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG'
 
 type ProspectingScope = 'super' | 'client';
 
+const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
 const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantId?: string; label?: string }) => {
   const qc = useQueryClient();
   const scope = props?.scope ?? 'super';
