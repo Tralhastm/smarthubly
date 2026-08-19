@@ -487,7 +487,7 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
   return (
     <div className="space-y-6">
       {/* SUB-ABAS LEADS / CONVERSAR */}
-      <div className="flex gap-2 overflow-x-auto">
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setView('leads')}
           className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-xs font-medium transition-all ${view === 'leads' ? 'gradient-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'}`}
@@ -513,7 +513,7 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
             <MessageCircle className="h-5 w-5 text-primary" />
             <h2 className="font-semibold text-base">Pipeline de conversas</h2>
           </div>
-          <div className="flex gap-2 overflow-x-auto">
+          <div className="flex flex-wrap gap-2">
             {PIPELINE.map(s => (
               <button key={s.id} onClick={() => setPipelineStatus(s.id)}
                 className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium ${pipelineStatus === s.id ? 'gradient-primary text-primary-foreground' : `${s.tone} hover:opacity-80`}`}>
@@ -623,7 +623,7 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
             Só sem site
           </label>
         </div>
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setFilterStatus('all')}
             className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs ${filterStatus === 'all' ? 'gradient-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}
@@ -660,7 +660,7 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <h3 className="font-semibold text-base">{p.business_name}</h3>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full ${status.color}`}>{status.label}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-bold">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-bold whitespace-nowrap">
                         Score {p.priority_score}
                       </span>
                     </div>
@@ -755,62 +755,66 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
                 )}
 
                 {/* TELEFONE + ENRICH */}
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <input
-                    value={phoneVal}
-                    onChange={(e) => setEditingPhone((s) => ({ ...s, [p.id]: e.target.value }))}
-                    onBlur={() => {
-                      const v = editingPhone[p.id];
-                      if (v !== undefined && v !== p.phone) updateProspect.mutate({ id: p.id, patch: { phone: v } });
-                    }}
-                    placeholder="DDD + número"
-                    className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  />
-                  <button
-                    onClick={() => mapsPhone.mutate(p.id)}
-                    disabled={mapsPhone.isPending && mapsPhone.variables === p.id}
-                    title="Buscar telefone só desta loja no Google Maps"
-                    className="flex items-center gap-1 h-9 rounded-md bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 px-3 text-xs disabled:opacity-50"
-                  >
-                    {mapsPhone.isPending && mapsPhone.variables === p.id
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <MapIcon className="h-3.5 w-3.5" />}
-                    Maps
-                  </button>
-                  <button
-                    onClick={() => enrich.mutate(p.id)}
-                    disabled={enrich.isPending && enrich.variables === p.id}
-                    title="Buscar CNPJ, telefone e Insta"
-                    className="flex items-center gap-1 h-9 rounded-md bg-secondary px-3 text-xs hover:bg-secondary/80 disabled:opacity-50"
-                  >
-                    {enrich.isPending && enrich.variables === p.id
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <Radar className="h-3.5 w-3.5" />}
-                    Enriquecer
-                  </button>
-                  <button
-                    onClick={() => analyzeReviews.mutate(p.id)}
-                    disabled={analyzeReviews.isPending && analyzeReviews.variables === p.id}
-                    title="Ler avaliações do Google Maps e extrair dores reais"
-                    className="flex items-center gap-1 h-9 rounded-md bg-amber-500/20 text-amber-200 px-3 text-xs hover:bg-amber-500/30 disabled:opacity-50"
-                  >
-                    {analyzeReviews.isPending && analyzeReviews.variables === p.id
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <MessageSquareWarning className="h-3.5 w-3.5" />}
-                    Avaliações
-                  </button>
-                  <button
-                    onClick={() => siteStack.mutate(p.id)}
-                    disabled={siteStack.isPending && siteStack.variables === p.id}
-                    title={p.manual_website_url ? `Detectar plataforma a partir do site manual: ${p.manual_website_url}` : "Detectar site (via Maps) e identificar qual plataforma o lojista já usa"}
-                    className="flex items-center gap-1 h-9 rounded-md bg-indigo-500/20 text-indigo-200 px-3 text-xs hover:bg-indigo-500/30 disabled:opacity-50"
-                  >
-                    {siteStack.isPending && siteStack.variables === p.id
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <Layers className="h-3.5 w-3.5" />}
-                    Plataforma
-                  </button>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="flex flex-1 items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <input
+                      value={phoneVal}
+                      onChange={(e) => setEditingPhone((s) => ({ ...s, [p.id]: e.target.value }))}
+                      onBlur={() => {
+                        const v = editingPhone[p.id];
+                        if (v !== undefined && v !== p.phone) updateProspect.mutate({ id: p.id, patch: { phone: v } });
+                      }}
+                      placeholder="DDD + número"
+                      className="flex-1 min-w-0 h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => mapsPhone.mutate(p.id)}
+                      disabled={mapsPhone.isPending && mapsPhone.variables === p.id}
+                      title="Buscar telefone só desta loja no Google Maps"
+                      className="flex items-center justify-center gap-1 h-9 rounded-md bg-cyan-600/20 text-cyan-300 hover:bg-cyan-600/30 px-2 text-xs whitespace-nowrap disabled:opacity-50"
+                    >
+                      {mapsPhone.isPending && mapsPhone.variables === p.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <MapIcon className="h-3.5 w-3.5" />}
+                      Maps
+                    </button>
+                    <button
+                      onClick={() => enrich.mutate(p.id)}
+                      disabled={enrich.isPending && enrich.variables === p.id}
+                      title="Buscar CNPJ, telefone e Insta"
+                      className="flex items-center justify-center gap-1 h-9 rounded-md bg-secondary px-2 text-xs whitespace-nowrap hover:bg-secondary/80 disabled:opacity-50"
+                    >
+                      {enrich.isPending && enrich.variables === p.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Radar className="h-3.5 w-3.5" />}
+                      Enriquecer
+                    </button>
+                    <button
+                      onClick={() => analyzeReviews.mutate(p.id)}
+                      disabled={analyzeReviews.isPending && analyzeReviews.variables === p.id}
+                      title="Ler avaliações do Google Maps e extrair dores reais"
+                      className="flex items-center justify-center gap-1 h-9 rounded-md bg-amber-500/20 text-amber-200 px-2 text-xs whitespace-nowrap hover:bg-amber-500/30 disabled:opacity-50"
+                    >
+                      {analyzeReviews.isPending && analyzeReviews.variables === p.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <MessageSquareWarning className="h-3.5 w-3.5" />}
+                      Avaliações
+                    </button>
+                    <button
+                      onClick={() => siteStack.mutate(p.id)}
+                      disabled={siteStack.isPending && siteStack.variables === p.id}
+                      title={p.manual_website_url ? `Detectar plataforma a partir do site manual: ${p.manual_website_url}` : "Detectar site (via Maps) e identificar qual plataforma o lojista já usa"}
+                      className="flex items-center justify-center gap-1 h-9 rounded-md bg-indigo-500/20 text-indigo-200 px-2 text-xs whitespace-nowrap hover:bg-indigo-500/30 disabled:opacity-50"
+                    >
+                      {siteStack.isPending && siteStack.variables === p.id
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Layers className="h-3.5 w-3.5" />}
+                      Plataforma
+                    </button>
+                  </div>
                 </div>
 
                 {/* SITE MANUAL */}

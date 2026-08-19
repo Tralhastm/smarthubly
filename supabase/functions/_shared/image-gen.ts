@@ -81,7 +81,7 @@ async function tryLovableImage(prompt: string): Promise<{ bytes: Uint8Array; mim
   }
 }
 
-async function tryAiWorkerImage(worker: { id: string; name: string; base_url: string }, prompt: string, raw = false): Promise<{ bytes: Uint8Array; mime: string; status?: number } | null> {
+async function tryAiWorkerImage(worker: { id: string; name: string; base_url: string }, prompt: string, raw = false, productName = "Product"): Promise<{ bytes: Uint8Array; mime: string; status?: number } | null> {
   try {
     // O endpoint real do worker é SEMPRE /functions/v1/ai-generate-image;
     // os base_url registrados no banco apontam para /functions/v1/ai-gen (path parcial) e precisam ser normalizados.
@@ -329,7 +329,7 @@ export async function generateImageCascade(
     for (let i = 0; i < list.length; i += 2) {
       const batch = list.slice(i, i + 2);
       const reqPrompt = minimal ? prompt : `${RICH_PREFIX}${prompt}`;
-      const settled = await Promise.allSettled(batch.map((w) => tryAiWorkerImage(w, reqPrompt, minimal)));
+      const settled = await Promise.allSettled(batch.map((w) => tryAiWorkerImage(w, reqPrompt, minimal, productName)));
       for (let b = 0; b < batch.length; b++) {
         const res = settled[b];
         const w = batch[b];

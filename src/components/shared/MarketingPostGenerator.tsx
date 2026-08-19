@@ -97,16 +97,19 @@ const MarketingPostGenerator = ({ scope, tenantId, title, defaultAudience, allow
       const { data, error } = await Promise.race([invokeP, timeoutP]);
       if (error) throw error;
       if (!data?.content) throw new Error(data?.error || 'Sem retorno');
-      setOutput(data.content);
+      setOutput(sanitizeOutput(data.content));
       setMeta(data.context_used);
       setOverlay(data.overlay || null);
       setFinalArt(null);
-      // Garante data URL válida: a edge function retorna base64 puro (ex: /9j/...)
+      // Garante formato válido: a cascata retorna URL pública do storage (https://...?ai=1)
+      // ou base64 puro (ex: /9j/...); nunca prefixar base64 em URL http(s) senão a <img> quebra
       if (data?.image) {
         setImage(
           data.image.startsWith('data:')
             ? data.image
-            : `data:image/jpeg;base64,${data.image}`
+            : /^https?:\/\//.test(data.image)
+              ? data.image
+              : `data:image/jpeg;base64,${data.image}`
         );
       } else {
         setImage(null);
@@ -122,6 +125,25 @@ const MarketingPostGenerator = ({ scope, tenantId, title, defaultAudience, allow
     } catch (e: any) {
       toast.error(e?.message || 'Falha ao gerar');
     } finally { setLoading(false); }
+  };
+
+  // Limpeza do texto cru da IA: remove markdown de bold (**) e cabeçalhos (###, ---)
+  // que às vezes escapam das instruções, além de linhas de rótulo do tipo "**Hashtags:**"
+  const sanitizeOutput = (text: string) => {
+    if (!text) return text;
+    return text
+      // separadores e cabeçalhos markdown crus
+      .replace(/^\s*-{3,}\s*$/gm, '')
+      .replace(/^\s*#{2,}\s+/gm, '')
+      // "**Rótulo:** Valor" → "Rótulo — Valor"
+      .replace(/^(\s*)\*\*([^*]{1,60})\*\*\s*:?\s*/gm, (_m, pad, label) => `${pad}${label.trim().charAt(0).toUpperCase() + label.trim().slice(1)} — `)
+      // bold isolado restante (palavra entre **)**
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      // asterisco solto em linha própria
+      .replace(/^\s*\*\s*$/gm, '')
+      // até 2 quebras de linha seguidas
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   };
 
   const copy = () => { if (output) { navigator.clipboard.writeText(output); toast.success('Texto copiado!'); } };
