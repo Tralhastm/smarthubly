@@ -242,20 +242,26 @@ async function tryGoogleStream(messages: any[], systemPrompt: string, keys: ApiK
     generationConfig: { temperature: 0.4, maxOutputTokens: 700, topP: 0.9 },
   };
 
+  // Contas Google AI novas não têm acesso aos modelos legados (404 "no longer available").
+  // Nesses casos, repetir a tentativa com modelos modernos disponíveis para contas novas.
+  const SO_MODELS = ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"];
   for (const keyEntry of allKeys) {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse&key=${keyEntry.api_key}`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
-      );
-      if (response.status === 429 || response.status === 403) {
-        if (keyEntry.id !== "__env__") await supabase.from("api_keys").update({ is_exhausted: true }).eq("id", keyEntry.id);
-        continue;
-      }
-      if (!response.ok) continue;
-      if (keyEntry.id !== "__env__") await supabase.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyEntry.id);
-      return streamGeminiResponse(response);
-    } catch (e) { console.error("Sofia Google failed:", e); continue; }
+    for (const modelName of SO_MODELS) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:streamGenerateContent?alt=sse&key=${keyEntry.api_key}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+        );
+        if (response.status === 429 || response.status === 403) {
+          if (keyEntry.id !== "__env__") await supabase.from("api_keys").update({ is_exhausted: true }).eq("id", keyEntry.id);
+          break;
+        }
+        if (response.status === 404) continue; // modelo indisponível nesta conta, tentar o próximo
+        if (!response.ok) continue;
+        if (keyEntry.id !== "__env__") await supabase.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyEntry.id);
+        return streamGeminiResponse(response);
+      } catch (e) { console.error(`Sofia Google failed (${modelName}):`, e); continue; }
+    }
   }
   return null;
 }

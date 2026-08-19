@@ -373,20 +373,41 @@ async function tryGoogleStream(messages: any[], systemPrompt: string, keys: ApiK
     contents: geminiMessages,
     generationConfig: { temperature: 0.4, maxOutputTokens: 2000, topP: 0.9 },
   };
+  // Contas Google AI novas não têm acesso aos modelos legados (404 "no longer available").
+  // Nesses casos, repetir a tentativa com modelos modernos disponíveis para contas novas.
+  const STREAM_MODELS = ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"];
   for (const keyEntry of allKeys) {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent?alt=sse&key=${keyEntry.api_key}`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
-      );
-      if (response.status === 429 || response.status === 403) {
-        if (keyEntry.id !== "__env__") await supabase.from("api_keys").update({ is_exhausted: true }).eq("id", keyEntry.id);
-        continue;
-      }
-      if (!response.ok) continue;
-      if (keyEntry.id !== "__env__") await supabase.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyEntry.id);
-      return streamGeminiResponse(response);
-    } catch (e) { console.error("Cindy Google failed:", e); continue; }
+    for (const modelName of STREAM_MODELS) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:streamGenerateContent?alt=sse&key=${keyEntry.api_key}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+        );
+        const bodyText = await response.text();
+        const isModelUnavailable = response.status === 404 && /no longer available|not found for API/i.test(bodyText);
+        if (isModelUnavailable) continue; // tentar próximo modelo com a mesma chave
+        if (response.status === 429 || response.status === 403) {
+          if (keyEntry.id !== "__env__") await supabase.from("api_keys").update({ is_exhausted: true }).eq("id", keyEntry.id);
+          break; // chave esgotada, pular para a próxima chave
+        }
+        if (!response.ok) continue;
+        if (keyEntry.id !== "__env__") await supabase.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyEntry.id);
+        // re-emite o SSE já lido + o restante da resposta como stream (compatível com o parser do front)
+        const encoder = new TextEncoder();
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        (async () => {
+          try {
+            await writer.write(encoder.encode(bodyText));
+            const remaining = await response.text();
+            await writer.write(encoder.encode(remaining));
+            await writer.write(encoder.encode("data: [DONE]\n\n"));
+            await writer.close();
+          } catch { try { await writer.close(); } catch {} }
+        })();
+        return new Response(readable, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
+      } catch (e) { console.error(`Cindy Google failed (${modelName}):`, e); continue; }
+    }
   }
   return null;
 }

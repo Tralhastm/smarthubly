@@ -89,7 +89,11 @@ async function tryGoogle(opts: AiCallOptions, keys: ApiKeyEntry[], supabase: any
     : (Deno.env.get("GOOGLE_AI_API_KEY") ? [{ id: "__env__", api_key: Deno.env.get("GOOGLE_AI_API_KEY")! }] : []);
   if (allKeys.length === 0) return null;
 
+  // Contas Google AI novas não têm acesso aos modelos legados (404 "no longer available").
+  // Repetir a tentativa com modelos modernos disponíveis para contas novas.
+  const AF_MODELS = ["gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"];
   for (const keyEntry of allKeys) {
+    for (const modelName of AF_MODELS) {
     try {
       const generationConfig: any = {};
       if (opts.jsonMode) generationConfig.responseMimeType = "application/json";
@@ -97,7 +101,7 @@ async function tryGoogle(opts: AiCallOptions, keys: ApiKeyEntry[], supabase: any
       if (opts.maxTokens != null) generationConfig.maxOutputTokens = opts.maxTokens;
 
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${keyEntry.api_key}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${keyEntry.api_key}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -115,8 +119,9 @@ async function tryGoogle(opts: AiCallOptions, keys: ApiKeyEntry[], supabase: any
         if (keyEntry.id !== "__env__") {
           await supabase.from("api_keys").update({ is_exhausted: true }).eq("id", keyEntry.id);
         }
-        continue;
+        break; // chave esgotada, pular para a próxima chave
       }
+      if (res.status === 404) continue; // modelo indisponível nesta conta, tentar o próximo
       if (!res.ok) continue;
       if (keyEntry.id !== "__env__") {
         await supabase.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyEntry.id);
@@ -125,13 +130,13 @@ async function tryGoogle(opts: AiCallOptions, keys: ApiKeyEntry[], supabase: any
       const text = String(data?.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
       if (text) return text;
     } catch (e) {
-      console.error("[ai-fallback] Google exception:", e);
+      console.error(`[ai-fallback] Google exception (${modelName}):`, e);
       continue;
     }
+    } // modelName
   }
   return null;
 }
-
 // 3. AI Workers externos (ai_workers, worker_type='chat')
 // Retorna texto puro lendo o stream SSE inteiro do worker.
 async function tryWorkers(opts: AiCallOptions, workers: AiWorker[], supabase: any): Promise<string | null> {

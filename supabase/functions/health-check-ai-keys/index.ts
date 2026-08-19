@@ -12,14 +12,22 @@ const TEST_BODY = {
   generationConfig: { maxOutputTokens: 1, temperature: 0 },
 };
 
+// Contas Google AI novas não têm acesso aos modelos legados (404). Testa uma cadeia de modelos.
+const HC_MODELS = ["gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"];
 async function testGoogleKey(apiKey: string): Promise<{ ok: boolean; status: number }> {
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(TEST_BODY) }
-    );
-    await res.text();
-    return { ok: res.ok, status: res.status };
+    let lastStatus = 0;
+    for (const model of HC_MODELS) {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(TEST_BODY) }
+      );
+      lastStatus = res.status;
+      await res.text();
+      if (res.status === 404) continue; // modelo legado indisponível nesta conta, tentar o próximo
+      return { ok: res.ok, status: res.status };
+    }
+    return { ok: lastStatus >= 200 && lastStatus < 300, status: lastStatus };
   } catch {
     return { ok: false, status: 0 };
   }
