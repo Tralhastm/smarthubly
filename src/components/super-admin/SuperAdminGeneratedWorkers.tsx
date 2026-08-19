@@ -311,7 +311,7 @@ const SuperAdminGeneratedWorkers = () => {
     setActiveToolId((cur) => (cur === id ? null : cur));
   };
 
-  const { data: items = [], isLoading } = useQuery({
+  const { data: items = [], isLoading, isRefetching } = useQuery({
     queryKey: ['generated-workers'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -321,7 +321,10 @@ const SuperAdminGeneratedWorkers = () => {
       if (error) throw error;
       return data as any[];
     },
-    refetchInterval: 5000,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: false,
+    retry: 2,
+    staleTime: 30000,
   });
 
   const stats = useMemo(() => {
@@ -437,6 +440,12 @@ const SuperAdminGeneratedWorkers = () => {
 
   return (
     <div className="space-y-6">
+      {isRefetching && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin text-primary" />
+          Atualizando lista de gerações...
+        </div>
+      )}
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="rounded-lg border border-border bg-card p-3"><p className="text-xs text-muted-foreground">Total</p><p className="text-2xl font-bold text-foreground">{stats.total}</p></div>

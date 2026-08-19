@@ -81,14 +81,14 @@ async function tryLovableImage(prompt: string): Promise<{ bytes: Uint8Array; mim
   }
 }
 
-async function tryAiWorkerImage(worker: { id: string; name: string; base_url: string }, prompt: string, raw = false, productName = "Product"): Promise<{ bytes: Uint8Array; mime: string; status?: number } | null> {
+async function tryAiWorkerImage(worker: { id: string; name: string; base_url: string }, prompt: string, minimal = false, productName = "Product", admin?: any): Promise<{ bytes: Uint8Array; mime: string; status?: number } | null> {
   try {
     // O endpoint real do worker é SEMPRE /functions/v1/ai-generate-image;
     // os base_url registrados no banco apontam para /functions/v1/ai-gen (path parcial) e precisam ser normalizados.
     const m = worker.base_url.match(/^(https?:\/\/[^\/]+)(\/functions\/v1)?(\/ai-generate-image)?$/);
     const url = m ? `${m[1]}/functions/v1/ai-generate-image` : worker.base_url;
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 90_000);
+    const timer = setTimeout(() => ctrl.abort(), 40_000);
     // productName é obrigatório pelo worker (validação no início da EF);
     // o prompt rico já embute as restrições de composição — productName serve
     // apenas como etiqueta do arquivo/capa, não é impresso na imagem pelo fluxo
@@ -100,11 +100,11 @@ async function tryAiWorkerImage(worker: { id: string; name: string; base_url: st
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt: raw ? prompt : `${RICH_PREFIX}${prompt}`,
+          prompt: minimal ? prompt : `${RICH_PREFIX}${prompt}`,
           category: "product",
           tenantId: "sofia",
           productName,
-          ...(raw ? { withPrefix: false } : {}),
+          ...(minimal ? { withPrefix: false } : {}),
         }),
         signal: ctrl.signal,
       });
@@ -118,10 +118,10 @@ async function tryAiWorkerImage(worker: { id: string; name: string; base_url: st
       console.error(`[image-gen] worker ${worker.name} (${url}) HTTP ${r.status}: ${bodyText}`);
       // Fallback: o worker pode rejeitar o prompt rico (400 "AI error") mas aceitar
       // o prompt simples — testado empiricamente (D direto = 200; RICH = 400).
-      if (!raw && (r.status === 400 || r.status === 500)) {
+      if (!minimal) {
         console.log(`[image-gen] worker ${worker.name}: retry com prompt simples...`);
         const ctrl2 = new AbortController();
-        const timer2 = setTimeout(() => ctrl2.abort(), 90_000);
+        const timer2 = setTimeout(() => ctrl2.abort(), 25_000);
         let bodyText2 = "";
         let r2: Response;
         try {
@@ -174,7 +174,11 @@ async function tryAiWorkerImage(worker: { id: string; name: string; base_url: st
     const buf = await ir.arrayBuffer();
     return { bytes: new Uint8Array(buf), mime, status: r.status };
   } catch (e) {
-    console.warn("ai-worker image error:", e instanceof Error ? e.message : e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn("ai-worker image error:", msg);
+    try {
+      await admin.from("ef_logs").insert({ fn: "ai-worker-image", step: "error", detail: `${worker.name}: ${msg.slice(0, 300)}` }).maybeSingle();
+    } catch { /* ignora */ }
     return null;
   }
 }
@@ -212,7 +216,21 @@ export async function generateImageCascade(
 ): Promise<ImageGenResult | null> {
   const debug: ImageGenDebug = { geminiKeysTried: 0, workersTried: [] };
   const productName = opts?.productName || deriveProductName(prompt);
-  // 1. Google Gemini 2.5 Flash Image (chaves do projeto, rotacionadas)
+
+  // Consulta dos ai_workers tipo image NO INÍCIO: enquanto as chaves Google
+  // rodam (429 em ~2-3s cada), a consulta do banco já estará pronta — evita
+  // estourar o orçamento de 150s da Edge Function antes de chegar aos workers.
+  const { data: workers } = await admin
+    .from("ai_workers")
+    .select("id, name, base_url")
+    .eq("is_active", true)
+    .eq("worker_type", "image")
+    .order("last_used_at", { ascending: true, nullsFirst: true });
+  // 1. Google Gemini 2.5 Flash Image (chaves do projeto, rotacionadas).
+  // Atenção: com quota gratuita esgotada o Gemini responde 429 em TODAS as
+  // chaves e um retry lento consome o orçamento de 150s da Edge Function
+  // antes dos workers rodarem. Cada chave recebe UMA tentativa serial rápida;
+  // se todas retornarem 429, segue imediatamente para os workers.
   const { data: keys } = await admin
     .from("api_keys")
     .select("id, api_key")
@@ -237,10 +255,8 @@ export async function generateImageCascade(
   }
   const allQuota = (keys || []).length > 0 && googleFailStatuses.length === (keys || []).length && googleFailStatuses.every((s) => s === 429);
   if (allQuota) {
-    // Quota gratuita do Gemini renova lentamente; a espera longa de 60s quase sempre
-    // consome o orçamento de tempo da Edge Function (150s) antes dos workers rodarem.
-    // Estratégia: tentativa rápida única (15s) — se a quota já renovou, ganha de graça;
-    // se não, segue imediatamente para os demais provedores.
+    // Quota gratuita esgotada: UMA tentativa rápida paralela (todas as chaves
+    // de uma vez) para capturar renovação espontânea sem consumir tempo extra.
     console.log("[image-gen] todas as chaves google em 429, tentativa rápida de renovação...");
     const quickRetry = await Promise.all((keys || []).map((keyEntry) =>
       tryGoogleImage(keyEntry.api_key, prompt).catch(() => null),
@@ -253,7 +269,7 @@ export async function generateImageCascade(
         return await storeImage(admin, out.bytes, out.mime, tenantId, suffix);
       }
     }
-    console.log("[image-gen] google retry rápido também falhou; seguindo para os demais provedores.");
+    console.log("[image-gen] google retry rápido também falhou; seguindo direto para os workers.");
   }
   console.log("[image-gen] google keys: ", (keys || []).length, "tentadas, tentando OpenRouter...");
 
@@ -311,25 +327,23 @@ export async function generateImageCascade(
   debug.lovableOk = false;
   console.log("[image-gen] lovable falhou, tentando ai_workers...");
 
-  // 4. ai_workers tipo image — paralelizados em lotes de 2 para respeitar o rate limit
-  // dos modelos por destino (~1-2 req/min); cada lote leva ~8-10s.
-  const { data: workers } = await admin
-    .from("ai_workers")
-    .select("id, name, base_url")
-    .eq("is_active", true)
-    .eq("worker_type", "image")
-    .order("last_used_at", { ascending: true, nullsFirst: true });
 
   async function runWorkerPass(passLabel: string, minimal = false): Promise<{ out: { bytes: Uint8Array; mime: string } | null; winner: any } | null> {
     // Limita a rodada aos 6 workers menos usados: suficiente para um sucesso e
     // evita estourar o limite de 150s da Edge Function quando várias imagens
     // rodam em paralelo (applyPlan faz Promise.allSettled por produto).
     const list = (workers || []).slice(0, 6);
+    await logEfStep(admin, "worker pass", `${passLabel} list=${list.map((w: any) => w.name).join(",")}`);
     const results: { id: string; name: string; st: number | null }[] = [];
     for (let i = 0; i < list.length; i += 2) {
       const batch = list.slice(i, i + 2);
       const reqPrompt = minimal ? prompt : `${RICH_PREFIX}${prompt}`;
-      const settled = await Promise.allSettled(batch.map((w) => tryAiWorkerImage(w, reqPrompt, minimal, productName)));
+      const settled = await Promise.allSettled(batch.map((w) => tryAiWorkerImage(w, reqPrompt, minimal, productName, admin)));
+      await logEfStep(admin, "worker results", settled.map((s, b) => {
+        const w = batch[b];
+        const out = s.status === "fulfilled" ? s.value : null;
+        return `${w.name}:${out?.status ?? (s.status === "rejected" ? "REJ" : "NULL")}`;
+      }).join(" "));
       for (let b = 0; b < batch.length; b++) {
         const res = settled[b];
         const w = batch[b];
@@ -366,11 +380,19 @@ export async function generateImageCascade(
     debug.workersTried = (debug.workersTried || []).concat([{ id: pass.winner.id, name: pass.winner.name, http: 200 }]);
     return await storeImage(admin, pass.out.bytes, pass.out.mime, tenantId, suffix);
   }
+  await logEfStep(admin, "cascade failed", JSON.stringify(debug).slice(0, 400));
   console.warn("[image-gen] cascata completa sem sucesso. debug:", JSON.stringify(debug));
   const msg = `cascata esgotada: google=${debug.geminiKeysTried} lovableHttp=${debug.lovableHttp} workersTentados=${(debug.workersTried || []).map((x: any) => x.name).join(",")}`;
   throw new Error(msg);
 }
 
+async function logEfStep(admin: any, step: string, detail: string) {
+  try {
+    await admin.from("ef_logs").insert({ fn: "image-gen", step, detail }).maybeSingle();
+  } catch (e) {
+    console.warn("ef_logs insert failed:", e instanceof Error ? e.message : e);
+  }
+}
 async function storeImage(admin: any, bytes: Uint8Array, mime: string, tenantId: string, suffix: string): Promise<ImageGenResult> {
   const path = `${tenantId}/${crypto.randomUUID()}-${suffix}.${extFor(mime)}`;
   const { error } = await admin.storage.from("product-images").upload(path, bytes, { contentType: mime, upsert: true });
