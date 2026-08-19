@@ -5,7 +5,7 @@ import SuperAdminDashboard from '@/components/super-admin/SuperAdminDashboard';
 import SuperAdminTenants from '@/components/super-admin/SuperAdminTenants';
 import SuperAdminMetrics from '@/components/super-admin/SuperAdminMetrics';
 import SuperAdminFeeRequests from '@/components/super-admin/SuperAdminFeeRequests';
-import { LayoutDashboard, Store, BarChart3, LogOut, Percent, Key, Bot, Users, Activity, DollarSign, Receipt, MapPin, Sun, Moon, Sparkles, Gauge, LifeBuoy, Code2 } from 'lucide-react';
+import { LayoutDashboard, Store, BarChart3, LogOut, Percent, Key, Bot, Users, Activity, DollarSign, Receipt, MapPin, Sun, Moon, Sparkles, Gauge, LifeBuoy, Code2, Zap } from 'lucide-react';
 import adminLogo from '@/assets/admin-logo.png';
 import SuperAdminApiKeys from '@/components/super-admin/SuperAdminApiKeys';
 import SuperAdminWorkers from '@/components/super-admin/SuperAdminWorkers';
@@ -20,9 +20,10 @@ import CindyChat from '@/components/super-admin/CindyChat';
 import MarketingPostGenerator from '@/components/shared/MarketingPostGenerator';
 import SuperAdminSupport from '@/components/super-admin/SuperAdminSupport';
 import SuperAdminAiEditor from '@/components/super-admin/SuperAdminAiEditor';
+import SuperAdminAutoTest from '@/components/super-admin/SuperAdminAutoTest';
 import { useAuthReady } from '@/hooks/useAuthReady';
 
-type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'workers' | 'users' | 'health' | 'financial' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor';
+type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'workers' | 'users' | 'health' | 'financial' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test';
 
 const SuperAdmin = () => {
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -102,6 +103,7 @@ const SuperAdmin = () => {
     { id: 'usage' as Tab, label: 'Consumo & Margem', icon: <Gauge className="h-4 w-4" /> },
     { id: 'support' as Tab, label: 'Chamados', icon: <LifeBuoy className="h-4 w-4" /> },
     { id: 'ai_editor' as Tab, label: 'Editor IA', icon: <Code2 className="h-4 w-4" /> },
+    { id: 'auto_test' as Tab, label: 'AutoTest', icon: <Zap className="h-4 w-4" /> },
   ];
 
   return (
@@ -157,6 +159,7 @@ const SuperAdmin = () => {
           {tab === 'usage' && <SuperAdminUsageMonitor />}
           {tab === 'support' && <SuperAdminSupport />}
           {tab === 'ai_editor' && <SuperAdminAiEditor />}
+          {tab === 'auto_test' && <SuperAdminAutoTest />}
         </div>
       </div>
 
