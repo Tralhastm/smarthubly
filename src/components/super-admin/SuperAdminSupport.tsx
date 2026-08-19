@@ -28,7 +28,7 @@ const priorityColor: Record<string, string> = {
 };
 const statusLabel: Record<string, string> = {
   open: 'Aberto', in_progress: 'Em andamento', waiting_customer: 'Aguardando cliente',
-  resolved: 'Resolvido', closed: 'Fechado',
+  resolved: 'Resolvido', closed: 'Fechado', archived: 'Arquivado',
 };
 
 export default function SuperAdminSupport() {
@@ -62,7 +62,7 @@ export default function SuperAdminSupport() {
   });
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: tickets.length, open: 0, in_progress: 0, waiting_customer: 0, resolved: 0, closed: 0 };
+    const c: Record<string, number> = { all: tickets.length, open: 0, in_progress: 0, waiting_customer: 0, resolved: 0, closed: 0, archived: 0 };
     tickets.forEach(t => { c[t.status] = (c[t.status] || 0) + 1; });
     return c;
   }, [tickets]);
@@ -84,6 +84,7 @@ export default function SuperAdminSupport() {
               <SelectItem value="waiting_customer">Aguardando ({counts.waiting_customer || 0})</SelectItem>
               <SelectItem value="resolved">Resolvidos ({counts.resolved || 0})</SelectItem>
               <SelectItem value="closed">Fechados ({counts.closed || 0})</SelectItem>
+              <SelectItem value="archived">Arquivados ({counts.archived || 0})</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" size="icon" onClick={() => refetch()} disabled={isFetching}>
