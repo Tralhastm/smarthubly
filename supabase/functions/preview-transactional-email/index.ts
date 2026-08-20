@@ -15,25 +15,31 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Autorização: Lovable API key (quando configurada) OU JWT de service_role.
+  // O gateway Lovable está fora do ar; sem a chave, apenas service role é aceita.
   const apiKey = Deno.env.get('LOVABLE_API_KEY')
-  if (!apiKey) {
-    return new Response(
-      JSON.stringify({ error: 'Server configuration error' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    )
-  }
-
-  // Verify the caller is authorized with LOVABLE_API_KEY
   const authHeader = req.headers.get('Authorization')
-  const token = authHeader?.replace(/^Bearer\s+/i, '')
-  if (token !== apiKey) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+  const token = authHeader?.replace(/^Bearer\s+/i, '') || ''
+  if (apiKey && token === apiKey) {
+    // Go API do Lovable autorizada
+  } else {
+    const parts = token.split('.')
+    let claims: any = null
+    if (parts.length === 3) {
+      try {
+        claims = JSON.parse(
+          atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))
+        )
+      } catch {
+        claims = null
+      }
+    }
+    if (claims?.role !== 'service_role') {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
   }
 
   const templateNames = Object.keys(TEMPLATES)

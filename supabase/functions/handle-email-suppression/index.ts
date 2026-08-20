@@ -36,24 +36,50 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Method not allowed' }, 405)
   }
 
-  const apiKey = Deno.env.get('LOVABLE_API_KEY')
+    const apiKey = Deno.env.get('LOVABLE_API_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-
-  if (!apiKey || !supabaseUrl || !supabaseServiceKey) {
+  if (!supabaseUrl || !supabaseServiceKey) {
     console.error('Missing required environment variables')
     return jsonResponse({ error: 'Server configuration error' }, 500)
   }
 
-  // Verify HMAC signature using the Lovable API Key (same as auth-email-hook)
+  // Autorização: HMAC do Lovable (quando a chave existir) OU JWT service_role
+  const authHeader = req.headers.get('Authorization') || ''
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, '').trim()
+  const parts = bearerToken.split('.')
+  let claims: Record<string, unknown> | null = null
+  if (parts.length === 3) {
+    try {
+      const b64 = parts[1]
+        .replaceAll('-', '+')
+        .replaceAll('_', '/')
+        .padEnd(Math.ceil(parts[1].length / 4) * 4, '=')
+      claims = JSON.parse(atob(b64)) as Record<string, unknown>
+    } catch {
+      claims = null
+    }
+  }
+  const isServiceRole = claims?.role === 'service_role'
+  const hmacSecret = apiKey ?? (isServiceRole ? undefined : null)
+
+  // Verify HMAC signature using the Lovable API Key (when configured)
   let payload: SuppressionPayload
   try {
-    const verified = await verifyWebhookRequest({
-      req,
-      secret: apiKey,
-      parser: parseSuppressionPayload,
-    })
-    payload = verified.payload
+    if (hmacSecret) {
+      const verified = await verifyWebhookRequest({
+        req,
+        secret: hmacSecret,
+        parser: parseSuppressionPayload,
+      })
+      payload = verified.payload
+    } else if (isServiceRole) {
+      const ct2 = req.headers.get('content-type') || ''
+      const raw = ct2.includes('application/json') ? await req.text() : ''
+      payload = parseSuppressionPayload(raw || JSON.stringify({}))
+    } else {
+      return jsonResponse({ error: 'Unauthorized' }, 401)
+    }
   } catch (error) {
     if (error instanceof WebhookError) {
       switch (error.code) {
@@ -82,20 +108,27 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
   const normalizedEmail = payload.email.toLowerCase()
 
-  // 1. Upsert to suppressed_emails (idempotent — safe for retries)
-  const { error: suppressError } = await supabase
+  // 1. Insert into suppressed_emails (idempotent — safe for retries).
+  // A tabela não possui unique(email) neste projeto, então o upsert com
+  // onConflict falha; verificamos a existência antes de inserir.
+  const { data: existing } = await supabase
     .from('suppressed_emails')
-    .upsert(
-      {
-        email: normalizedEmail,
-        reason: payload.reason,
-        metadata: payload.metadata ?? null,
-      },
-      { onConflict: 'email' },
-    )
+    .select('id')
+    .eq('email', normalizedEmail)
+    .maybeSingle()
+
+  let suppressError: any = null
+  if (!existing) {
+    const { error } = await supabase.from('suppressed_emails').insert({
+      email: normalizedEmail,
+      reason: payload.reason,
+      metadata: payload.metadata ?? null,
+    })
+    suppressError = error
+  }
 
   if (suppressError) {
-    console.error('Failed to upsert suppressed email', {
+    console.error('Failed to write suppressed email', {
       error: suppressError,
       email_redacted: normalizedEmail[0] + '***@' + normalizedEmail.split('@')[1],
     })
