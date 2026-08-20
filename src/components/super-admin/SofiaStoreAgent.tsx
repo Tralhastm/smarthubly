@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
-const AGENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sofia-store-agent`;
+// Agora unificado: ai-chat-unified/sofia-agent/{plan,plans,apply,rollback,plan-detail,retry-images}
 
 // Detecta intenção de aplicar direto: "aplica", "aplica tudo", "faz e aplica", "aplica ja"
 const wantsAutoApply = (text: string): boolean =>
@@ -52,17 +52,14 @@ const SofiaStoreAgent = ({ tenantId, tenantName }: { tenantId: string; tenantNam
   const loadHistory = async () => {
     setLoadingHistory(true);
     try {
-      const { data, error } = await unifiedInvoke("ai-chat-unified", "sofia-agent", { tenantId, action: 'list' });
-      // usa endpoint /plans via invoke genérico — a EF só aceita POST /plan? Não: vamos usar o
-      // helper abaixo que chama as rotas com path. (Implementado via query param path)
-      void data; void error;
+      await invoke('plans', { tenantId });
     } finally {
       setLoadingHistory(false);
     }
   };
 
   const invoke = async (path: string, body: any) => {
-    const { data, error } = await unifiedInvoke("ai-chat-unified", "sofia-agent", any));
+    const { data, error } = await unifiedInvoke("ai-chat-unified", `sofia-agent/${path}`, body);
     if (error) throw new Error(error.message || 'Falha na conexão com a Sofia Agente');
     if (data?.error) throw new Error(data.error === 'ai_unavailable' ? 'A IA está instável agora. Tenta de novo em alguns segundos.' : data.error);
     return data;
@@ -155,7 +152,7 @@ const SofiaStoreAgent = ({ tenantId, tenantName }: { tenantId: string; tenantNam
     if (expanded === plan.id) { setExpanded(null); setDetails(null); return; }
     setExpanded(plan.id);
     try {
-      const { data } = await unifiedInvoke("ai-chat-unified", "sofia-agent", { tenantId, _path: 'plan-detail', planId: plan.id });
+      const { data } = await unifiedInvoke("ai-chat-unified", "sofia-agent/plan-detail", { tenantId, planId: plan.id });
       setDetails(data?.plan || null);
     } catch {
       setDetails(null);

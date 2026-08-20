@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "npm:@lovable.dev/email-js@*": "0.1.2_react@18.3.1_react-dom@18.3.1__react@18.3.1",
+    "npm:@lovable.dev/webhooks-js@*": "0.0.1",
     "npm:@react-email/components@0.0.22": "0.0.22_react@18.3.1_react-dom@18.3.1__react@18.3.1",
     "npm:@supabase/supabase-js@2": "2.112.3",
     "npm:react@18.3.1": "18.3.1"

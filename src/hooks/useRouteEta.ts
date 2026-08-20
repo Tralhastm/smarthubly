@@ -71,7 +71,7 @@ export const useRouteEta = ({
       body.destAddress = destAddress;
     }
 
-    unifiedInvoke("delivery-unified", "route-eta", undefined).then(({ data, error }) => {
+    unifiedInvoke("delivery-unified", "route-eta", body).then(({ data, error }) => {
       inFlightRef.current = false;
       if (error || (data as any)?.error) {
         setState(s => ({ ...s, loading: false, error: (data as any)?.error || error?.message || 'falha' }));

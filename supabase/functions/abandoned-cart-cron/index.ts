@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
           // checa unsubscribe
           const { data: unsub } = await supa.from("email_unsubscribes").select("id").eq("tenant_id", t.id).eq("email", cart.customer_email.toLowerCase()).maybeSingle();
           if (unsub) continue;
-          const unsubUrl = `${SUPABASE_URL}/functions/v1/unsubscribe-public?tenant=${t.id}&email=${encodeURIComponent(cart.customer_email)}`;
+          const unsubUrl = `${SUPABASE_URL}/functions/v1/notify-unified/unsubscribe-public?tenant=${t.id}&email=${encodeURIComponent(cart.customer_email)}`;
           const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111">
             <h1 style="color:#3b82f6">Esqueceu algo, ${cart.customer_name || ''}? 🛒</h1>
             <p>Você deixou itens no carrinho da <b>${t.name}</b>. Que tal finalizar agora com <b>10% OFF</b>?</p>

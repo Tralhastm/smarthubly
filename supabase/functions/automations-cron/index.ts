@@ -99,7 +99,7 @@ async function runCreditReminders(supa: any, tenant: any) {
     if (!targets.includes(daysOver)) continue;
     if (lastH < 20) continue; // não manda 2x no mesmo dia
     try {
-      const r = await fetch(`${SUPABASE_URL}/functions/v1/send-credit-reminder`, {
+      const r = await fetch(`${SUPABASE_URL}/functions/v1/notify-unified/send-credit`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` },
         body: JSON.stringify({ credit_account_id: acc.id }),
@@ -253,7 +253,7 @@ async function runWeeklyReport(supa: any, tenant: any, opts?: { force?: boolean 
   try {
     const aiController = new AbortController();
     const aiTimeout = setTimeout(() => aiController.abort(), 2500);
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/empresarial-insights`, {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/finance-unified/insights`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` },
       signal: aiController.signal,
@@ -299,7 +299,7 @@ async function runWeeklyReport(supa: any, tenant: any, opts?: { force?: boolean 
       const idempotencyKey = opts?.force
         ? `weekly-report-manual-${tenant.id}-${now.toISOString()}-${crypto.randomUUID()}`
         : `weekly-report-${tenant.id}-${now.toISOString().slice(0, 10)}`;
-      const r = await fetch(`${SUPABASE_URL}/functions/v1/send-transactional-email`, {
+      const r = await fetch(`${SUPABASE_URL}/functions/v1/notify-unified/send-transactional`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` },
         body: JSON.stringify({
@@ -343,7 +343,7 @@ async function runCategorizeNightly(supa: any, tenant: any) {
     .limit(50);
   if (!items || items.length === 0) return { uncategorized: 0 };
   try {
-    const r = await fetch(`${SUPABASE_URL}/functions/v1/auto-categorize`, {
+    const r = await fetch(`${SUPABASE_URL}/functions/v1/finance-unified/auto-categorize`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${SERVICE_KEY}` },
       body: JSON.stringify({ items, context: tenant.name }),
