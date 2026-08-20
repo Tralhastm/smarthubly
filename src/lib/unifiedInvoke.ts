@@ -4,8 +4,13 @@
 //   ${SUPABASE_URL}/functions/v1/<unified>/<rota>
 import { createClient } from "@supabase/supabase-js";
 
+// VITE_SUPABASE_PUBLISHABLE_KEY é a padrão do projeto (.env/.env.build); ANON_KEY é alias para compatibilidade
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const supabase = createClient(SUPA_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+const SUPA_KEY =
+  (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string) ??
+  (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ??
+  "";
+const supabase = createClient(SUPA_URL, SUPA_KEY);
 
 export type InvokeResult<T = any> = { data: T | null; error: any };
 
@@ -24,7 +29,7 @@ export async function unifiedInvoke(
     const token = session?.session?.access_token ?? "";
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      apikey: SUPA_KEY,
     };
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetch(url, {
