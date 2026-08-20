@@ -13,7 +13,7 @@
 
 export const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-route",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
@@ -34,9 +34,21 @@ function normalizePath(url: string): string {
   }
 }
 
+// Remove o primeiro segmento do pathname (o slug da Edge Function) para que o
+// path entregue pelo Supabase (ex.: /<slug>/parse-txt) case com handlers
+// definidos como /parse-txt. Não remove se o path tem só 1 segmento.
+function stripSlug(path: string): string {
+  const parts = path.split("/").filter((p) => p.length > 0);
+  if (parts.length <= 1) return "/";
+  return "/" + parts.slice(1).join("/");
+}
+
 export async function route(req: Request, handlers: Record<string, Handler>): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
-  const path = normalizePath(req.url);
+  // Prioridade: header x-route (independe do formato da URL), senão o pathname
+  // com o slug removido (o Supabase envia a URL completa /<slug>/<rota>).
+  const hdr = (req.headers.get("x-route") || "").trim();
+  const path = hdr ? (hdr.startsWith("/") ? hdr : "/" + hdr) : stripSlug(normalizePath(req.url));
   let h: Handler | undefined = handlers[path];
   if (!h) {
     // fallback: prefixo (ex.: /cindy-actions/anything)
@@ -48,13 +60,28 @@ export async function route(req: Request, handlers: Record<string, Handler>): Pr
     return json({ error: "route_not_found", available: Object.keys(handlers) }, 404);
   }
   let body: any = {};
+  // Bufferiza o corpo UMA vez como texto e reconstrói o Request para que o
+  // handler (código original) possa reler req.json()/req.formData() sem erro.
+  let bodyText = "";
+  try {
+    bodyText = await req.text();
+  } catch { bodyText = ""; }
   try {
     const ct = req.headers.get("content-type") || "";
-    if (ct.includes("application/json")) body = await req.json();
-    else if (ct.includes("multipart")) body = await req.formData();
+    if (ct.includes("application/json") && bodyText) body = JSON.parse(bodyText);
+    else if (ct.includes("multipart") && bodyText) {
+      // boundary; cair para leitura direta abaixo se falhar
+      try {
+        const blob = new Blob([bodyText], { type: ct });
+        const fd = await new Response(blob).formData();
+        body = fd;
+      } catch { body = {}; }
+    }
   } catch { body = {}; }
   try {
-    return await h(req, body);
+    const opts: RequestInit = { method: req.method, headers: req.headers };
+    if (["POST", "PUT", "PATCH"].includes(req.method) && bodyText) opts.body = bodyText;
+    return await h(new Request(req.url, opts), body);
   } catch (e: any) {
     console.error(`[router] erro na rota ${path}:`, e);
     return json({ error: String(e?.message || e) }, 500);
