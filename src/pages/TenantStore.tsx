@@ -76,7 +76,7 @@ const TenantStore = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       {showSplash && (
         <StoreSplash
           logoUrl={tenant.logo_url}
@@ -197,10 +197,14 @@ const TenantStore = () => {
         />
       )}
 
-      <footer className="py-10 mt-auto opacity-40">
-        <p className="text-center text-[10px] tracking-widest uppercase text-muted-foreground font-medium">
+      <footer className="mt-auto py-6 w-full text-center">
+        <span 
+          aria-hidden="true" 
+          className="text-[10px] uppercase text-[#d3d3d3] font-medium"
+          style={{ pointerEvents: 'none', userSelect: 'none' }}
+        >
           Powered by SmartHubly
-        </p>
+        </span>
       </footer>
     </div>
   );
