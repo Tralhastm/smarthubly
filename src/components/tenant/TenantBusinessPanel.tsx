@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ClaraChat from './ClaraChat';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 type SubTab = 'resumo' | 'financeiro';
 type FinSubTab = 'completo' | 'despesas' | 'fiado' | 'fornecedores';
@@ -343,7 +344,7 @@ const TenantBusinessPanel = ({
         topProductMonth: topProduct?.name ?? null,
         margin: Number(monthMargin.toFixed(1)),
       };
-      const { data, error } = await supabase.functions.invoke('empresarial-insights', { body: snapshot });
+      const { data, error } = await unifiedInvoke("finance-unified", "insights", snapshot);
       // supabase.functions.invoke devolve erro em `error` quando status nao-2xx,
       // mas o body com a mensagem amigavel vem em `error.context` (Response).
       if (error) {

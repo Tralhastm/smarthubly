@@ -5,9 +5,16 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { generateSlug } from '@/lib/store';
-import { Plus, Edit, Trash2, Check, X, Store, ExternalLink, Package, Sparkles, Eraser, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Check, X, Store, ExternalLink, Package, Sparkles, Eraser, Loader2, Bot } from 'lucide-react';
 import ImageUploadField from '@/components/shared/ImageUploadField';
 import { ADMIN_SUBTABS, subTabKey } from '@/lib/admin-subtabs';
+import { BotEditor, type BotRow as WABoTRow } from './SuperAdminWhatsAppBots';
+
+const telDigits = (t: string) => String(t || '').replace(/[^0-9]/g, '');
+const loadBots = async (): Promise<WABoTRow[]> => {
+  const { data } = await supabase.from('whatsapp_bots').select('*');
+  return (data || []) as WABoTRow[];
+};
 
 // ---- Controle das abas do painel do lojista (o super admin decide o que aparece e como se chama)
 export type TabsConfig = Record<string, { hidden?: boolean; label?: string }>;
@@ -134,6 +141,27 @@ const SuperAdminTenants = () => {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [addingProducts, setAddingProducts] = useState<string | null>(null);
+  const [createBot, setCreateBot] = useState(false);
+  const [bots, setBots] = useState<WABoTRow[]>([]);
+  const [botEditor, setBotEditor] = useState<WABoTRow | null | 'new'>(null);
+  useEffect(() => { loadBots().then(setBots); }, []);
+  const botByTenant = (t: Tenant): WABoTRow | undefined => {
+    const tels = [telDigits((t as any).whatsapp), telDigits((t as any).phone)].filter(Boolean);
+    return bots.find(b => tels.includes(telDigits(b.telefone)));
+  };
+  const openTenantBot = (t: Tenant) => {
+    const linked = botByTenant(t);
+    if (linked) {
+      setBotEditor(linked);
+    } else {
+      setBotEditor({
+        id: '', loja_nome: t.name, telefone: (t as any).whatsapp || t.phone || '',
+        segmento: (t as any).niche || '', mensagem_boas_vindas: (t as any).description || '',
+        humano_telefone: '', tom_conversa: 'amigavel', horario_atendimento: '', ativo: true,
+        catalog: [], orcamentos: [], regras: [],
+      } as any);
+    }
+  };
   const [form, setForm] = useState({
     name: '', slug: '', logo_url: '', address: '', phone: '', whatsapp: '', description: '',
     delivery_mode: 1, platform_fee: '5.00', platform_fee_percent: '5', mercadopago_token: '',
@@ -170,6 +198,21 @@ const SuperAdminTenants = () => {
       if (msg.toLowerCase().includes('slug') && msg.toLowerCase().includes('em uso')) toast.error(msg);
       else if (msg.includes('23505') || msg.includes('unique') || msg.includes('duplicate')) toast.error('Já existe uma loja com esse slug. Escolha outro nome ou slug.');
       else toast.error(`Erro ao cadastrar a loja: ${msg}`);
+      return;
+    }
+    // Criar o bot vinculado se marcado (comércio bot-only ou site+bot)
+    if (createBot) {
+      const tel = telDigits(form.whatsapp || form.phone);
+      if (tel) {
+        const { data, error } = await supabase.from('whatsapp_bots').insert({
+          loja_nome: form.name, telefone: tel, segmento: form.niche,
+          mensagem_boas_vindas: form.description || '', ativo: true,
+        }).select('*').single();
+        if (error) toast.error('Loja criada, mas o bot falhou: ' + error.message);
+        else { toast.success('🤖 Bot WhatsApp criado e vinculado ao comércio!'); loadBots().then(setBots); setBotEditor(data as WABoTRow); }
+      } else {
+        toast.warning('Loja criada. Preencha o telefone para vincular o bot depois (botão 🤖 no card).');
+      }
     }
   };
 
@@ -249,6 +292,10 @@ const SuperAdminTenants = () => {
             <input type="checkbox" checked={form.is_donated} onChange={e => setForm({ ...form, is_donated: e.target.checked })} className="accent-primary" />
             🎁 Loja doada (não conta nos meus lucros)
           </label>
+          <label className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-foreground">
+            <input type="checkbox" checked={createBot} onChange={e => setCreateBot(e.target.checked)} className="accent-primary" />
+            <span>🤖 Criar também o <b>Bot WhatsApp</b> deste comércio (atendimento automático no número informado)</span>
+          </label>
           <div>
             <label className="text-xs text-muted-foreground">Token Mercado Pago (opcional)</label>
             <input value={form.mercadopago_token} onChange={e => setForm({ ...form, mercadopago_token: e.target.value })} placeholder="APP_USR-..." type="password" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
@@ -269,16 +316,23 @@ const SuperAdminTenants = () => {
         <TenantCard key={t.id} tenant={t} isEditing={editing === t.id} isAddingProducts={addingProducts === t.id}
           onEdit={() => setEditing(t.id)} onSave={handleUpdate} onCancel={() => setEditing(null)} onDelete={() => handleDelete(t.id)}
           onToggleProducts={() => setAddingProducts(addingProducts === t.id ? null : t.id)}
-          productForm={productForm} setProductForm={setProductForm} onAddProduct={() => handleAddProduct(t.id)} />
+          productForm={productForm} setProductForm={setProductForm} onAddProduct={() => handleAddProduct(t.id)}
+          onOpenBot={openTenantBot} bot={botByTenant(t)} />
       ))}
+
+      {botEditor !== null && (
+        <BotEditor bot={botEditor === 'new' ? null : botEditor} onClose={() => setBotEditor(null)}
+          onSave={() => { setBotEditor(null); loadBots().then(setBots); }} />
+      )}
     </div>
   );
 };
 
-const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCancel, onDelete, onToggleProducts, productForm, setProductForm, onAddProduct }: {
+const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCancel, onDelete, onToggleProducts, productForm, setProductForm, onAddProduct, onOpenBot, bot }: {
   tenant: Tenant; isEditing: boolean; isAddingProducts: boolean;
   onEdit: () => void; onSave: (t: Tenant) => void; onCancel: () => void; onDelete: () => void;
   onToggleProducts: () => void; productForm: any; setProductForm: any; onAddProduct: () => void;
+  onOpenBot: (t: Tenant) => void; bot?: WABoTRow;
 }) => {
   const [form, setForm] = useState(tenant);
   const { data: products = [] } = useProducts(tenant.id);
@@ -421,12 +475,14 @@ const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCan
               {(tenant as any).billing_mode === 'monthly_fixed' ? ' · 💵 R$60/mês' : ` · Taxa ${(tenant as any).platform_fee_percent ?? 5}%`}
               {(tenant as any).is_dropshipping && ' · 📦 Dropshipping'}
               {(tenant as any).is_donated && ' · 🎁 Doada'}
+              {bot && <span className={bot.ativo !== false ? ' text-green-600 font-medium' : ' text-destructive font-medium'}> · 🤖 Bot WhatsApp {bot.ativo !== false ? 'ativo' : 'pausado'}</span>}
             </p>
           </div>
         </div>
         <div className="flex gap-1">
           <a href={storeUrl} target="_blank" rel="noopener noreferrer" className="rounded-md p-2 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Ver loja"><ExternalLink className="h-4 w-4" /></a>
           <button onClick={onToggleProducts} className="rounded-md p-2 text-muted-foreground hover:text-primary hover:bg-primary/10" title="Produtos"><Package className="h-4 w-4" /></button>
+          <button onClick={() => onOpenBot(tenant)} className={`rounded-md p-2 hover:bg-primary/10 ${bot ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`} title={bot ? 'Editar bot WhatsApp' : 'Criar bot WhatsApp'}><Bot className="h-4 w-4" /></button>
           <button onClick={onEdit} className="rounded-md p-2 text-muted-foreground hover:text-primary hover:bg-primary/10"><Edit className="h-4 w-4" /></button>
           <button onClick={onDelete} className="rounded-md p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></button>
         </div>
@@ -479,8 +535,21 @@ const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCan
               if (!confirm(`Desbloquear a loja "${tenant.name}"?`)) return;
               updateTenantMutation.mutate({ ...tenant, blocked: false, blocked_reason: null, blocked_at: null } as any);
             } else {
-              const reason = prompt(`Bloquear a loja "${tenant.name}".\n\nMotivo (será mostrado pro lojista):`, 'Pendência financeira');
-              if (!reason) return;
+              // Seletor de motivos predefinidos + motivo livre
+              const presets = [
+                'Fotos irregulares no catálogo',
+                'Produtos proibidos no catálogo',
+                'Preços abusivos',
+                'Pendência financeira',
+                'Denúncia de cliente',
+              ];
+              const preset = prompt(
+                `Bloquear a loja "${tenant.name}".\n\nMotivos sugeridos:\n${presets.map((p, i) => `[${i + 1}] ${p}`).join('\n')}\n\nDigite o número do motivo ou escreva outro (será mostrado pro lojista):`,
+                '1'
+              );
+              if (!preset) return;
+              const idx = parseInt(preset, 10) - 1;
+              const reason = idx >= 0 && idx < presets.length ? presets[idx] : preset;
               updateTenantMutation.mutate({ ...tenant, blocked: true, blocked_reason: reason, blocked_at: new Date().toISOString() } as any);
             }
           }}

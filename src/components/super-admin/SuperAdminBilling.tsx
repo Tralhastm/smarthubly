@@ -3,6 +3,7 @@ import { useAllInvoices, useApprovePayment, useGenerateInvoices } from '@/hooks/
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { CheckCircle2, Clock, AlertTriangle, RefreshCw, DollarSign, Loader2, Mail } from 'lucide-react';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 const STATUS_LABELS: Record<string, { label: string; color: string; icon: any }> = {
   pending: { label: 'Aguardando', color: 'text-yellow-400 bg-yellow-400/10', icon: Clock },
@@ -32,9 +33,7 @@ const SuperAdminBilling = () => {
     }
     setSendingTest(true);
     try {
-      const { data, error } = await supabase.functions.invoke('send-billing-email', {
-        body: { test_email: testEmail.trim() },
-      });
+      const { data, error } = await unifiedInvoke("notify-unified", "send-billing", { test_email: testEmail.trim() });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       toast({ title: '✅ E-mail de teste enviado!', description: `Verifique a caixa de entrada de ${testEmail}` });
@@ -48,9 +47,7 @@ const SuperAdminBilling = () => {
   const sendInvoiceEmail = async (id: string) => {
     setSendingId(id);
     try {
-      const { data, error } = await supabase.functions.invoke('send-billing-email', {
-        body: { invoice_id: id },
-      });
+      const { data, error } = await unifiedInvoke("notify-unified", "send-billing", { invoice_id: id });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       toast({ title: '✅ E-mail enviado', description: `Para: ${(data as any)?.to}` });

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, CheckCircle2, XCircle, Mail } from "lucide-react";
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -44,9 +45,7 @@ const Unsubscribe = () => {
     if (!token) return;
     setState("submitting");
     try {
-      const { data, error } = await supabase.functions.invoke("handle-email-unsubscribe", {
-        body: { token },
-      });
+      const { data, error } = await unifiedInvoke("notify-unified", "unsubscribe-handle", { token });
       if (error) throw error;
       if ((data as any)?.success) setState("done");
       else if ((data as any)?.reason === "already_unsubscribed") setState("already");

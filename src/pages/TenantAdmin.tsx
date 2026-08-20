@@ -61,6 +61,7 @@ import ClaraChat from '@/components/tenant/ClaraChat';
 import ClaraFab from '@/components/tenant/ClaraFab';
 import { LayoutDashboard, Package, ShoppingBag, DollarSign, ArrowLeft, LogOut, Users, Store, Factory, Bike, Truck, BarChart3, Palette, Megaphone, Tag, Star, Receipt, MousePointerClick, Printer, CalendarClock, ClipboardList, BookOpen, Settings, Sparkles, Calculator, Plug, Zap, Bot, Activity, Sun, Moon, Wand2, AlertTriangle, CheckCircle2, Mail, Percent, ChefHat, Layers, Radar } from 'lucide-react';
 import { contrastWarning } from '@/lib/color-utils';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'categories' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi' | 'sofia-agent' | 'prospecting' | 'remote-prospecting';
 
@@ -949,9 +950,7 @@ const BrandColorsPanel = ({ primaryColor, setPrimaryColor, bgColor, setBgColor, 
     setAiLoading(true);
     setAiResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke('suggest-brand-colors', {
-        body: { niche: aiNiche, description: aiDesc, storeName: '' },
-      });
+      const { data, error } = await unifiedInvoke("marketing-unified", "colors", { niche: aiNiche, description: aiDesc, storeName: '' });
       if (error) throw error;
       setAiResult(data);
     } catch (e: any) {

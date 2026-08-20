@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { MapPin, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 interface StructuredAddressInputProps {
   value: string;
@@ -63,9 +64,7 @@ const StructuredAddressInput = ({ onChange, onCalculated, onError, tenantAddress
     setResult(null);
     onError('');
     try {
-      const { data, error } = await supabase.functions.invoke('calculate-distance', {
-        body: { address: composed, origin: tenantAddress },
-      });
+      const { data, error } = await unifiedInvoke("delivery-unified", "distance", { address: composed, origin: tenantAddress });
       if (error) throw error;
       if (data.error) {
         onError(data.error);

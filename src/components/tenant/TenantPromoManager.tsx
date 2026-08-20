@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Sparkles, Save, Loader2, Eye, EyeOff, Megaphone } from 'lucide-react';
 import { toast } from 'sonner';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 const TenantPromoManager = ({ tenantId, niche }: { tenantId: string; niche?: string }) => {
   const [title, setTitle] = useState('Promoção do Dia');
@@ -38,9 +39,7 @@ const TenantPromoManager = ({ tenantId, niche }: { tenantId: string; niche?: str
     if (!text.trim()) { toast.error('Escreva algo primeiro para refinar'); return; }
     setRefining(true);
     try {
-      const { data, error } = await supabase.functions.invoke('refine-promo', {
-        body: { text, niche: niche || '' },
-      });
+      const { data, error } = await unifiedInvoke("marketing-unified", "refine", { text, niche: niche || '' });
       if (error) throw error;
       if (data?.refined) {
         setText(data.refined);

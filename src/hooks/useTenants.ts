@@ -24,7 +24,14 @@ export const useTenantBySlug = (slug?: string) => {
       if (!slug) return null;
       // Usa view pública (sem secrets como mercadopago_token, lalamove keys, etc.)
       // ilike pra ser case-insensitive (URL pode vir com maiúscula)
-      const { data, error } = await (supabase as any).from('tenants_public').select('*').ilike('slug', slug).eq('active', true).maybeSingle();
+      // Bloqueio server-side: loja bloqueada (ex.: fotos irregulares) não é entregue nem ao cliente
+      const { data, error } = await (supabase as any)
+        .from('tenants_public')
+        .select('*')
+        .ilike('slug', slug)
+        .eq('active', true)
+        .eq('blocked', false)
+        .maybeSingle();
       if (error) throw error;
       return data as Tenant | null;
     },

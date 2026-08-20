@@ -15,6 +15,7 @@ import SchedulingSlotPicker from './SchedulingSlotPicker';
 import type { Tenant } from '@/hooks/useTenants';
 import { ShoppingCart, X, Plus, Minus, Trash2, MessageCircle, CreditCard, MapPin, Loader2, ExternalLink, Tag, CheckCircle2, CalendarClock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 type SupplierShipping = {
   id: string;
@@ -375,9 +376,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       _setCalculatingDistance(true);
       const results = await Promise.allSettled(
         Array.from(uniqueOrigins).map(async (origin) => {
-          const { data } = await supabase.functions.invoke('calculate-distance', {
-            body: { address: calculatedAddress, origin },
-          });
+          const { data } = await unifiedInvoke("delivery-unified", "distance", { address: calculatedAddress, origin });
           if (data && !data.error) {
             distances[origin] = data.distance_km;
           }
@@ -424,9 +423,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         const supplierIds = Array.from(new Set(
           items.map(i => (i.product as any).supplier_id).filter(Boolean)
         ));
-        const { data, error } = await supabase.functions.invoke('quote-delivery', {
-          body: { tenantId: tenant.id, customerAddress: calculatedAddress, supplierIds },
-        });
+        const { data, error } = await unifiedInvoke("delivery-unified", "quote", { tenantId: tenant.id, customerAddress: calculatedAddress, supplierIds });
         if (!error && data && !data.error) {
           setDeliveryCheck(data);
           const courierOpt = data.options?.find((o: any) => (o.method === 'lalamove' || o.method === 'uber_direct') && o.available);

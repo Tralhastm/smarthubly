@@ -7,6 +7,7 @@ import { Plus, Trash2, Copy, Truck, ExternalLink, Phone, MapPin, RefreshCw, Rada
 import { toast } from 'sonner';
 import DriverMap, { type MapMarker } from '@/components/shared/DriverMap';
 import DriverLiveMapModal from '@/components/tenant/DriverLiveMapModal';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 const TenantAdminDrivers = ({ tenantId, slug }: { tenantId: string; slug: string }) => {
   const { data: drivers = [], isLoading } = useDrivers(tenantId);
@@ -50,7 +51,7 @@ const TenantAdminDrivers = ({ tenantId, slug }: { tenantId: string; slug: string
   const refreshLalamove = async (orderId: string) => {
     setRefreshingId(orderId);
     try {
-      const { data, error } = await supabase.functions.invoke('lalamove-order-status', { body: { orderId } });
+      const { data, error } = await unifiedInvoke("delivery-unified", "lalamove-status", { orderId });
       if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message || 'Erro');
       toast.success(`Status: ${(data as any).status || 'atualizado'}`);
     } catch (e: any) {

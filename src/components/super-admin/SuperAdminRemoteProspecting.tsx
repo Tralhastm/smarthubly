@@ -8,6 +8,7 @@ import {
   MessageSquareWarning, Layers, NotebookPen,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 type Prospect = {
   id: string;
@@ -193,16 +194,14 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
   const search = useMutation({
     mutationFn: async () => {
       if (!city.trim() || !niche.trim()) throw new Error('Preencha pelo menos cidade e nicho');
-      const { data, error } = await supabase.functions.invoke('prospect-google-search', {
-        body: {
+      const { data, error } = await unifiedInvoke("prospect-unified", "google", {
           city: city.trim(),
           state: state.trim(),
           region: region.trim(),
           neighborhood: neighborhood.trim(),
           niche: niche.trim(),
           sector: sector.trim(),
-        },
-      });
+        });
       if (error) {
         const ctxMsg = (error as any)?.context?.body
           ? (() => { try { return JSON.parse((error as any).context.body)?.message; } catch { return null; } })()
@@ -228,9 +227,7 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
         let foundCount = 0;
         for (const lead of leadsArr) {
           try {
-            const { data: enr } = await supabase.functions.invoke('prospect-enrich', {
-              body: { prospect_id: lead.id },
-            });
+            const { data: enr } = await unifiedInvoke("prospect-unified", "enrich", { prospect_id: lead.id });
             if ((enr as any)?.changed) foundCount++;
           } catch { /* ignora */ }
         }
@@ -243,9 +240,7 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
 
   const mapsPhone = useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase.functions.invoke('prospect-maps-phone', {
-        body: { prospect_id: id },
-      });
+      const { data, error } = await unifiedInvoke("prospect-unified", "maps", { prospect_id: id });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).message || (data as any).error);
       return data as { found: boolean; phone?: string; source?: string; message?: string };
@@ -260,9 +255,14 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
 
   const enrich = useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase.functions.invoke('prospect-enrich', {
-        body: { prospect_id: id },
-      });
+      const { data, error } = await unifiedInvoke("prospect-unified", "enrich", {
+          city: city.trim(),
+          state: state.trim(),
+          region: region.trim(),
+          neighborhood: neighborhood.trim(),
+          niche: niche.trim(),
+          sector: sector.trim(),
+        });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).message || (data as any).error);
       return data as { found: { instagram: string | null; phone: string | null }; changed: boolean };
@@ -280,9 +280,7 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
 
   const analyzeReviews = useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase.functions.invoke('prospect-reviews', {
-        body: { prospect_id: id },
-      });
+      const { data, error } = await unifiedInvoke("prospect-unified", "reviews", { prospect_id: id });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).message || (data as any).error);
       return data as { reviews_found: number; negatives_found: number; pain_signals: string[]; pain_summary: string };
@@ -298,7 +296,7 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
 
   const siteStack = useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase.functions.invoke('prospect-site-stack', { body: { prospect_id: id } });
+      const { data, error } = await unifiedInvoke("prospect-unified", "site", { prospect_id: id });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).message || (data as any).error);
       return data as { site_url: string | null; found_on_maps: boolean; stack: string[]; summary: string };
@@ -314,9 +312,7 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
 
   const generateMsg = useMutation({
     mutationFn: async ({ id, mode }: { id: string; mode: 'initial' | 'reply' | 'followup' }) => {
-      const { data, error } = await supabase.functions.invoke('prospect-message', {
-        body: { prospect_id: id, mode },
-      });
+      const { data, error } = await unifiedInvoke("prospect-unified", "message", { prospect_id: id, mode });
       if (error) {
         const ctxMsg = (error as any)?.context?.body
           ? (() => { try { return JSON.parse((error as any).context.body)?.message; } catch { return null; } })()
@@ -1025,7 +1021,7 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
                     <div className="flex gap-2 pt-1">
                       <button onClick={async () => {
                         await updateProspect.mutateAsync({ id: p.id, patch: { status: 'closed_won' } });
-                        const { data, error } = await supabase.functions.invoke('prospect-learn', { body: { prospect_id: p.id, outcome: 'won' } });
+                        const { data, error } = await unifiedInvoke("prospect-unified", "learn", { prospect_id: p.id, outcome: 'won' });
                         if (error) toast.error('Lição não foi gerada'); else if ((data as any)?.ok) toast.success(`📚 Lição salva: ${(data as any).lesson}`);
                       }}
                         className="flex-1 rounded-md bg-emerald-600/20 text-emerald-300 px-3 py-1.5 text-xs">
@@ -1033,7 +1029,14 @@ const SuperAdminRemoteProspecting = (props?: { scope?: ProspectingScope; tenantI
                       </button>
                       <button onClick={async () => {
                         await updateProspect.mutateAsync({ id: p.id, patch: { status: 'closed_lost' } });
-                        const { data, error } = await supabase.functions.invoke('prospect-learn', { body: { prospect_id: p.id, outcome: 'lost' } });
+                        const { data, error } = await unifiedInvoke("prospect-unified", "learn", {
+          city: city.trim(),
+          state: state.trim(),
+          region: region.trim(),
+          neighborhood: neighborhood.trim(),
+          niche: niche.trim(),
+          sector: sector.trim(),
+        });
                         if (error) toast.error('Lição não foi gerada'); else if ((data as any)?.ok) toast.success(`📚 Lição salva: ${(data as any).lesson}`);
                       }}
                         className="flex-1 rounded-md bg-rose-600/20 text-rose-300 px-3 py-1.5 text-xs">

@@ -21,9 +21,10 @@ import MarketingPostGenerator from '@/components/shared/MarketingPostGenerator';
 import SuperAdminSupport from '@/components/super-admin/SuperAdminSupport';
 import SuperAdminAiEditor from '@/components/super-admin/SuperAdminAiEditor';
 import SuperAdminAutoTest from '@/components/super-admin/SuperAdminAutoTest';
+import SuperAdminWhatsAppBots from '@/components/super-admin/SuperAdminWhatsAppBots';
 import { useAuthReady } from '@/hooks/useAuthReady';
 
-type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'workers' | 'users' | 'health' | 'financial' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test';
+type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'workers' | 'users' | 'health' | 'financial' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test' | 'whatsapp_bots';
 
 const SuperAdmin = () => {
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -104,6 +105,7 @@ const SuperAdmin = () => {
     { id: 'support' as Tab, label: 'Chamados', icon: <LifeBuoy className="h-4 w-4" /> },
     { id: 'ai_editor' as Tab, label: 'Editor IA', icon: <Code2 className="h-4 w-4" /> },
     { id: 'auto_test' as Tab, label: 'AutoTest', icon: <Zap className="h-4 w-4" /> },
+    { id: 'whatsapp_bots' as Tab, label: 'Bot WhatsApp', icon: <Bot className="h-4 w-4" /> },
   ];
 
   return (
@@ -160,6 +162,7 @@ const SuperAdmin = () => {
           {tab === 'support' && <SuperAdminSupport />}
           {tab === 'ai_editor' && <SuperAdminAiEditor />}
           {tab === 'auto_test' && <SuperAdminAutoTest />}
+          {tab === 'whatsapp_bots' && <SuperAdminWhatsAppBots />}
         </div>
       </div>
 

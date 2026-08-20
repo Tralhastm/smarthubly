@@ -15,6 +15,7 @@ import { useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { fileToScanPayload } from '@/lib/file-to-image';
 import NfeReviewDialog from './NfeReviewDialog';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 interface Props { tenantId: string }
 
@@ -218,9 +219,7 @@ function APRTab({ tenantId }: { tenantId: string }) {
     setScanning(true);
     try {
       const payload = await fileToScanPayload(file);
-      const { data, error } = await supabase.functions.invoke('scan-invoice', {
-        body: { tenant_id: tenantId, ...payload },
-      });
+      const { data, error } = await unifiedInvoke("fiscal-unified", "scan", { tenant_id: tenantId, ...payload });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       const f = data?.extracted || {};

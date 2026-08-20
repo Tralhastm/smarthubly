@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Activity, AlertTriangle, TrendingUp, TrendingDown, RefreshCw } from "lucide-react";
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 type TenantUsage = {
   id: string; name: string; slug: string; active: boolean;
@@ -40,7 +41,7 @@ const SuperAdminUsageMonitor = () => {
   const load = async () => {
     setLoading(true); setErr(null);
     try {
-      const { data: res, error } = await supabase.functions.invoke("tenant-usage-stats");
+      const { data: res, error } = await unifiedInvoke("finance-unified", "stats", undefined);
       if (error) throw error;
       if (res?.error) throw new Error(res.error);
       setData(res);

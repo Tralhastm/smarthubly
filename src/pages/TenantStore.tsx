@@ -64,12 +64,17 @@ const TenantStore = () => {
   }
 
   if ((tenant as any).blocked) {
+    const blockedReason = (tenant as any).blocked_reason;
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="text-center max-w-md">
           <div className="text-5xl mb-4">🚫</div>
           <h1 className="text-xl font-bold text-foreground mb-2">Loja temporariamente indisponível</h1>
-          <p className="text-muted-foreground text-sm">Esta loja está com o atendimento suspenso no momento. Tente novamente mais tarde.</p>
+          <p className="text-muted-foreground text-sm">
+            Esta loja está com o atendimento suspenso no momento.
+            {blockedReason && ` Motivo: ${blockedReason}.`}
+            {' '}Tente novamente mais tarde.
+          </p>
         </div>
       </div>
     );

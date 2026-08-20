@@ -15,6 +15,7 @@ import { isPrinterPaired } from '@/lib/printer-bluetooth';
 import { isSimulationMode } from '@/lib/printer-simulator';
 import { registerTenantAdminPush, getNotificationPermission, isPushSupported } from '@/lib/push-notifications';
 import OrderEmitNFCeButton from './OrderEmitNFCeButton';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   pending_review: { label: 'Aguardando Aprovação', icon: <Clock className="h-4 w-4" />, color: 'bg-purple-500/20 text-purple-400' },
@@ -234,13 +235,11 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
     // Send push notification to driver
     const order = orders.find(o => o.id === orderId);
     try {
-      await supabase.functions.invoke('send-push', {
-        body: {
+      await unifiedInvoke("notify-unified", "push", {
           driverId,
           title: '🏍️ Nova entrega!',
           body: `Pedido #${orderId.slice(0, 6)} - ${order?.customer_name || 'Cliente'} - ${order?.customer_address || ''}`,
-        },
-      });
+        });
     } catch (e) {
       console.error('Push notification failed:', e);
     }
@@ -252,7 +251,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
     const toastId = toast.loading('Chamando Lalamove... (até 30s)');
     try {
       // Race com timeout de 30s — se demorar demais, sugere chamar por fora
-      const invokePromise = supabase.functions.invoke('request-lalamove-delivery', { body: { orderId, calledBy: 'admin' } });
+      const invokePromise = unifiedInvoke("delivery-unified", "lalamove-request", { orderId, calledBy: 'admin' });
       const timeoutPromise = new Promise<never>((_, rej) =>
         setTimeout(() => rej(new Error('TIMEOUT: Lalamove demorou mais de 30s')), 30000)
       );
@@ -643,9 +642,7 @@ const ExternalTrackingEditor = ({ orderId, initialUrl, initialProvider, autoOpen
 
     if (url && lalamoveActive && confirm('Cancelar a corrida na Lalamove agora? Você passará a usar o link externo.')) {
       try {
-        const { data, error: cErr } = await supabase.functions.invoke('cancel-lalamove-delivery', {
-          body: { orderId },
-        });
+        const { data, error: cErr } = await unifiedInvoke("delivery-unified", "lalamove-cancel", { orderId });
         if (cErr || (data as { error?: string })?.error) {
           throw new Error((data as { error?: string })?.error || cErr?.message || 'Erro');
         }

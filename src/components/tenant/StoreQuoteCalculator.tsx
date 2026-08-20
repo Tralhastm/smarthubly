@@ -8,6 +8,7 @@ import { useQuoteVariables } from '@/hooks/useQuotes';
 import { Calculator, MessageCircle, Sparkles, Info, Wand2, Loader2, Clock, TrendingUp, Users } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 interface Props {
   tenantId: string;
@@ -101,9 +102,7 @@ const StoreQuoteCalculator = ({ tenantId, tenantName, whatsapp, introText }: Pro
     setAiLoading(true);
     setAiResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke('estimate-quote', {
-        body: { tenantId, description: aiDescription.trim() },
-      });
+      const { data, error } = await unifiedInvoke("finance-unified", "estimate-quote", { tenantId, description: aiDescription.trim() });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       const est = (data as any)?.estimate as AiEstimate;

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Trash2, Save, MapPin, Search, Phone, Crosshair, Loader2, FileText, Target, MessageCircle, CheckCircle2, Flame, TrendingUp, AlertTriangle, Bot, Send, Pencil, Copy, Sparkles, X, Bell, BrainCircuit, Clock, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 type ConvMsg = { from: 'me' | 'lead'; text: string; at: string };
 type ProspectTag = {
@@ -226,9 +227,7 @@ const SuperAdminProspecting = (props?: { scope?: ProspectingScope; tenantId?: st
   const generateAI = async (p: Prospect) => {
     setGenerating(g => ({ ...g, [p.id]: true }));
     try {
-      const { data, error } = await supabase.functions.invoke('street-prospect-message', {
-        body: { prospect_id: p.id, instruction: instructionDraft[p.id] || undefined },
-      });
+      const { data, error } = await unifiedInvoke("prospect-unified", "street-message", { prospect_id: p.id, instruction: instructionDraft[p.id] || undefined });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('Rascunho gerado pela IA');
@@ -243,9 +242,7 @@ const SuperAdminProspecting = (props?: { scope?: ProspectingScope; tenantId?: st
   const analyzeAI = async (p: Prospect) => {
     setAnalyzing(g => ({ ...g, [p.id]: true }));
     try {
-      const { data, error } = await supabase.functions.invoke('street-prospect-analyze', {
-        body: { prospect_id: p.id },
-      });
+      const { data, error } = await unifiedInvoke("prospect-unified", "street-analyze", { prospect_id: p.id });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('Conversa analisada');

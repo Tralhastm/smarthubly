@@ -12,6 +12,7 @@ import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Sparkles, Loa
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 type ParsedProduct = { name: string; price: number; category: string; description: string };
 
@@ -51,9 +52,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     setRefreshingPrices(true);
     toast.loading('Atualizando preços via IA... pode levar 1-2 min', { id: 'refresh-aff' });
     try {
-      const { data, error } = await supabase.functions.invoke('refresh-affiliate-prices', {
-        body: { tenant_id: tenantId, limit: 100 },
-      });
+      const { data, error } = await unifiedInvoke("affiliate-unified", "refresh", { tenant_id: tenantId, limit: 100 });
       if (error) throw error;
       toast.success(
         `${data.updated} atualizados, ${data.unchanged} sem mudança, ${data.soldOut} esgotados, ${data.failed} falharam`,
@@ -120,9 +119,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     const toastId = `del-${source}`;
     toast.loading(`Excluindo fotos ${label}...`, { id: toastId });
     try {
-      const { data, error } = await supabase.functions.invoke('delete-bulk-images', {
-        body: { tenantId, source },
-      });
+      const { data, error } = await unifiedInvoke("ai-media-unified", "delete", { tenantId, source });
       if (error) throw error;
       toast.success(`${data?.productsCleared ?? 0} produtos limpos · ${data?.storageDeleted ?? 0} arquivos removidos`, { id: toastId, duration: 5000 });
       refetch();
@@ -196,7 +193,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
     setImportStep('parsing');
     try {
-      const { data, error } = await supabase.functions.invoke('parse-products-txt', { body: { txtContent: text } });
+      const { data, error } = await unifiedInvoke("ai-media-unified", "parse-txt", { txtContent: text });
 
       if (error) {
         let detailedMessage = '';
@@ -285,9 +282,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     // Otimista: mostra job placeholder enquanto a edge function não retorna o jobId
     setActiveJob({ id: 'pending', total: productIds.length, done: 0, failed: 0, status: 'running', reason: '', message: 'Iniciando…', cooldown_until: null });
     try {
-      const { data, error } = await supabase.functions.invoke('batch-generate-images', {
-        body: { productIds, tenantId },
-      });
+      const { data, error } = await unifiedInvoke("ai-media-unified", "bulk", { productIds, tenantId });
       if (error) throw error;
       if (data?.jobId) {
         setActiveJob((prev) => prev ? { ...prev, id: data.jobId } : prev);
@@ -312,9 +307,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     toast.info(`Buscando ${noImage.length} fotos na web... Pode fechar o navegador!`);
     setActiveJob({ id: 'pending', total: noImage.length, done: 0, failed: 0, status: 'running', reason: '', message: 'Iniciando busca…', cooldown_until: null });
     try {
-      const { data, error } = await supabase.functions.invoke('batch-search-google-images', {
-        body: { productIds: noImage.map(p => p.id), tenantId },
-      });
+      const { data, error } = await unifiedInvoke("ai-media-unified", "search", { productIds: noImage.map(p => p.id), tenantId });
       if (error) throw error;
       if (data?.jobId) setActiveJob((prev) => prev ? { ...prev, id: data.jobId } : prev);
     } catch (err) {
@@ -367,9 +360,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     if (!affiliateImportUrl.trim()) return;
     setImportingUrl(true);
     try {
-      const { data, error } = await supabase.functions.invoke('import-affiliate-product', {
-        body: { url: affiliateImportUrl.trim(), useAi },
-      });
+      const { data, error } = await unifiedInvoke("affiliate-unified", "import", { url: affiliateImportUrl.trim(), useAi });
       if (error) throw error;
       if (!data || data.error) { toast.error(data?.error || 'Erro ao importar'); return; }
       setForm(f => ({
@@ -768,14 +759,12 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
     if (generatingDesc) return;
     setGeneratingDesc(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-product-description', {
-        body: {
+      const { data, error } = await unifiedInvoke("ai-media-unified", "describe", {
           name: form.name,
           category: form.category,
           network: (form as any).affiliate_network || null,
           currentDescription: form.description,
-        },
-      });
+        });
       if (error) throw error;
       if (data?.error) { toast.error(data.error); return; }
       if (data?.description) {

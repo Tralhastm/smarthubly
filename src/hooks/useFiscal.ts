@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 export type FiscalProvider = "webmania" | "plugnotas" | "focusnfe" | "nfeio";
 export type FiscalEnvironment = "sandbox" | "production";
@@ -135,9 +136,7 @@ export const useEmitNFCe = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ orderId, tenantId }: { orderId: string; tenantId: string }) => {
-      const { data, error } = await supabase.functions.invoke("emit-nfce", {
-        body: { orderId, tenantId },
-      });
+      const { data, error } = await unifiedInvoke("fiscal-unified", "emit", { orderId, tenantId });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.error || "Erro ao emitir nota");
       return data;

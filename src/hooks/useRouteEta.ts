@@ -3,6 +3,7 @@
 // Cacheia destino geocodificado para reaproveitar entre recálculos.
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 interface Args {
   originLat?: number | null;
@@ -70,7 +71,7 @@ export const useRouteEta = ({
       body.destAddress = destAddress;
     }
 
-    supabase.functions.invoke('route-eta', { body }).then(({ data, error }) => {
+    unifiedInvoke("delivery-unified", "route-eta", undefined).then(({ data, error }) => {
       inFlightRef.current = false;
       if (error || (data as any)?.error) {
         setState(s => ({ ...s, loading: false, error: (data as any)?.error || error?.message || 'falha' }));

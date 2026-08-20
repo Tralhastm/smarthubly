@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 export type BillingInvoice = {
   id: string;
@@ -90,7 +91,7 @@ export const useGenerateInvoices = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (params?: { tenant_id?: string; force?: boolean }) => {
-      const { data, error } = await supabase.functions.invoke('generate-invoices', { body: params || {} });
+      const { data, error } = await unifiedInvoke("fiscal-unified", "generate", params);
       if (error) throw error;
       return data;
     },

@@ -20,6 +20,7 @@ import { logOrderEvent } from '@/lib/order-events';
 import { registerSupplierPushSubscription } from '@/lib/push-notifications';
 import { useSupplierReviews } from '@/hooks/useReviews';
 import ReviewsList from '@/components/tenant/ReviewsList';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 type OrderWithItems = {
   id: string; status: string; total: number; delivery_type: string; payment_method: string;
@@ -227,13 +228,11 @@ const SupplierPanel = () => {
       if (relevantOrders.length > prevCountRef.current && prevCountRef.current > 0) {
         try { audioRef.current?.play(); } catch {}
         toast.success('🔔 Novo pedido recebido!');
-        supabase.functions.invoke('send-push', {
-          body: {
+        unifiedInvoke("notify-unified", "push", {
             supplierId: supplier.id,
             title: '🔔 Novo pedido!',
             body: `Você recebeu um novo pedido na ${supplier.name}.`,
-          },
-        }).catch(e => console.error('Push to supplier failed:', e));
+          }).catch(e => console.error('Push to supplier failed:', e));
       }
       prevCountRef.current = relevantOrders.length;
       setOrders(relevantOrders);
@@ -345,9 +344,7 @@ const SupplierPanel = () => {
     setAdvancingId(orderId);
     const toastId = toast.loading('Chamando Lalamove...');
     try {
-      const { data, error } = await supabase.functions.invoke('request-lalamove-delivery', {
-        body: { orderId, supplierId: supplier.id, calledBy: 'supplier' },
-      });
+      const { data, error } = await unifiedInvoke("delivery-unified", "lalamove-request", { orderId, supplierId: supplier.id, calledBy: 'supplier' });
       if (error || (data as { error?: string })?.error) {
         throw new Error((data as { error?: string })?.error || error?.message || 'Erro Lalamove');
       }
@@ -382,13 +379,7 @@ const SupplierPanel = () => {
     } as any).eq('id', orderId);
     const order = orders.find(o => o.id === orderId);
     try {
-      await supabase.functions.invoke('send-push', {
-        body: {
-          driverId,
-          title: '🏍️ Nova entrega!',
-          body: `Pedido #${orderId.slice(0, 6)} - ${order?.customer_name || 'Cliente'} - ${order?.customer_address || ''}`,
-        },
-      });
+      await unifiedInvoke("notify-unified", "push", `Você);
     } catch (e) { console.error('Push falhou:', e); }
   };
 

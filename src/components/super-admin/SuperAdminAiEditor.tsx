@@ -7,7 +7,7 @@
 // Histórico completo com desfazer.
 
 import { useState, useEffect } from 'react';
-import { Code2, Send, Loader2, CheckCircle2, AlertCircle, Undo2, FileCode2, Clock, History, Rocket, Zap, ScanSearch, GitBranch, ShieldAlert, Database } from 'lucide-react';
+import { Code2, Send, Loader2, CheckCircle2, AlertCircle, Undo2, FileCode2, Clock, History, Rocket, Zap, ScanSearch, GitBranch, ShieldAlert, Database, Eye, Sparkles, XCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -42,6 +42,10 @@ type ReqRow = {
   reverted_at: string | null;
   deploy_requested_at: string | null;
   deployed_at: string | null;
+  visual_check_status: string | null;
+  visual_check_verdict: string | null;
+  visual_check_detail: string | null;
+  visual_check_at: string | null;
 };
 
 function timeAgo(iso: string): string {
@@ -205,6 +209,47 @@ const SuperAdminAiEditor = () => {
     }
   };
 
+  const VISUAL_STATUS: Record<string, { text: string; cls: string }> = {
+    in_progress: { text: 'Verificando no ar...', cls: 'text-amber-400 bg-amber-500/10' },
+    pending_recheck: { text: 'Corrigido — re-verificar', cls: 'text-blue-400 bg-blue-500/10' },
+    verified_ok: { text: 'Verificado ✓', cls: 'text-emerald-400 bg-emerald-500/10' },
+    verified_fail: { text: 'Falha na verificação', cls: 'text-red-400 bg-red-500/10' },
+  };
+
+  const [visualBusy, setVisualBusy] = useState<string | null>(null);
+  const [visualOpen, setVisualOpen] = useState<string | null>(null);
+
+  const handleVerify = async (id: string) => {
+    if (busyId || visualBusy) return;
+    setVisualBusy(id);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const res = await fetch(`${FN_URL}/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.session?.access_token}`,
+        },
+        body: JSON.stringify({ id }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error || 'Falha ao iniciar verificação visual');
+        return;
+      }
+      toast.success('Verificação visual iniciada! A IA vai conferir a mudança direto no site no ar.');
+      await loadHistory();
+    } catch (e: any) {
+      toast.error(String(e?.message || e));
+    } finally {
+      setVisualBusy(null);
+    }
+  };
+
+  const visualDetailOf = (r: ReqRow): any | null => {
+    try { return r.visual_check_detail ? JSON.parse(r.visual_check_detail) : null; } catch { return null; }
+  };
+
   const handleRevert = async (id: string) => {
     if (busyId) return;
     if (!window.confirm('Reverter esta edição? O código volta ao estado anterior.')) return;
@@ -251,7 +296,7 @@ const SuperAdminAiEditor = () => {
         </div>
         <div>
           <h2 className="font-heading text-xl text-foreground flex items-center gap-2">
-            Editor IA <span className="rounded-full bg-gradient-to-r from-violet-500 to-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white">V3.1</span>
+            Editor IA <span className="rounded-full bg-gradient-to-r from-violet-500 to-indigo-600 px-2 py-0.5 text-[10px] font-bold text-white">V3.2</span>
           </h2>
           <p className="text-sm text-muted-foreground">Descreva a mudança e a IA edita o código-fonte do sistema.</p>
         </div>
@@ -295,11 +340,13 @@ const SuperAdminAiEditor = () => {
         )}
       </div>
 
-      {/* V3.1 — Análise de impacto (sem alterar código) */}
+      {/* V3.2 — Verificação Visual no card de cada pedido (botão "Verificar no ar") */}
+
+      {/* Análise de impacto (sem alterar código) */}
       <div className="rounded-xl border border-violet-500/30 bg-card p-4">
         <div className="mb-2 flex items-center gap-2">
           <ScanSearch className="h-4 w-4 text-violet-400" />
-          <h3 className="text-sm font-medium text-foreground">Analisar impacto <span className="rounded-full bg-gradient-to-r from-violet-500 to-indigo-600 px-1.5 py-0.5 text-[9px] font-bold text-white">V3.1</span></h3>
+          <h3 className="text-sm font-medium text-foreground">Analisar impacto <span className="rounded-full bg-gradient-to-r from-violet-500 to-indigo-600 px-1.5 py-0.5 text-[9px] font-bold text-white">V3.2</span></h3>
           <span className="text-[11px] text-muted-foreground">— a IA prevê o que será mexido, sem alterar nada</span>
         </div>
         <div className="flex gap-2">
@@ -406,6 +453,19 @@ const SuperAdminAiEditor = () => {
                   {r.explanation && !isExpanded && (
                     <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{r.explanation}</p>
                   )}
+                  {r.visual_check_status && !isExpanded && (() => {
+                    const vs = VISUAL_STATUS[r.visual_check_status] || { text: r.visual_check_status, cls: 'text-slate-400 bg-slate-500/10' };
+                    return (
+                      <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${vs.cls}`}>
+                          <Eye className="h-3 w-3" /> Verificação visual: {vs.text}
+                        </span>
+                        {r.visual_check_verdict && (
+                          <span className="text-muted-foreground">— {r.visual_check_verdict}</span>
+                        )}
+                      </p>
+                    );
+                  })()}
                   {ctx.length > 0 && !isExpanded && (
                     <p className="mt-1 text-[10px] text-muted-foreground/70">
                       Contexto usado: {ctx.slice(0, 4).map(p => p.replace('src/', '')).join(', ')}{ctx.length > 4 ? ` +${ctx.length - 4}` : ''}
@@ -452,6 +512,22 @@ const SuperAdminAiEditor = () => {
                       <Loader2 className="h-3 w-3 animate-spin" /> Publicando...
                     </span>
                   )}
+                  {canDeploy && (
+                    <button
+                      onClick={() => void handleVerify(r.id)}
+                      disabled={visualBusy === r.id}
+                      className="flex items-center gap-1 rounded-lg border border-emerald-500/40 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/10 disabled:opacity-60"
+                      title="A IA abre a página no ar, confere se a mudança ficou como pedido e corrige se estiver errada"
+                    >
+                      {visualBusy === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+                      Verificar no ar
+                    </button>
+                  )}
+                  {r.visual_check_status === 'verified_fail' && r.visual_check_verdict !== 'corrigido' && (
+                    <span className="flex items-center gap-1 text-[10px] text-red-400">
+                      <XCircle className="h-3 w-3" /> Revisar manualmente
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -486,6 +562,78 @@ const SuperAdminAiEditor = () => {
                   )}
                   {r.commit_sha && (
                     <p className="text-xs text-muted-foreground">Commit: <span className="font-mono">{r.commit_sha.slice(0, 7)}</span></p>
+                  )}
+                  {visualDetailOf(r) && (
+                    <div className="overflow-hidden rounded-lg border border-border text-xs">
+                      <button
+                        onClick={() => setVisualOpen(visualOpen === r.id ? null : r.id)}
+                        className="flex w-full items-center gap-2 border-b border-border bg-secondary px-3 py-1.5 text-left text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        <span>Verificação visual da IA {r.visual_check_status === 'verified_ok' ? '— aprovada ✓' : r.visual_check_status === 'verified_fail' ? '— falhou' : ''}</span>
+                      </button>
+                      {visualOpen === r.id && (() => {
+                        const vd = visualDetailOf(r)!;
+                        return (
+                          <div className="max-h-[320px] space-y-2 overflow-auto bg-background/60 p-3">
+                            {Array.isArray(vd.checkpoints) && vd.checkpoints.length > 0 && (
+                              <div>
+                                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">O que a IA foi conferir na página</p>
+                                <ul className="space-y-1">
+                                  {vd.checkpoints.map((c: any, i: number) => (
+                                    <li key={i} className="text-[11px] text-secondary-foreground">
+                                      <span className="font-mono text-muted-foreground">{c.path}</span> · {c.what}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {Array.isArray(vd.visual_checks) && vd.visual_checks.length > 0 && (
+                              <div>
+                                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Checagens visuais</p>
+                                <ul className="space-y-0.5">
+                                  {vd.visual_checks.map((v: string, i: number) => (
+                                    <li key={i} className="text-[11px] text-secondary-foreground">• {v}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {vd.note && <p className="text-[11px] italic text-muted-foreground">{vd.note}</p>}
+                            {vd.history && (
+                              <div>
+                                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Ciclos de checagem</p>
+                                {vd.history.map((h: any, i: number) => (
+                                  <div key={i} className="mb-2 rounded-md border border-border p-2">
+                                    <p className="mb-1 text-[10px] font-semibold text-muted-foreground">Ciclo {h.cycle}</p>
+                                    {Array.isArray(h.checks) && h.checks.map((c: any, j: number) => (
+                                      <p key={j} className="text-[11px] text-secondary-foreground">
+                                        {c.found ? '✓' : '✗'} {c.target} · {c.what?.slice(0, 80)}
+                                        {c.reason && !c.found && <span className="text-red-400"> ({c.reason})</span>}
+                                      </p>
+                                    ))}
+                                    {h.verdict && (
+                                      <p className={`text-[11px] font-medium ${h.verdict?.verdict === 'ok' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                        Veredito: {h.verdict?.verdict_text || h.verdict?.verdict}
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {vd.final_feedback && (
+                              <p className="rounded-md bg-secondary p-2 text-[11px] text-secondary-foreground">{vd.final_feedback}</p>
+                            )}
+                            {vd.correction && (
+                              <div className="rounded-md border border-blue-500/30 bg-blue-500/5 p-2">
+                                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-blue-400">Correção automática aplicada</p>
+                                <p className="text-[11px] text-secondary-foreground">{vd.correction.feedback?.slice(0, 200)}</p>
+                                {vd.correction.commit && <p className="mt-1 font-mono text-[10px] text-muted-foreground">commit: {vd.correction.commit.slice(0, 7)}</p>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   )}
                 </div>
               )}

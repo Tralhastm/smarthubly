@@ -4,6 +4,7 @@
 // Envia para edge function update-driver-location a cada update significativo (>10m ou >15s).
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 interface Options {
   driverToken?: string;
@@ -86,16 +87,14 @@ export const useDriverTracking = ({ driverToken, enabled, minDistanceMeters = 10
       }
       lastSentRef.current = { lat: latitude, lng: longitude, t: now };
       try {
-        await supabase.functions.invoke('update-driver-location', {
-          body: {
+        await unifiedInvoke("delivery-unified", "driver-location", {
             token: driverToken,
             lat: latitude,
             lng: longitude,
             accuracy: accuracy ?? null,
             heading: heading ?? null,
             speed: speed ?? null,
-          },
-        });
+          });
         if (!cancelled) setState(s => ({ ...s, lastUpdate: new Date(), lastPosition: { lat: latitude, lng: longitude }, error: null }));
       } catch (e: any) {
         if (!cancelled) setState(s => ({ ...s, error: e?.message || 'falha ao enviar' }));

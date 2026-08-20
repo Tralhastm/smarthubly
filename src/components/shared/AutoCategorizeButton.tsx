@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 interface ItemToCategorize {
   id: string;
@@ -31,12 +32,10 @@ export const AutoCategorizeButton = ({ items, context, onResults, label = 'Categ
     }
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('auto-categorize', {
-        body: {
+      const { data, error } = await unifiedInvoke("finance-unified", "auto-categorize", {
           items: eligible.map(it => ({ id: it.id, name: it.name, description: it.description })),
           context,
-        },
-      });
+        });
       const fallbackMessage = (error as any)?.message || 'Falha ao categorizar';
       if (error && !data) throw new Error(fallbackMessage);
       if (data?.ok === false || data?.error) throw new Error(data?.error || fallbackMessage);

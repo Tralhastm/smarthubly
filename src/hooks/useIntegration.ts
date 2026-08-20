@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 export type IntegrationSettings = Tables<"integration_settings">;
 
@@ -69,7 +70,7 @@ export const useRotateIntegrationKey = () => {
 
 export async function triggerSync(tenantId: string, event: string, data: any) {
   try {
-    await supabase.functions.invoke("sync-to-financeflow", { body: { tenantId, event, data } });
+    await unifiedInvoke("finance-unified", "sync-financeflow", { tenantId, event, data });
   } catch (e) {
     console.warn("sync-to-financeflow falhou (não-bloqueante):", e);
   }

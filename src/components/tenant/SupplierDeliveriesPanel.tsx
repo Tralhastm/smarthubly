@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Truck, ExternalLink, Phone, MapPin, RefreshCw, Package, Bike, Send, ArrowLeftRight, AlertCircle, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { logOrderEvent } from '@/lib/order-events';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 type Driver = { id: string; name: string; phone: string; active: boolean };
 
@@ -88,9 +89,7 @@ const SupplierDeliveriesPanel = ({ supplierId, tenantId, supplierName }: Props) 
     }
     setDispatchingId(orderId);
     try {
-      const { data, error } = await supabase.functions.invoke('request-lalamove-delivery', {
-        body: { orderId, supplierId, calledBy: 'supplier' },
-      });
+      const { data, error } = await unifiedInvoke("delivery-unified", "lalamove-request", { orderId, supplierId, calledBy: 'supplier' });
       if (error || (data as { error?: string })?.error) {
         throw new Error((data as { error?: string })?.error || error?.message || 'Erro');
       }
@@ -136,7 +135,7 @@ const SupplierDeliveriesPanel = ({ supplierId, tenantId, supplierName }: Props) 
   const refreshLalamove = async (orderId: string) => {
     setRefreshingId(orderId);
     try {
-      const { data, error } = await supabase.functions.invoke('lalamove-order-status', { body: { orderId } });
+      const { data, error } = await unifiedInvoke("delivery-unified", "lalamove-status", { orderId });
       if (error || (data as { error?: string })?.error) {
         throw new Error((data as { error?: string })?.error || error?.message || 'Erro');
       }
@@ -154,9 +153,7 @@ const SupplierDeliveriesPanel = ({ supplierId, tenantId, supplierName }: Props) 
     if (!confirm('Cancelar a corrida na Lalamove? O pedido voltará para "Em preparo".')) return;
     setCancellingId(orderId);
     try {
-      const { data, error } = await supabase.functions.invoke('cancel-lalamove-delivery', {
-        body: { orderId, revertStatus: 'preparing' },
-      });
+      const { data, error } = await unifiedInvoke("delivery-unified", "lalamove-cancel", { orderId, revertStatus: 'preparing' });
       if (error || (data as { error?: string })?.error) {
         throw new Error((data as { error?: string })?.error || error?.message || 'Erro');
       }

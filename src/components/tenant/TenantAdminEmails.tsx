@@ -3,6 +3,7 @@ import { useSubTabs } from '@/lib/admin-subtabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Send, Loader2, Save, AlertCircle, Sparkles } from 'lucide-react';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 interface Props { tenantId: string }
 
@@ -88,9 +89,7 @@ export default function TenantAdminEmails({ tenantId }: Props) {
         tenant_id: tenantId, subject: newSubject, body_html: newBody, preview_text: newPreview, status: 'draft',
       }).select().single();
       if (error) throw error;
-      const { data: result, error: fnErr } = await supabase.functions.invoke('send-marketing-campaign', {
-        body: { campaignId: campaign.id }
-      });
+      const { data: result, error: fnErr } = await unifiedInvoke("marketing-unified", "campaign", { campaignId: campaign.id });
       if (fnErr) throw fnErr;
       toast({ title: 'Campanha enviada', description: `${result.succeeded}/${result.recipients} entregues.` });
       setNewSubject(''); setNewBody(''); setNewPreview('');

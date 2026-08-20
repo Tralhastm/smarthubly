@@ -4,6 +4,7 @@ import { removeSolidBackground } from '@/lib/remove-image-bg';
 import { supabase } from '@/integrations/supabase/client';
 import { Upload, Loader2, Link, ImageIcon, Search, X, Plus, Wand2, Eraser } from 'lucide-react';
 import { toast } from 'sonner';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, transparentBg }: { value: string; onChange: (url: string) => void; tenantId: string; label?: string; searchQuery?: string; transparentBg?: boolean }) => {
 
@@ -139,9 +140,7 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, trans
     setGoogleResults([]);
     try {
       const existingImages = await loadExistingImages();
-      const { data, error } = await supabase.functions.invoke('search-google-images', {
-        body: { query: q, max: 8, refImages: refs, refOnly: refOnly && refs.length > 0, existingImages },
-      });
+      const { data, error } = await unifiedInvoke("ai-media-unified", "search", { query: q, max: 8, refImages: refs, refOnly: refOnly && refs.length > 0, existingImages });
       if (error) throw error;
       const urls = (data?.urls || []) as string[];
       if (urls.length === 0) { toast.warning(refs.length ? 'Nada parecido com as referências (ou só vieram fotos já usadas na loja).' : 'Nada encontrado que já não esteja na loja. Tente outras palavras.'); return; }
@@ -172,9 +171,7 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, trans
     try {
       const existingImages = await loadExistingImages();
       // Salva EXATAMENTE a foto clicada no nosso bucket (não busca de novo)
-      const { data, error } = await supabase.functions.invoke('search-google-images', {
-        body: { directUrl: url, tenantId, existingImages },
-      });
+      const { data, error } = await unifiedInvoke("ai-media-unified", "search", { directUrl: url, tenantId, existingImages });
       if (data?.duplicate) {
         toast.error('Essa foto já está sendo usada em outro produto da loja. Escolha outra.');
         return;
@@ -201,9 +198,7 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, trans
     setEnhancing(true);
     const previous = value;
     try {
-      const { data, error } = await supabase.functions.invoke('enhance-image', {
-        body: { imageUrl: value, tenantId, productName: searchQuery || searchTerm || undefined, style: enhanceStyle, aiTag },
-      });
+      const { data, error } = await unifiedInvoke("ai-media-unified", "enhance", { imageUrl: value, tenantId, productName: searchQuery || searchTerm || undefined, style: enhanceStyle, aiTag });
       if (error || !data?.imageUrl) {
         // pega a mensagem real que a função devolveu (o invoke só diz "non-2xx")
         let msg = data?.error || error?.message || 'Falha ao tratar a imagem';

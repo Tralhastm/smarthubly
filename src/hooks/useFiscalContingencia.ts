@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 export interface OfflineQueueRow {
   id: string;
@@ -72,9 +73,7 @@ export const useProcessOfflineQueue = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (tenantId: string) => {
-      const { data, error } = await supabase.functions.invoke("process-offline-nfce-queue", {
-        body: { tenantId },
-      });
+      const { data, error } = await unifiedInvoke("fiscal-unified", "offline-queue", { tenantId });
       if (error) throw error;
       return data;
     },
@@ -120,9 +119,7 @@ export const useCancelNFCe = () => {
       if (error) throw error;
       // Dispara função de cancelamento (best-effort)
       try {
-        await supabase.functions.invoke("cancel-nfce", {
-          body: { cancellationId: data.id, tenantId: vars.tenantId, invoiceId: vars.invoiceId },
-        });
+        await unifiedInvoke("fiscal-unified", "cancel", { cancellationId: data.id, tenantId: vars.tenantId, invoiceId: vars.invoiceId });
       } catch {}
       return data;
     },
@@ -152,9 +149,7 @@ export const useInvalidateNumeros = () => {
       }).select().single();
       if (error) throw error;
       try {
-        await supabase.functions.invoke("invalidate-nfce-range", {
-          body: { cancellationId: data.id, tenantId: vars.tenantId },
-        });
+        await unifiedInvoke("fiscal-unified", "invalidate", { cancellationId: data.id, tenantId: vars.tenantId });
       } catch {}
       return data;
     },

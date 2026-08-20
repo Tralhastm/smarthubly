@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MapPin, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 interface AddressInputProps {
   value: string;
@@ -24,9 +25,7 @@ const AddressAutocomplete = ({ value, onChange, onCalculated, onError, tenantAdd
     setResult(null);
     onError('');
     try {
-      const { data, error } = await supabase.functions.invoke('calculate-distance', {
-        body: { address: value, origin: tenantAddress },
-      });
+      const { data, error } = await unifiedInvoke("delivery-unified", "distance", { address: value, origin: tenantAddress });
       if (error) throw error;
       if (data.error) {
         onError(data.error);

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 export type CreditAccount = {
   id: string;
@@ -163,9 +164,7 @@ export const useSendCreditReminder = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ accountId, testEmail }: { accountId: string; testEmail?: string }) => {
-      const { data, error } = await supabase.functions.invoke('send-credit-reminder', {
-        body: { credit_account_id: accountId, test_email: testEmail },
-      });
+      const { data, error } = await unifiedInvoke("notify-unified", "send-credit", { credit_account_id: accountId, test_email: testEmail });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       return data;

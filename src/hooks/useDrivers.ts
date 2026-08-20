@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables } from '@/integrations/supabase/types';
+import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 export type Driver = Tables<'drivers'>;
 
@@ -77,9 +78,7 @@ export const useDeleteDriver = (tenantId?: string) => {
 // Usa edge function pra centralizar a lógica (também usada por sendBeacon no unload).
 export const setDriverOnline = async (driverId: string, online: boolean, token?: string) => {
   if (token) {
-    const { error } = await supabase.functions.invoke('set-driver-online', {
-      body: { token, online },
-    });
+    const { error } = await unifiedInvoke("delivery-unified", "driver-online", { token, online });
     if (error) throw error;
     return;
   }

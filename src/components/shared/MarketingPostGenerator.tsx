@@ -64,7 +64,7 @@ const MarketingPostGenerator = ({ scope, tenantId, title, defaultAudience, allow
       const payload = { scope, tenantId, format, tone, extraContext: extra, audience, generateImage: allowImage && generateImage, imagePrompt, imageStyle };
       const invokeP = (async () => {
         // Token: getSession pode ficar pendente; lê direto do localStorage do projeto novo
-        const EF_URL = 'https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/marketing-post';
+        const EF_URL = '${import.meta.env.VITE_SUPABASE_URL}/functions/v1/marketing-unified/post';
         let ak: string | undefined;
         const s = await Promise.race([
           supabase.auth.getSession(),
