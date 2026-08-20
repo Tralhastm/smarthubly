@@ -379,7 +379,11 @@ const SupplierPanel = () => {
     } as any).eq('id', orderId);
     const order = orders.find(o => o.id === orderId);
     try {
-      await unifiedInvoke("notify-unified", "push", `Você);
+      await unifiedInvoke("notify-unified", "push", {
+        driverId,
+        title: "🏍️ Nova entrega!",
+        body: `Pedido #${orderId.slice(0, 6)} - ${order?.customer_name || "Cliente"} - ${order?.customer_address || ""}`,
+      });
     } catch (e) { console.error('Push falhou:', e); }
   };
 
