@@ -213,36 +213,37 @@ async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyI
 // ============ HANDLER ============
 
 export async function sofia_agent(req: Request, body?: unknown): Promise<Response> {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
   try {
     const ct = req.headers.get("content-type") || "";
     const parsed: any = body ?? (ct.includes("application/json") ? await req.json() : {});
-if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  try {
+    
     // O frontend chama via supabase.functions.invoke (rota única), passando a ação no body._path.
     let path = "";
     let method = req.method;
-    let body: any = null;
-    if (req.method === "POST") {
-      try { body = await req.json(); } catch { body = null; }
-      if (body && body?._path) {
-        path = String(body._path);
-      } else if (body && body?.action) {
+    let payload: any = parsed;
+
+    if (method === "POST") {
+      if (payload && payload?._path) {
+        path = String(payload._path);
+      } else if (payload && payload?.action) {
         // compat: action=list → plans
-        path = body.action === "list" ? "plans" : "";
+        path = payload.action === "list" ? "plans" : "";
       }
     }
+    
     if (!path) {
       const url = new URL(req.url);
       path = url.pathname.split("/").pop() || "";
     }
-    if (method === "POST" && !body) body = (await req.json().catch(() => null)) || {};
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const admin = getAdmin(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
 
     if (path === "plan" && method === "POST") {
-      const { tenantId, messages } = body as { tenantId?: string; messages?: any[] };
+      const { tenantId, messages } = payload as { tenantId?: string; messages?: any[] };
       if (!tenantId || !Array.isArray(messages) || messages.length === 0) {
         return json({ error: "tenantId e messages são obrigatórios" }, 400);
       }

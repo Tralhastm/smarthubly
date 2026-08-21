@@ -396,13 +396,12 @@ async function tryWorkerStream(systemPrompt: string, messages: any[], workers: A
 // ============================================================
 
 export async function clara(req: Request, body?: unknown): Promise<Response> {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
   try {
     const ct = req.headers.get("content-type") || "";
     const parsed: any = body ?? (ct.includes("application/json") ? await req.json() : {});
-if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { messages, tenantId } = await req.json();
+    const { messages, tenantId } = parsed;
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages obrigatório" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });

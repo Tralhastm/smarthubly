@@ -557,6 +557,24 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
               </div>
             )}
 
+            {(order as any).needs_fragmentation && (
+              <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 mb-2 space-y-2">
+                <div className="flex items-center gap-2 text-yellow-500 font-bold text-sm">
+                  <Package className="h-4 w-4" />
+                  Pedido Fragmentado (Múltiplos Fornecedores)
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Este pedido contém itens que devem ser coletados de fornecedores diferentes para garantir o melhor preço.
+                </p>
+                <button 
+                  onClick={() => toast.info("Funcionalidade de divisão automática em desenvolvimento. Por favor, trate os itens individualmente no WhatsApp dos fornecedores.")}
+                  className="w-full rounded bg-yellow-500 text-black py-1.5 text-xs font-bold hover:bg-yellow-600 transition-colors"
+                >
+                  Ver Divisão de Itens
+                </button>
+              </div>
+            )}
+
             {order.status === 'out-for-delivery' && selectingDriver !== order.id && choosingDispatch !== order.id && (
               <div className="grid grid-cols-2 gap-2">
                 {activeDrivers.length > 0 && (

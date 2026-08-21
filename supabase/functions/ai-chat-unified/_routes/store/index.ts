@@ -292,9 +292,12 @@ async function tryWorkerStream(messages: any[], systemPrompt: string, tenantName
 }
 
 export async function store(req: Request, body?: unknown): Promise<Response> {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
   try {
-    const body = await req.json().catch(() => ({}));
-    const { messages, tenantName, niche, tenantId } = body || {};
+    const ct = req.headers.get("content-type") || "";
+    const parsed: any = body ?? (ct.includes("application/json") ? await req.json().catch(() => ({})) : {});
+    const { messages, tenantName, niche, tenantId } = parsed || {};
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "Campo 'messages' deve ser um array não vazio." }), {
