@@ -39,6 +39,16 @@ function normalizePath(url: string): string {
 // definidos como /parse-txt. Não remove se o path tem só 1 segmento.
 function stripSlug(path: string): string {
   const parts = path.split("/").filter((p) => p.length > 0);
+  // As Edge Functions do Supabase geralmente têm o formato /functions/v1/<slug>/<sub-rota>
+  // ou apenas /<slug>/<sub-rota> dependendo do ambiente.
+  // Vamos procurar pelo slug "ai-chat-unified" e pegar o que vem depois.
+  const slug = "ai-chat-unified";
+  const idx = parts.indexOf(slug);
+  if (idx !== -1) {
+    const subPath = "/" + parts.slice(idx + 1).join("/");
+    return subPath.replace(/\/+$/, "") || "/";
+  }
+  // Fallback para comportamento anterior se não achar o slug
   if (parts.length <= 1) return "/";
   return "/" + parts.slice(1).join("/");
 }
