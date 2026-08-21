@@ -138,7 +138,11 @@ const CindyChat = () => {
       if (!token) throw new Error('Sessão expirada — faça login de novo.');
       const resp = await fetch(CHAT_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${token}`
+        },
         body: JSON.stringify({ messages: next }),
       });
       if (!resp.ok) {
@@ -197,7 +201,11 @@ const CindyChat = () => {
             const endpoint = action.tool === 'gen-post' ? '/gen-post' : '/reply-ticket';
             const res = await fetch(`${ACTIONS_URL}${endpoint}`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
+              headers: {
+                'Content-Type': 'application/json',
+                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                Authorization: `Bearer ${tok}`
+              },
               body: JSON.stringify(action.payload),
             });
             const data = await res.json().catch(() => ({}));

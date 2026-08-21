@@ -24,10 +24,17 @@ async function isSuperAdmin(authHeader: string | null): Promise<boolean> {
   if (!authHeader) return false;
   const token = authHeader.replace(/^Bearer\s+/i, "");
   if (!token) return false;
+
+  // Se o token for a publishable key, não é um token de usuário.
+  // Mas a Cindy exige super_admin. No frontend, o super admin está logado.
+  // Vamos validar o token JWT do usuário.
+  const pubKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY");
+  if (token === pubKey) return false;
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
+      pubKey!,
       { global: { headers: { Authorization: `Bearer ${token}` } } }
     );
     const { data: userRes } = await supabase.auth.getUser();

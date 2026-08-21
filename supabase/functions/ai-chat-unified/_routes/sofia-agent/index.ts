@@ -212,14 +212,47 @@ async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyI
 
 // ============ HANDLER ============
 
+import { PLATFORM_KNOWLEDGE } from "../../../_shared/platform_knowledge.ts";
+
+// Helper para streaming da Sofia pública (similar ao da Store)
+async function trySofiaPublicStream(messages: any[], role: string, admin: any): Promise<Response | null> {
+  const systemPrompt = `Você é a **Sofia**, a assistente inteligente da plataforma SmartHubly.
+Sua missão é ajudar visitantes a entenderem a plataforma, lojistas a gerenciarem seus negócios e interessados a criarem suas próprias lojas.
+
+# PERSONALIDADE E TOM
+- Tom: amigável, prestativa, moderna e profissional.
+- Frases curtas e diretas. Máximo 4 linhas.
+- Use no máximo 1 emoji por resposta.
+- Nunca invente preços ou recursos que não existem.
+
+# CONHECIMENTO DA PLATAFORMA
+${PLATFORM_KNOWLEDGE}
+
+# REGRAS
+1. Se o usuário quiser criar uma loja, direcione para o botão "Quero criar minha loja" ou peça para entrar em contato no WhatsApp +55 11 91287-0761.
+2. Se o usuário for um lojista (merchant), ajude com dúvidas sobre o painel admin.
+3. NUNCA responda sobre assuntos fora da SmartHubly.
+4. Se não souber algo, peça para falar com o suporte humano no WhatsApp.
+
+Papel atual do usuário: ${role}`;
+
+  // Usar a mesma lógica de cascata do store/clara (simplificado aqui para brevidade, chamando o ai-fallback)
+  const { callAiStream } = await import("../../../_shared/ai-fallback.ts");
+  return callAiStream(admin, {
+    systemPrompt,
+    messages,
+    temperature: 0.7,
+    maxTokens: 800,
+  });
+}
+
 export async function sofia_agent(req: Request, body?: unknown): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
     const ct = req.headers.get("content-type") || "";
-    const parsed: any = body ?? (ct.includes("application/json") ? await req.json() : {});
+    const parsed: any = body ?? (ct.includes("application/json") ? await req.json().catch(() => ({})) : {});
     
-    // O frontend chama via supabase.functions.invoke (rota única), passando a ação no body._path.
     let path = "";
     let method = req.method;
     let payload: any = parsed;
@@ -228,7 +261,6 @@ export async function sofia_agent(req: Request, body?: unknown): Promise<Respons
       if (payload && payload?._path) {
         path = String(payload._path);
       } else if (payload && payload?.action) {
-        // compat: action=list → plans
         path = payload.action === "list" ? "plans" : "";
       }
     }
@@ -241,6 +273,16 @@ export async function sofia_agent(req: Request, body?: unknown): Promise<Respons
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const admin = getAdmin(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
+
+    // Rota de Chat Público (Streaming) - Usada pelo widget SofiaChat
+    if (method === "POST" && (!path || path === "sofia-agent" || path === "chat")) {
+      const { messages, role = "visitor" } = payload;
+      if (Array.isArray(messages) && messages.length > 0) {
+        const stream = await trySofiaPublicStream(messages, role, admin);
+        if (stream) return stream;
+        throw new Error("Falha ao iniciar stream da Sofia");
+      }
+    }
 
     if (path === "plan" && method === "POST") {
       const { tenantId, messages } = payload as { tenantId?: string; messages?: any[] };
