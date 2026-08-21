@@ -44,14 +44,14 @@ async function requireSuperAdmin(authHeader: string | null): Promise<string> {
 }
 
 export async function cindy_actions(req: Request, body?: unknown): Promise<Response> {
-  try {
-    const ct = req.headers.get("content-type") || "";
-    const parsed: any = body ?? (ct.includes("application/json") ? await req.json() : {});
-if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    const ct = req.headers.get("content-type") || "";
+    const payload: any = body ?? (ct.includes("application/json") ? await req.json().catch(() => ({})) : {});
+
     await requireSuperAdmin(req.headers.get("Authorization"));
-    const body = await req.json().catch(() => ({}));
+    const body = payload;
     const url = new URL(req.url);
     const path = url.pathname
       .replace(/^\/functions\/v1\/cindy-actions|^\/cindy-actions/, "")
@@ -148,15 +148,9 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
 
     return j({ error: "rota_desconhecida" }, 404);
   } catch (e: any) {
-    console.error("[cindy-actions] erro:", e);
-    const msg = String(e?.message || e);
-    if (msg === "super_admin_required") return j({ error: msg }, 403);
-    if (msg === "unauthorized") return j({ error: msg }, 401);
-    return j({ error: msg }, 500);
-  }
-
-  } catch (e) {
     console.error("[unified:cindy-actions] error", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    const msg = String(e?.message || e);
+    const status = msg === "super_admin_required" ? 403 : (msg === "unauthorized" ? 401 : 500);
+    return j({ error: msg }, status);
   }
 }

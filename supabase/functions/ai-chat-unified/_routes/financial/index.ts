@@ -206,13 +206,13 @@ async function tryWorkerStream(systemPrompt: string, messages: any[], workers: A
 }
 
 export async function financial(req: Request, body?: unknown): Promise<Response> {
-  try {
-    const ct = req.headers.get("content-type") || "";
-    const parsed: any = body ?? (ct.includes("application/json") ? await req.json() : {});
-if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages, businessData } = await req.json();
+    const ct = req.headers.get("content-type") || "";
+    const parsed: any = body ?? (ct.includes("application/json") ? await req.json().catch(() => ({})) : {});
+    const { messages, businessData } = parsed;
+
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "messages é obrigatório" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -241,14 +241,10 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
     }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (e) {
-    console.error("public-chat-financial error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
-  }
-
-  } catch (e) {
     console.error("[unified:financial] error", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { 
+      status: 500, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
   }
 }

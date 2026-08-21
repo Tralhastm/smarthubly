@@ -447,13 +447,10 @@ export async function clara(req: Request, body?: unknown): Promise<Response> {
     return new Response(JSON.stringify({ error: "Todos os provedores de IA estão indisponíveis. Tente em alguns minutos." }),
       { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
-    console.error("clara-empresarial error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erro" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
-
-  } catch (e) {
     console.error("[unified:clara] error", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { 
+      status: 500, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
   }
 }

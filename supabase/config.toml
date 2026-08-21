@@ -52,3 +52,6 @@ verify_jwt = false
 verify_jwt = false
 
 
+
+[functions.ai-chat-unified]
+verify_jwt = false

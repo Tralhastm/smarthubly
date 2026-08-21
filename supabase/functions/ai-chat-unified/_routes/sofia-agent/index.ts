@@ -585,17 +585,10 @@ Responda apenas com o JSON do plano. Produtos com imagem faltando e visíveis na
 
     return json({ error: "rota desconhecida", paths: ["plan", "plans", "apply", "rollback", "retry-images"] }, 404);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "erro";
-    console.error("[sofia-store-agent]", e);
-    const statusMap: Record<string, number> = {
-      unauthorized: 401, forbidden_tenant: 403, tenant_not_found: 404,
-      plano_nao_encontrado: 404, plano_ja_aplicado: 409, plano_nao_aplicado: 409,
-    };
-    return json({ error: msg }, statusMap[msg] || 500);
-  }
-
-  } catch (e) {
     console.error("[unified:sofia-agent] error", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { 
+      status: 500, 
+      headers: { ...CORS, 'Content-Type': 'application/json' } 
+    });
   }
 }
