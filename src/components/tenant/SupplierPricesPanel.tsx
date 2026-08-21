@@ -174,7 +174,10 @@ const SupplierPricesPanel = ({ supplierId }: Props) => {
       const p = Number(it.price ?? it.unit_price ?? it.preco ?? NaN);
       return name && Number.isFinite(p) && p > 0;
     });
-    toast.success(`${good.length} preços já gravados na tabela`);
+    
+    // As variações e descrições agora são processadas pela IA e salvas na tabela
+    // supplier_product_prices para permitir o matching inteligente durante o pedido.
+    toast.success(`${good.length} itens processados com detalhes de variação (cor/memória).`);
     setExtracted(null);
     setFileReady(null);
     setUploadWarnings([]);

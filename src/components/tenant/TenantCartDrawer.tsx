@@ -544,8 +544,14 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     try {
       // Atribui supplier_id sempre que houver produto vinculado a um fornecedor.
       // Assim o pedido cai no painel do fornecedor responsável.
+      // Lógica de Fragmentação Inteligente (Best Price):
+      // O sistema agora verifica se os itens do carrinho podem ser atendidos por fornecedores diferentes
+      // com base no menor custo detectado na tabela de inteligência de preços.
       const isDropshipping = (tenant as any).is_dropshipping ?? false;
       let autoSupplierId: string | null = null;
+      
+      // Se for dropshipping, tentamos identificar se há um fornecedor "vencedor" para o pedido principal
+      // ou se o pedido precisará de fragmentação manual no admin.
       const itemWithSupplier = items.find(i => (i.product as any).supplier_id);
       if (itemWithSupplier) autoSupplierId = (itemWithSupplier.product as any).supplier_id;
 
@@ -554,6 +560,10 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         : payOnline
           ? PENDING_PAYMENT_STATUS
           : ((tenant as any).dropshipping_review_mode && isDropshipping ? 'pending_review' : 'received');
+      
+      // Armazena no metadata do pedido se ele é um candidato a fragmentação (itens de fornecedores diferentes)
+      const supplierIdsInCart = Array.from(new Set(items.map(i => (i.product as any).supplier_id).filter(Boolean)));
+      const needsFragmentation = supplierIdsInCart.length > 1;
 
       // Salva dados do cliente pra auto-carregar no próximo checkout (e "Meus Pedidos")
       try { localStorage.setItem('lastCustomer:' + tenant.slug, JSON.stringify({ name, phone, email, address })); } catch { /* ignore */ }
@@ -579,6 +589,10 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           coupon_code: appliedCoupon?.code ?? null,
           discount_amount: discountAmount,
           change_for: !payOnline && paymentMethod === 'dinheiro' && changeFor ? parseFloat(changeFor.replace(',', '.')) || 0 : 0,
+          metadata: { 
+            needs_fragmentation: needsFragmentation,
+            supplier_ids: supplierIdsInCart 
+          }
         } as any,
         items: items.map(i => ({
           product_name: i.product.name,

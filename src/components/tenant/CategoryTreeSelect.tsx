@@ -36,10 +36,28 @@ const CategoryTreeSelect = ({ tenantId, value, onChange }: CategoryTreeSelectPro
   const toggle = (id: string) => {
     setExpanded(prev => {
       const nx = new Set(prev);
-      if (nx.has(id)) nx.delete(id); else nx.add(id);
+      if (nx.has(id)) {
+        nx.delete(id);
+      } else {
+        nx.add(id);
+        // Ao expandir, garante que os pais também estejam expandidos
+        const node = nodes.find(n => n.id === id);
+        if (node?.parent_id) nx.add(node.parent_id);
+      }
       return nx;
     });
   };
+
+  // Auto-expande o caminho selecionado ao carregar
+  useEffect(() => {
+    if (value.length > 0 && nodes.length > 0) {
+      setExpanded(prev => {
+        const nx = new Set(prev);
+        value.forEach(id => nx.add(id));
+        return nx;
+      });
+    }
+  }, [value, nodes.length]);
 
   // seleção = último nó clicado; visualiza o caminho inteiro
   const selectedId = value[value.length - 1] || null;

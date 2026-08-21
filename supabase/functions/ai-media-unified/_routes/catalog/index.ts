@@ -579,19 +579,24 @@ if (req.method === "OPTIONS")
       text = String(content);
     }
 
-    const SYSTEM = `Você é um extrator de dados de catálogos de fornecedores brasileiros. O usuário enviou um catálogo (texto de PDF, imagem ou texto puro). Extraia TODOS os produtos com preços.`;
+    const SYSTEM = `Você é um extrator inteligente de catálogos de fornecedores brasileiros (foco em eletrônicos e iPhones). Sua missão é extrair produtos, preços e VARIAÇÕES (cor, memória, estado) com precisão cirúrgica.`;
 
-    const USER = `Extraia desta ${kind === "pdf" ? "lista em texto extraída de um PDF" : kind === "image" ? "imagem de catálogo" : "lista de texto"} TODOS os produtos com preços em reais (R$).
+    const USER = `Extraia desta ${kind === "pdf" ? "lista em texto extraída de um PDF" : kind === "image" ? "imagem de catálogo" : "lista de texto"} TODOS os produtos com preços.
 
-Regras:
-- Retorne TODOS os itens que você identificar com nome e preço numérico, como um array "items" com { name, price, available }.
-- Se um item não tiver preço identificável, ignore-o (não inclua).
-- Normalize o nome: minúsculas, sem códigos de fabricante, mantendo a unidade quando relevante (ex: "coca cola 2l", "arroz 5kg").
-- NÃO invente itens. Se a imagem não estiver legível, extraia apenas o que conseguir e inclua "warnings" com observações.
-- available: true por padrão, a menos que esteja marcado como esgotado/indisponível/fora de estoque.
-- Preços podem aparecer como "R$ 12,50", "12,50", "12.50" ou em colunas de tabela — associe corretamente o preço ao produto da mesma linha/coluna.
+Regras de Ouro:
+1. **Identificação de Variações**: Para eletrônicos, extraia a memória (ex: 128GB, 256GB, 1TB) e a cor (ex: Titânio, Azul, Black) do nome.
+2. **Normalização de Nome**: O nome deve ser limpo, sem emojis, mas mantendo o modelo exato (ex: "iPhone 15 Pro Max").
+3. **Estrutura JSON**: Retorne um array "items" com:
+   - "name": Nome base do produto (ex: "iPhone 15 Pro Max")
+   - "price": Preço numérico (R$)
+   - "category": Categoria sugerida (ex: "Apple", "Samsung", "Acessórios")
+   - "description": Detalhes extras como cor e memória (ex: "256GB - Titânio Natural")
+   - "available": boolean (false se disser "esgotado", "off", "sem estoque")
+   - "variations": objeto opcional com { "storage": "256GB", "color": "Blue" }
+4. **Preços em Bloco**: Se houver uma lista de cores abaixo de um modelo com um único preço, replique o produto para cada cor.
+5. **Inteligência**: Ignore linhas decorativas ou avisos de "tabela sujeita a alteração".
 
-Responda APENAS com JSON no formato: { "items": [...], "warnings": [...] }`;
+Responda APENAS com JSON: { "items": [...], "warnings": [...] }`;
 
     let items: CatalogItem[] = [];
     let warnings: string[] = [];
@@ -639,13 +644,14 @@ Responda APENAS com JSON no formato: { "items": [...], "warnings": [...] }`;
           product_name: name,
           unit_price: price,
           available: it.available ?? it.disponivel ?? true,
+          description: it.description || null,
+          variations: (it as any).variations || null,
         });
       }
       return json({ total: items.length, skipped, warnings, items: items.slice(0, 100) });
     }
 
-    // merge=true: upsert (conflito supplier_id,product_name) — preserva preços manuais
-    // só se o catálogo não trouxer o item; traz preço novo sempre que o item aparece.
+    // merge=true: upsert (conflito supplier_id,product_name)
     for (const it of items) {
       const name = String(it.name || it.product_name || "").trim().toLowerCase();
       const price = Number(it.price ?? it.unit_price ?? it.preco ?? NaN);
@@ -659,6 +665,8 @@ Responda APENAS com JSON no formato: { "items": [...], "warnings": [...] }`;
           product_name: name,
           unit_price: price,
           available: it.available ?? it.disponivel ?? true,
+          description: it.description || null,
+          variations: (it as any).variations || null,
         },
         { onConflict: "supplier_id,product_name" },
       );

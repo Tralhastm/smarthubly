@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Package, Factory, TrendingDown, TrendingUp, AlertTriangle, CheckCircle2, DollarSign, ArrowRight, Info } from 'lucide-react';
+import { Package, Factory, TrendingDown, TrendingUp, AlertTriangle, CheckCircle2, DollarSign, ArrowRight, Info, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 type PriceComparison = {
@@ -139,7 +139,34 @@ const TenantPriceIntelligence = ({ tenantId }: { tenantId: string }) => {
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" /> Análise de Fornecedores por Produto
           </h3>
-          <button onClick={fetchData} className="text-xs text-primary hover:underline">Atualizar dados</button>
+          <div className="flex gap-3">
+            <button 
+              onClick={async () => {
+                const targets = comparisons.filter(c => c.best_cost < c.current_cost && c.best_cost > 0);
+                if (targets.length === 0) {
+                  toast.info("Todos os produtos já estão com o melhor preço de custo!");
+                  return;
+                }
+                if (!confirm(`Deseja atualizar o preço de custo de ${targets.length} produtos para a melhor oferta encontrada?`)) return;
+                
+                toast.loading(`Sincronizando ${targets.length} preços...`);
+                let count = 0;
+                for (const t of targets) {
+                  const { error } = await supabase
+                    .from('products')
+                    .update({ original_price: t.best_cost } as any)
+                    .eq('id', t.product_id);
+                  if (!error) count++;
+                }
+                toast.success(`${count} preços atualizados com sucesso!`);
+                fetchData();
+              }}
+              className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full hover:bg-primary/20 font-bold transition-colors"
+            >
+              Sincronizar Melhores Preços
+            </button>
+            <button onClick={fetchData} className="text-xs text-primary hover:underline">Atualizar dados</button>
+          </div>
         </div>
         
         <div className="overflow-x-auto">
