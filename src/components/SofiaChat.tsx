@@ -93,7 +93,7 @@ const SofiaChat = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: PUBLISHABLE,
+          apikey: PUBLISHABLE, 'x-route': '/sofia-agent',
           Authorization: `Bearer ${PUBLISHABLE}`,
         },
         body: JSON.stringify({ messages: next, role, tenantId, supplierId, driverId }),

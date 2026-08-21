@@ -140,7 +140,7 @@ const CindyChat = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, 'x-route': '/cindy',
           Authorization: `Bearer ${token}`
         },
         body: JSON.stringify({ messages: next }),
@@ -203,7 +203,7 @@ const CindyChat = () => {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, 'x-route': '/cindy',
                 Authorization: `Bearer ${tok}`
               },
               body: JSON.stringify(action.payload),

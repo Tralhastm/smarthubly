@@ -82,7 +82,7 @@ const ClaraChat = ({ tenantId, tenantName, open, onClose }: Props) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: PUBLISHABLE,
+          apikey: PUBLISHABLE, 'x-route': '/clara',
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ messages: next, tenantId }),
