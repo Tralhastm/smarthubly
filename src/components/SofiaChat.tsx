@@ -18,7 +18,7 @@ interface SofiaChatProps {
   greeting?: string;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-sofia`;
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat-unified/sofia-agent`;
 const PUBLISHABLE = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const SofiaChat = ({

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTenants, useAddTenant, useUpdateTenant, useDeleteTenant, type Tenant } from '@/hooks/useTenants';
 import { useProducts, useAddProduct } from '@/hooks/useProducts';
 import { useQueryClient } from '@tanstack/react-query';

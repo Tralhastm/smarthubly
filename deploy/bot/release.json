@@ -1,5 +1,5 @@
 {
-  "versao": "5.10",
-  "url": "https://smarthubly.pages.dev/bot/botv5.10.zip",
-  "notas": "v5.10 — sync por mensagem (refresh a cada mensagem + cache 30s + background 30s), falha rápida 429 (<1s), Super Admin unificado Comércios+Bots integrado ao mesmo registro."
+  "versao": "6.2",
+  "url": "https://smarthubly.pages.dev/bot/botv6.2.zip",
+  "notas": "v6.2 — excluir/cancelar com prioridade máxima, sanidade rejeita medidas absurdas (local e IA), IA classifica cancelamentos."
 }

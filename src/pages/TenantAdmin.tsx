@@ -29,6 +29,7 @@ import TenantAffiliateDashboard from '@/components/tenant/TenantAffiliateDashboa
 import TenantAdminPrinter from '@/components/tenant/TenantAdminPrinter';
 import TenantAdminScheduling from '@/components/tenant/TenantAdminScheduling';
 import TenantAdminQuotes from '@/components/tenant/TenantAdminQuotes';
+import TenantPriceIntelligence from '@/components/tenant/TenantPriceIntelligence';
 import OnboardingChecklist from '@/components/tenant/OnboardingChecklist';
 import { AdminTabsConfigProvider } from '@/lib/admin-subtabs';
 import HelpButton from '@/components/tenant/HelpButton';
@@ -63,7 +64,7 @@ import { LayoutDashboard, Package, ShoppingBag, DollarSign, ArrowLeft, LogOut, U
 import { contrastWarning } from '@/lib/color-utils';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
-type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'categories' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi' | 'sofia-agent' | 'prospecting' | 'remote-prospecting';
+type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'categories' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi' | 'sofia-agent' | 'prospecting' | 'remote-prospecting' | 'price-intelligence';
 
 type GroupId = 'dashboard' | 'operation' | 'catalog' | 'finance' | 'marketing' | 'settings';
 
@@ -211,6 +212,7 @@ const TenantAdmin = () => {
     { id: 'ficha', label: 'Ficha Técnica/CMV', icon: <BookOpen className="h-4 w-4" />, group: 'finance' },
     { id: 'stock', label: 'Estoque', icon: <Package className="h-4 w-4" />, group: 'catalog' },
     { id: 'suppliers', label: 'Fornecedores', icon: <Factory className="h-4 w-4" />, group: 'catalog' },
+    { id: 'price-intelligence', label: 'Inteligência de Preços', icon: <Radar className="h-4 w-4" />, group: 'finance' },
     { id: 'consultora', label: 'WhatsApp Consultora', icon: <Mail className="h-4 w-4" />, group: 'operation' },
     { id: 'shipping', label: 'Frete', icon: <Truck className="h-4 w-4" />, group: 'catalog' },
     { id: 'financial', label: 'Empresarial', icon: <DollarSign className="h-4 w-4" />, group: 'finance' },
@@ -425,6 +427,7 @@ const TenantAdmin = () => {
           {tab === 'fiscal' && <TenantAdminFiscal tenantId={tenant.id} />}
           {tab === 'ficha' && <TenantAdminFichaTecnica tenantId={tenant.id} />}
           {tab === 'stock' && <TenantAdminStock tenantId={tenant.id} />}
+          {tab === 'price-intelligence' && <TenantPriceIntelligence tenantId={tenant.id} />}
           {tab === 'finance-deep' && <TenantAdminFinanceDeep tenantId={tenant.id} />}
           {tab === 'reports' && <TenantAdminReports tenantId={tenant.id} />}
           {tab === 'support' && <TenantAdminSupport tenantId={tenant.id} />}

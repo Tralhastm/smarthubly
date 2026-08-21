@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/store-chat`;
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat-unified/store`;
 
 const StoreChatbot = ({ tenantName, niche, tenantId }: { tenantName: string; niche: string; tenantId: string }) => {
   const [open, setOpen] = useState(false);

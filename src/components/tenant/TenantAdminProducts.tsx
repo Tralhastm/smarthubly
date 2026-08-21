@@ -73,6 +73,15 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const [generateImages, setGenerateImages] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importTotal, setImportTotal] = useState(0);
+  const [importCancelled, setImportCancelled] = useState(false);
+  const [importRawText, setImportRawText] = useState('');
+  const [importFileName, setImportFileName] = useState('');
+  // Configuração do catálogo: fornecedor e tipo de preço (config geral, qualquer loja)
+  const [importSupplierName, setImportSupplierName] = useState('');
+  const [importPriceType, setImportPriceType] = useState<'cost' | 'resale' | 'both'>('resale');
+  const [importSupplierId, setImportSupplierId] = useState<string | null>(null);
+  const [importProfitMargin, setImportProfitMargin] = useState('20');
+  const [importShippingFee, setImportShippingFee] = useState('0');
 
   // Image generation job tracking (read from image_generation_jobs table)
   type ImageJob = {
@@ -90,6 +99,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
   const cancelImageGeneration = useCallback(async () => {
     const job = activeJob;
+    // Interrompe o import web client-side entre os lotes
+    webImportCancelled.current = true;
     setActiveJob(null);
     setCooldownLeftSec(0);
     if (job?.id && job.id !== 'pending') {
@@ -112,6 +123,47 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
   const [deletingAi, setDeletingAi] = useState(false);
   const [deletingGoogle, setDeletingGoogle] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
+  const [confirmAll, setConfirmAll] = useState(false);
+
+  const handleDeleteAll = async () => {
+    if (deletingAll) return;
+    if (!confirmAll) {
+      // Primeira confirmação: pede digitação de confirmação explícita
+      const typed = prompt(`Para apagar TODOS os ${products.length} produtos desta loja, digite a palavra APAGAR TUDO em letras maiúsculas:`);
+      if (typed !== 'APAGAR TUDO') {
+        toast.info('Operação cancelada — digitação não conferida.');
+        return;
+      }
+      setConfirmAll(true);
+      return;
+    }
+    setDeletingAll(true);
+    const toastId = 'del-all';
+    toast.loading(`Excluindo todos os ${products.length} produtos...`, { id: toastId });
+    try {
+      let deleted = 0;
+      let failed = 0;
+      const chunk = 50;
+      const ids = products.map(p => p.id);
+      for (let i = 0; i < ids.length; i += chunk) {
+        const batch = ids.slice(i, i + chunk);
+        const { error } = await supabase
+          .from('products')
+          .delete()
+          .in('id', batch)
+          .eq('tenant_id', tenantId);
+        if (error) failed += batch.length; else deleted += batch.length;
+      }
+      toast.success(`Excluídos ${deleted} produtos${failed ? ` · ${failed} falharam` : ''}`, { id: toastId });
+      setConfirmAll(false);
+      refetch();
+    } catch (e) {
+      toast.error('Falhou ao excluir', { id: toastId });
+    } finally {
+      setDeletingAll(false);
+    }
+  };
   const handleDeleteBulk = useCallback(async (source: 'ai' | 'google') => {
     const label = source === 'ai' ? 'geradas por IA' : 'importadas da web';
     if (!confirm(`Tem certeza? Isso vai apagar TODAS as fotos ${label} desta loja. As outras (uploads manuais e a outra origem) serão mantidas.`)) return;
@@ -151,6 +203,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   // Poll job status while active
   useEffect(() => {
     if (!activeJob) return;
+    // Sem jobId real (import web client-side): não faz poll no banco, o próprio loop atualiza
+    if (activeJob.id === 'pending') return;
     const interval = setInterval(async () => {
       const { data } = await supabase
         .from('image_generation_jobs')
@@ -183,6 +237,45 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     return () => clearInterval(id);
   }, [activeJob?.cooldown_until]);
 
+  // Resolve (ou cria) o fornecedor informado no import
+  const resolveImportSupplier = async (name: string): Promise<string | null> => {
+    const clean = name.trim();
+    if (!clean) return null;
+    const { data: existing } = await supabase
+      .from('suppliers')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .ilike('name', clean)
+      .limit(1)
+      .maybeSingle();
+    if (existing) return existing.id;
+    // Ainda não existe: cria automaticamente na aba Fornecedores
+    const { data: created, error } = await supabase
+      .from('suppliers')
+      .insert({ tenant_id: tenantId, name: clean, address: '', phone: '' })
+      .select('id')
+      .single();
+    if (error || !created) {
+      console.warn('Falha ao criar fornecedor automático', error);
+      return null;
+    }
+    toast.success(`Fornecedor "${clean}" cadastrado automaticamente! 🏭`);
+    return created.id;
+  };
+
+  // Grava o preço de cada produto na tabela do fornecedor (comparação multi-fornecedor)
+  // price_types é uma coluna jsonb: ["cost"] | ["resale"] | ["cost","resale"] — preserva o tipo escolhido sem alterar o unique key
+  const recordSupplierPrice = async (supplierId: string, productName: string, price: number, priceType: 'cost' | 'resale' | 'both'): Promise<void> => {
+    const types = priceType === 'both' ? ['cost', 'resale'] : [priceType];
+    const { error } = await supabase
+      .from('supplier_product_prices')
+      .upsert(
+        { supplier_id: supplierId, product_name: productName.toLowerCase(), unit_price: price, price_types: types, available: true },
+        { onConflict: 'supplier_id,product_name' },
+      );
+    if (error) console.warn('Falha ao gravar preço do fornecedor', error);
+  };
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -191,32 +284,54 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     const text = await file.text();
     if (!text.trim()) { toast.error('Arquivo vazio'); return; }
 
+    // Salva o texto e abre a tela de configuração (fornecedor + custo/revenda) antes de processar
+    setImportRawText(text);
+    setImportFileName(file.name);
+    setImportSupplierName('');
+    setImportPriceType('resale');
+    setImportSupplierId(null);
+    setImportCancelled(false);
+    setImportStep('config');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Prévia → processa o arquivo com IA
+  const handleStartParsing = async () => {
     setImportStep('parsing');
     try {
-      const { data, error } = await unifiedInvoke("ai-media-unified", "parse-txt", { txtContent: text });
+      const { data, error } = await unifiedInvoke("ai-media-unified", "parse-txt", { txtContent: importRawText });
 
       if (error) {
+        const status = (error as any)?.status;
         let detailedMessage = '';
-        const response = (error as any)?.context;
-        if (response?.json) {
-          const errorBody = await response.clone().json().catch(() => null);
+        const ctx = (error as any)?.context;
+        if (ctx && typeof ctx.json === 'function') {
+          const errorBody = await ctx.clone().json().catch(() => null);
           detailedMessage = errorBody?.error || '';
         }
-        throw new Error(detailedMessage || (error as any)?.message || 'Erro ao processar arquivo');
+        let msg = detailedMessage || (error as any)?.message || '';
+        if (status === 401) msg = 'Sessão expirada — faça logout e entre novamente.';
+        else if (status === 429) msg = 'Muitas tentativas seguidas — aguarde um momento e tente de novo.';
+        else if (!msg) msg = `Falha na IA de leitura (${status ? 'HTTP ' + status : 'rede'}) — verifique sua conexão e tente de novo.`;
+        throw new Error(msg);
       }
 
       if (!data?.products?.length) {
         toast.error('Nenhum produto encontrado no arquivo');
-        setImportStep('idle');
+        setImportStep('config');
         return;
       }
+
+      // Resolve (ou cria) o fornecedor informado
+      const supplierId = await resolveImportSupplier(importSupplierName);
+      setImportSupplierId(supplierId);
 
       setParsedProducts(data.products);
       setImportStep('preview');
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : 'Erro ao processar arquivo');
-      setImportStep('idle');
+      setImportStep('config');
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -225,56 +340,129 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     setImportStep('importing');
     setImportTotal(parsedProducts.length);
     setImportProgress(0);
+    setImportCancelled(false);
 
     const insertedIds: string[] = [];
+    
+    // Resolve o fornecedor novamente para garantir que o ID esteja disponível no escopo da função
+    const currentSupplierId = await resolveImportSupplier(importSupplierName);
 
-    for (let i = 0; i < parsedProducts.length; i++) {
-      const p = parsedProducts[i];
+    // IA Analítica: Filtra duplicatas na lista parseada antes de começar
+    const uniqueParsed = parsedProducts.filter((p, index, self) => 
+      index === self.findIndex((t) => t.name.trim().toLowerCase() === p.name.trim().toLowerCase())
+    );
+    
+    setImportTotal(uniqueParsed.length);
+
+    for (let i = 0; i < uniqueParsed.length; i++) {
+      if (importCancelled) break;
+      const p = uniqueParsed[i];
       try {
-        await new Promise<void>((resolve, reject) => {
-          addMutation.mutate({
-            tenant_id: tenantId,
-            name: p.name,
-            price: p.price,
-            original_price: 0,
-            category: p.category || 'Geral',
-            description: p.description || '',
-            image: '',
-            in_stock: true,
-            supplier_id: null,
-          } as any, {
-            onSuccess: () => resolve(),
-            onError: (e) => reject(e),
-          });
-        });
-
-        const { data: inserted } = await supabase
+        const isCost = importPriceType === 'cost';
+        const shipping = parseFloat(importShippingFee) || 0;
+        const margin = parseFloat(importProfitMargin) || 0;
+        
+        // Se for custo, calcula a revenda automaticamente com base na margem e frete
+        const original_price = isCost ? p.price : 0;
+        const calculatedPrice = isCost ? (p.price + shipping) * (1 + (margin / 100)) : p.price;
+        const price = calculatedPrice;
+        
+        // Verificação de duplicata no Banco de Dados em tempo real
+        const { data: existing } = await supabase
           .from('products')
-          .select('id')
+          .select('id, price, original_price, supplier_id, description, category')
           .eq('tenant_id', tenantId)
-          .eq('name', p.name)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single();
+          .ilike('name', p.name.trim())
+          .maybeSingle();
 
-        if (inserted) insertedIds.push(inserted.id);
+        if (existing) {
+          // Lógica de Melhor Preço: 
+          // Se o novo preço de custo for menor que o atual, atualiza o fornecedor principal e o preço.
+          const currentCost = existing.original_price || 0;
+          const shouldUpdateMain = isCost && (currentCost === 0 || original_price < currentCost);
+
+          const updateData: any = {
+            updated_at: new Date().toISOString(),
+          };
+          
+          if (shouldUpdateMain) {
+            updateData.original_price = original_price;
+            updateData.price = price; // Atualiza a revenda com a nova margem do fornecedor mais barato
+            updateData.supplier_id = currentSupplierId;
+            // Melhora a descrição se a nova for maior/melhor
+            if (p.description && (!existing.description || p.description.length > existing.description.length)) {
+              updateData.description = p.description;
+            }
+          } else if (!isCost) {
+            updateData.price = price;
+            updateData.supplier_id = currentSupplierId;
+          }
+
+          await supabase.from('products').update(updateData).eq('id', existing.id);
+          insertedIds.push(existing.id);
+        } else {
+          // Produto novo: Insere
+          await new Promise<void>((resolve, reject) => {
+            addMutation.mutate({
+              tenant_id: tenantId,
+              name: p.name.trim(),
+              price: price,
+              original_price: original_price,
+              category: p.category || 'Geral',
+              description: p.description || '',
+              image: '',
+              in_stock: true,
+              supplier_id: currentSupplierId || null,
+            } as any, {
+              onSuccess: () => resolve(),
+              onError: (e) => reject(e),
+            });
+          });
+
+          const { data: inserted } = await supabase
+            .from('products')
+            .select('id')
+            .eq('tenant_id', tenantId)
+            .eq('name', p.name.trim())
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          if (inserted) insertedIds.push(inserted.id);
+        }
+
+        // Registra sempre na tabela de comparação multi-fornecedor
+        if (currentSupplierId && Number.isFinite(p.price) && p.price > 0) {
+          await recordSupplierPrice(currentSupplierId, p.name, p.price, importPriceType);
+        }
       } catch (err) {
-        console.error('Failed to add', p.name, err);
+        console.error('Failed to process', p.name, err);
       }
       setImportProgress(i + 1);
     }
 
-    toast.success(`${insertedIds.length} produtos importados!`);
+    const msg = importCancelled
+      ? `Importação interrompida — ${insertedIds.length} produtos já importados.`
+      : `${insertedIds.length} produtos importados!`;
+    toast[importCancelled ? 'info' : 'success'](msg);
     setParsedProducts([]);
     setImportStep('idle');
+    setImportRawText('');
+    setImportFileName('');
+    setImportSupplierName('');
+    setImportSupplierId(null);
 
-    // Kick off server-side image generation
-    if (generateImages && insertedIds.length > 0) {
+    if (!importCancelled && generateImages && insertedIds.length > 0) {
       setGenerateImages(false);
       startServerImageGeneration(insertedIds);
     } else {
       setGenerateImages(false);
     }
+  };
+
+  const handleCancelImport = () => {
+    setImportCancelled(true);
+    toast.info('Interrompendo a importação após o item atual...');
   };
 
   const startServerImageGeneration = async (productIds: string[]) => {
@@ -301,21 +489,61 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     startServerImageGeneration(noImage.map(p => p.id));
   }, [products, tenantId]);
 
+  // Import web (client-side): busca cada produto sem imagem na web (Bing/DDG + IA curadoria)
+  const webImportCancelled = useRef(false);
   const handleImportImagesFromGoogle = useCallback(async () => {
     const noImage = products.filter(p => !p.image || p.image === '');
     if (noImage.length === 0) { toast.info('Todos os produtos já têm imagem!'); return; }
+    webImportCancelled.current = false;
     toast.info(`Buscando ${noImage.length} fotos na web... Pode fechar o navegador!`);
     setActiveJob({ id: 'pending', total: noImage.length, done: 0, failed: 0, status: 'running', reason: '', message: 'Iniciando busca…', cooldown_until: null });
+    let done = 0;
+    let failed = 0;
+    const CONCURRENT = 4;
+    const processOne = async (p: Product) => {
+      try {
+        const query = (p.name || '').trim();
+        if (!query) { failed++; return; }
+        const { data, error } = await unifiedInvoke("ai-media-unified", "search", { query, tenantId, download: true, curate: true });
+        const imgUrl = data?.imageUrl;
+        if (error || !imgUrl) {
+          failed++;
+          const msg = error?.status === 404 ? 'no_usable_image' : (typeof error?.message === 'string' ? error.message.slice(0, 60) : 'erro na busca');
+          setActiveJob(prev => prev ? { ...prev, failed, done, message: `${done} encontradas · ${failed} sem foto (${msg})…` } : prev);
+          return;
+        }
+        const { error: upErr } = await supabase.from('products').update({ image: imgUrl }).eq('id', p.id);
+        if (upErr) { failed++; console.warn('update image failed', upErr); return; }
+        done++;
+        setActiveJob(prev => prev ? { ...prev, done, failed, message: `Buscando próximas fotos… (${done}/${noImage.length})` } : prev);
+        void refetch();
+      } catch {
+        failed++;
+      }
+    };
     try {
-      const { data, error } = await unifiedInvoke("ai-media-unified", "search", { productIds: noImage.map(p => p.id), tenantId });
-      if (error) throw error;
-      if (data?.jobId) setActiveJob((prev) => prev ? { ...prev, id: data.jobId } : prev);
-    } catch (err) {
-      console.error('Failed to start Google import:', err);
-      toast.error('Erro ao iniciar importação');
-      cancelImageGeneration();
+      // executa em lotes concorrentes, respeitando interrupção entre lotes
+      for (let i = 0; i < noImage.length; i += CONCURRENT) {
+        if (webImportCancelled.current) break;
+        await Promise.all(noImage.slice(i, i + CONCURRENT).map(processOne));
+      }
+    } finally {
+      webImportCancelled.current = false;
+      const total = done + failed;
+      setActiveJob(prev => prev ? {
+        ...prev,
+        done,
+        failed,
+        status: 'done',
+        message: total === noImage.length ? 'Todas as buscas concluídas.' : 'Processo interrompido.',
+      } : null);
+      void refetch();
+      if (done > 0) toast.success(`✅ ${done} fotos importadas da web!${failed > 0 ? ` (${failed} sem foto encontrada)` : ''}`);
+      else if (failed > 0) toast.warning(`Nenhuma foto utilizável foi encontrada para ${failed} produto(s).`);
+      else toast.info('Busca encerrada sem alterações.');
+      setTimeout(() => setActiveJob(null), 4000);
     }
-  }, [products, tenantId]);
+  }, [products, tenantId, refetch]);
 
   const handleAdd = () => {
     if (!form.name || !form.price) return;
@@ -402,6 +630,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50">
           <FileText className="h-4 w-4" /> Importar TXT
         </button>
+        <button onClick={handleDeleteAll} disabled={deletingAll}
+          className="flex items-center gap-2 rounded-lg bg-destructive text-destructive-foreground px-4 py-2 text-sm font-medium hover:bg-destructive/90 disabled:opacity-50">
+          <Trash2 className="h-4 w-4" /> Apagar Tudo
+        </button>
         {productsWithoutImage > 0 && !activeJob && (
           <>
             <button onClick={handleRegenerateImages}
@@ -443,6 +675,17 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           }}
           label="Categorizar tudo com IA"
         />
+        {products.length > 0 && (
+          <button
+            onClick={handleDeleteAll}
+            disabled={deletingAll}
+            className="flex items-center gap-2 rounded-lg bg-destructive/15 text-destructive px-4 py-2 text-sm font-medium hover:bg-destructive/25 disabled:opacity-50"
+            title="Apaga TODOS os produtos desta loja (irreversível)"
+          >
+            {deletingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Apagar todos os produtos ({products.length})
+          </button>
+        )}
         <input ref={fileInputRef} type="file" accept=".txt" className="hidden" onChange={handleFileSelect} />
       </div>
 
@@ -536,54 +779,144 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         );
       })()}
 
+      {/* Configuração do import: fornecedor + tipo de preço */}
+      {importStep === 'config' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-background p-6 shadow-2xl space-y-4">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" /> Configurar importação{importFileName ? ` — ${importFileName}` : ''}
+            </h3>
+            <p className="text-xs text-muted-foreground">Os preços deste catálogo pertencem a qual fornecedor e são de custo ou de revenda? Se o fornecedor não existir, ele será cadastrado automaticamente na aba Fornecedores.</p>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Nome do fornecedor</label>
+              <input
+                list="supplier-suggestions"
+                value={importSupplierName}
+                onChange={e => setImportSupplierName(e.target.value)}
+                placeholder="Ex: Multimais, Celular BH..."
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <datalist id="supplier-suggestions">
+                {suppliers.map(s => <option key={s.id} value={s.name} />)}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Os preços do arquivo são de:</label>
+              <div className="flex gap-2 flex-wrap">
+                {([
+                  { v: 'cost', label: 'Preço de custo', hint: '(quanto você paga ao fornecedor)' },
+                  { v: 'resale', label: 'Preço de revenda', hint: '(quanto você cobra na loja)' },
+                  { v: 'both', label: 'Os dois', hint: '(custo = revenda por enquanto)' },
+                ] as const).map(opt => (
+                  <label key={opt.v} className={`flex-1 min-w-[140px] flex items-start gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer transition-colors ${importPriceType === opt.v ? 'border-primary bg-primary/10 text-foreground font-medium' : 'border-border bg-secondary text-muted-foreground'}`}>
+                    <input type="radio" name="price-type" checked={importPriceType === opt.v} onChange={() => setImportPriceType(opt.v)} className="accent-primary mt-0.5" />
+                    <span>
+                      <span className="block">{opt.label}</span>
+                      <span className="block text-[10px] opacity-70">{opt.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {importPriceType === 'cost' && (
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
+                <div>
+                  <label className="block text-[10px] font-bold text-primary uppercase mb-1">Margem de Lucro (%)</label>
+                  <div className="relative">
+                    <input type="number" value={importProfitMargin} onChange={e => setImportProfitMargin(e.target.value)} 
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-primary pr-8" />
+                    <span className="absolute right-3 top-2 text-xs text-muted-foreground">%</span>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground mt-1">Revenda = Custo + %</p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-primary uppercase mb-1">Frete por item (R$)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2 text-xs text-muted-foreground">R$</span>
+                    <input type="number" value={importShippingFee} onChange={e => setImportShippingFee(e.target.value)} 
+                      className="w-full rounded-md border border-border bg-background pl-8 pr-3 py-2 text-sm text-foreground focus:ring-primary" />
+                  </div>
+                  <p className="text-[9px] text-muted-foreground mt-1">Soma ao custo antes da margem</p>
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={handleStartParsing} className="flex-1 items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm font-medium">
+                <Sparkles className="h-4 w-4" /> Analisar com IA
+              </button>
+              <button onClick={() => { setImportStep('idle'); setImportRawText(''); setImportFileName(''); setImportSupplierName(''); }} className="flex-1 items-center gap-1 rounded-lg bg-secondary text-muted-foreground px-4 py-2 text-sm">
+                <X className="h-4 w-4" /> Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Parsing state */}
       {importStep === 'parsing' && (
         <div className="rounded-lg border border-border bg-card p-4 flex items-center gap-3">
           <Loader2 className="h-5 w-5 animate-spin text-primary" />
-          <span className="text-sm text-foreground">Analisando arquivo com IA...</span>
+          <span className="text-sm text-foreground">Analisando arquivo com IA...{importSupplierName ? ` Fornecedor: ${importSupplierName} · Preço: ${importPriceType === 'cost' ? 'custo' : importPriceType === 'resale' ? 'revenda' : 'custo e revenda'}` : ''}</span>
         </div>
       )}
 
       {/* Preview parsed products */}
       {importStep === 'preview' && (
-        <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" /> {parsedProducts.length} produtos encontrados
-          </h3>
-          <div className="max-h-60 overflow-y-auto space-y-2">
-            {parsedProducts.map((p, i) => (
-              <div key={i} className="flex items-center justify-between rounded-md bg-secondary px-3 py-2 text-sm">
-                <div>
-                  <span className="font-medium text-foreground">{p.name}</span>
-                  <span className="text-muted-foreground ml-2">· {p.category}</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-background p-6 shadow-2xl space-y-4">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" /> {parsedProducts.length} produtos encontrados
+            </h3>
+            <div className="max-h-60 overflow-y-auto space-y-2 border rounded-lg p-2">
+              {parsedProducts.map((p, i) => (
+                <div key={i} className="flex items-center justify-between rounded-md bg-secondary px-3 py-2 text-sm">
+                  <div>
+                    <span className="font-medium text-foreground">{p.name}</span>
+                    <span className="text-muted-foreground ml-2">· {p.category}</span>
+                  </div>
+                  <span className="text-primary font-medium">R${p.price.toFixed(2)}</span>
                 </div>
-                <span className="text-primary font-medium">R${p.price.toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-          <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-            <input type="checkbox" checked={generateImages} onChange={e => setGenerateImages(e.target.checked)} className="accent-primary" />
-            <Sparkles className="h-3.5 w-3.5 text-primary" /> Gerar imagens por IA (no servidor — pode fechar o navegador)
-          </label>
-          <div className="flex gap-2">
-            <button onClick={handleImportConfirm} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm">
-              <Check className="h-4 w-4" /> Importar {parsedProducts.length} produtos
-            </button>
-            <button onClick={() => { setImportStep('idle'); setParsedProducts([]); }} className="flex items-center gap-1 rounded-lg bg-secondary text-muted-foreground px-4 py-2 text-sm">
-              <X className="h-4 w-4" /> Cancelar
-            </button>
+              ))}
+            </div>
+            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+              <input type="checkbox" checked={generateImages} onChange={e => setGenerateImages(e.target.checked)} className="accent-primary" />
+              <Sparkles className="h-3.5 w-3.5 text-primary" /> Gerar imagens por IA (no servidor — pode fechar o navegador)
+            </label>
+            <div className="flex gap-2">
+              <button onClick={handleImportConfirm} className="flex-1 items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm">
+                <Check className="h-4 w-4" /> Importar {parsedProducts.length} produtos
+              </button>
+              <button onClick={() => { setImportStep('idle'); setParsedProducts([]); }} className="flex-1 items-center gap-1 rounded-lg bg-secondary text-muted-foreground px-4 py-2 text-sm">
+                <X className="h-4 w-4" /> Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Importing progress */}
       {importStep === 'importing' && (
-        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm text-foreground">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            Importando {importProgress}/{importTotal}...
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-background p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm text-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                Importando {importProgress}/{importTotal}...{importSupplierName ? ` · ${importSupplierName}` : ''}
+              </div>
+              {!importCancelled && (
+                <button
+                  onClick={handleCancelImport}
+                  className="text-xs rounded-md bg-destructive/15 text-destructive hover:bg-destructive/25 px-2 py-1 font-medium inline-flex items-center gap-1"
+                  title="Interrompe a importação após o item atual"
+                >
+                  <X className="h-3 w-3" /> Interromper
+                </button>
+              )}
+            </div>
+            <Progress value={(importProgress / importTotal) * 100} className="h-2" />
+            <p className="text-[10px] text-muted-foreground text-center">Processando itens em segundo plano...</p>
           </div>
-          <Progress value={(importProgress / importTotal) * 100} className="h-2" />
         </div>
       )}
 

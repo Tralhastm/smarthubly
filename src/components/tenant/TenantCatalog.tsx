@@ -269,10 +269,23 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
 
   // Nós exibidos como chips no nível atual
   const levelChips = useMemo(() => {
+    // Se não houver categorias cadastradas, usa as marcas (campo category) dos produtos
     if (catNodes.length === 0) {
+      const uniqueCats = Array.from(new Set(allProducts.map(p => p.category).filter(Boolean))).sort();
       return [
         { id: '__todos', name: 'Todos' },
-        ...Array.from(new Set(allProducts.map(p => p.category).filter(Boolean))).map(name => ({ id: `__cat::${name}`, name })),
+        ...uniqueCats.map(name => ({ id: `__cat::${name}`, name })),
+      ];
+    }
+    
+    // Fallback: se houver categorias cadastradas mas NENHUM produto estiver vinculado a elas (subcategory_ids vazio),
+    // também mostramos as marcas para não deixar o menu vazio.
+    const hasLinkedProducts = allProducts.some(p => (p as any).subcategory_ids?.length > 0);
+    if (!hasLinkedProducts) {
+      const uniqueCats = Array.from(new Set(allProducts.map(p => p.category).filter(Boolean))).sort();
+      return [
+        { id: '__todos', name: 'Todos' },
+        ...uniqueCats.map(name => ({ id: `__cat::${name}`, name })),
       ];
     }
     if (!activeNode) {
@@ -296,7 +309,14 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   }, [catNodes, allProducts, activeNode, rootIds, nodeById]);
 
   const categoryMatches = (p: any): boolean => {
-    if (!activeNode) return true; // Todos
+    if (!activeNode || activeNode === '__todos') return true;
+    if (activeNode === '__todos__node') return true;
+    
+    if (activeNode.startsWith('__cat::')) {
+      const catName = activeNode.replace('__cat::', '');
+      return p.category === catName;
+    }
+    
     const path = (p.subcategory_ids || []).filter(Boolean);
     return path.includes(activeNode);
   };
