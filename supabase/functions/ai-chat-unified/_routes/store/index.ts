@@ -293,11 +293,6 @@ async function tryWorkerStream(messages: any[], systemPrompt: string, tenantName
 
 export async function store(req: Request, body?: unknown): Promise<Response> {
   try {
-    const ct = req.headers.get("content-type") || "";
-    const parsed: any = body ?? (ct.includes("application/json") ? await req.json() : {});
-if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
     const body = await req.json().catch(() => ({}));
     const { messages, tenantName, niche, tenantId } = body || {};
 
@@ -340,7 +335,7 @@ NUNCA pergunte "quer que eu prepare/marque/agende pra você" — quem faz é o c
 
 ❌ PROIBIDO: inventar produto/preço/cupom/horário; prometer ações que não executa; mandar pra concorrente; "como posso ajudar?" sem recomendar nada; texto longo; markdown pesado.
 
-${productsAvailable ? '' : '⚠️ CATÁLOGO VAZIO — peça desculpa em 2 linhas e oriente o WhatsApp da loja se houver.'}${productsContext}${storeContext}`;
+${productsAvailable ? ' : '⚠️ CATÁLOGO VAZIO — peça desculpa em 2 linhas e oriente o WhatsApp da loja se houver.'}${productsContext}${storeContext}`;
 
     const [keys, workers] = await Promise.all([getGoogleKeys(supabase), getAllWorkers(supabase)]);
 
@@ -372,9 +367,3 @@ ${productsAvailable ? '' : '⚠️ CATÁLOGO VAZIO — peça desculpa em 2 linha
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-
-  } catch (e) {
-    console.error("[unified:store] error", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-  }
-}
