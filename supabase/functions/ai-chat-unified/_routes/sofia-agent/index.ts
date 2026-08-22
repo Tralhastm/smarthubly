@@ -10,78 +10,57 @@
 //
 // Auth: JWT do lojista (Bearer publishable key do browser) validado via auth.getUser +
 // has_role(admin, tenant) ou super_admin. Custos zero: fallback IA já embutido (_shared/ai-fallback).
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { callAiJson } from "../../../_shared/ai-fallback.ts";
 import { generateImageCascade } from "../../../_shared/image-gen.ts";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-route, x-my-custom-header",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
 };
-
-function json(body: unknown, status = 200) {
+function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json"
+    }
   });
 }
-
-function getAdmin(supabaseUrl: string, key: string) {
+function getAdmin(supabaseUrl, key) {
   return createClient(supabaseUrl, key);
 }
-
 // ============ AUTH ============
 // Valida o JWT do caller e garante que ele é admin da tenant (ou super admin).
 // Padrão da plataforma (cindy): cliente anônimo com o JWT do caller pra validar a sessão.
-async function requireTenantAdmin(admin: any, authHeader: string | null, tenantId: string): Promise<string> {
+async function requireTenantAdmin(admin, authHeader, tenantId) {
   if (!authHeader?.startsWith("Bearer ")) throw new Error("unauthorized");
   const token = authHeader.slice(7);
-  const callerClient = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!,
-    { global: { headers: { Authorization: `Bearer ${token}` } } },
-  );
+  const callerClient = createClient(Deno.env.get("SUPABASE_URL"), Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY"), {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  });
   const { data: session, error } = await callerClient.auth.getUser();
   if (error || !session?.user) throw new Error("unauthorized");
   const userId = session.user.id;
-
   // Super admin passa direto
-  const { data: superRow } = await admin
-    .from("platform_roles").select("role").eq("user_id", userId).eq("role", "super_admin").maybeSingle();
+  const { data: superRow } = await admin.from("platform_roles").select("role").eq("user_id", userId).eq("role", "super_admin").maybeSingle();
   if (superRow) return userId;
-
   // Lojista admin da tenant
-  const { data: roleRow } = await admin
-    .from("user_roles").select("role").eq("user_id", userId).eq("tenant_id", tenantId)
-    .eq("role", "admin").eq("approved", true).maybeSingle();
+  const { data: roleRow } = await admin.from("user_roles").select("role").eq("user_id", userId).eq("tenant_id", tenantId).eq("role", "admin").eq("approved", true).maybeSingle();
   if (!roleRow) throw new Error("forbidden_tenant");
   return userId;
 }
-
-// ============ CONTEXTO DA LOJA ============
-interface StoreContext {
-  tenant: any;
-  products: any[];
-  summary: string;
-}
-
-async function buildStoreContext(admin: any, tenantId: string): Promise<StoreContext> {
-  const { data: tenant, error: tErr } = await admin
-    .from("tenants")
-    .select("id, name, slug, niche, description, brand_primary_color, brand_bg_color, splash_bg_color, show_description, show_title, catalog_layout")
-    .eq("id", tenantId).single();
+async function buildStoreContext(admin, tenantId) {
+  const { data: tenant, error: tErr } = await admin.from("tenants").select("id, name, slug, niche, description, brand_primary_color, brand_bg_color, splash_bg_color, show_description, show_title, catalog_layout").eq("id", tenantId).single();
   if (tErr || !tenant) throw new Error("tenant_not_found");
-
-  const { data: products, error: pErr } = await admin
-    .from("products")
-    .select("id, name, description, price, original_price, category, subcategory, image, in_stock")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(120);
+  const { data: products, error: pErr } = await admin.from("products").select("id, name, description, price, original_price, category, subcategory, image, in_stock").eq("tenant_id", tenantId).order("created_at", {
+    ascending: false
+  }).limit(120);
   if (pErr) throw pErr;
-
   const summary = [
     `Loja: ${tenant.name} (slug: ${tenant.slug}, nicho: ${tenant.niche || "não definido"})`,
     `Paleta atual: primary=${tenant.brand_primary_color || "?"} bg=${tenant.brand_bg_color || "?"} splash=${tenant.splash_bg_color || "?"}`,
@@ -89,69 +68,96 @@ async function buildStoreContext(admin: any, tenantId: string): Promise<StoreCon
     `Descrição visível: ${tenant.show_description !== false ? "sim" : "não"} | Título visível: ${tenant.show_title !== false ? "sim" : "não"}`,
     `Layout: ${tenant.catalog_layout || "grid"} | Produtos: ${products.length}`,
     `Produtos (top 120 por cadastro):`,
-    ...(products || []).slice(0, 80).map((p: any) =>
-      `- [${p.id}] "${p.name}" | R$${Number(p.price).toFixed(2)}${p.original_price ? ` (de R$${Number(p.original_price).toFixed(2)})` : ""} | cat: ${p.category || "—"}/${p.subcategory || "—"} | ${p.in_stock ? "em estoque" : "esgotado"} | imagem: ${p.image ? "sim" : "NÃO"}`,
-    ),
+    ...(products || []).slice(0, 80).map((p)=>`- [${p.id}] "${p.name}" | R$${Number(p.price).toFixed(2)}${p.original_price ? ` (de R$${Number(p.original_price).toFixed(2)})` : ""} | cat: ${p.category || "—"}/${p.subcategory || "—"} | ${p.in_stock ? "em estoque" : "esgotado"} | imagem: ${p.image ? "sim" : "NÃO"}`)
   ].join("\n");
-
-  return { tenant, products: products || [], summary };
+  return {
+    tenant,
+    products: products || [],
+    summary
+  };
 }
-
 // ============ GERAÇÃO DE IMAGEM ============
 // Cascata profissional (sem Pollinations): Google Gemini 2.5 Flash Image → Lovable AI → ai_workers (image)
 // Política do dono: imagem sempre pelos Workers/cascata de APIs, nunca Pollinations (qualidade ruim).
-async function generateAndUploadImage(admin: any, prompt: string, tenantId: string, productName?: string): Promise<{ url: string | null; err: string | null }> {
+async function generateAndUploadImage(admin, prompt, tenantId, productName) {
   try {
-    const res = await generateImageCascade(admin, prompt, tenantId, "sofia", { productName });
-    if (res?.url) return { url: res.url, err: null };
+    const res = await generateImageCascade(admin, prompt, tenantId, "sofia", {
+      productName
+    });
+    if (res?.url) return {
+      url: res.url,
+      err: null
+    };
     console.error("[sofia] cascata retornou null — workers/google/lovable todos falharam, prompt:", (prompt || "").slice(0, 60));
-    return { url: null, err: "cascata de imagem falhou em todos os estagios (prompt: " + (prompt || "").slice(0, 80) + ")" };
+    return {
+      url: null,
+      err: "cascata de imagem falhou em todos os estagios (prompt: " + (prompt || "").slice(0, 80) + ")"
+    };
   } catch (e) {
-    return { url: null, err: e instanceof Error ? e.message : String(e) };
+    return {
+      url: null,
+      err: e instanceof Error ? e.message : String(e)
+    };
   }
 }
-
 // ============ APLICAÇÃO DO PLANO ============
 // Plano: { tenantChanges, productChanges[], notes, rationale }
 // tenantChanges: { brand_primary_color?, brand_bg_color?, splash_bg_color?, description?, show_description?, show_title? }
 // productChanges: [ { id, newName?, newDescription?, newPrice?, newImagePrompt? } ]
-
-async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyImages?: boolean }): Promise<{ applied: string[]; errors: string[] }> {
-  const applied: string[] = [];
-  const errors: string[] = [];
-
-  const pc = (plan?.productChanges || []).filter((x: any) => x?.id);
+async function applyPlan(admin, plan, tenantId, opts) {
+  const applied = [];
+  const errors = [];
+  const pc = (plan?.productChanges || []).filter((x)=>x?.id);
   // onlyImage=true → gera SOMENTE as imagens (usado pelo retry), sem tocar em identidade/nome/preço/descrição
   const onlyImages = Boolean(opts?.onlyImages);
   if (onlyImages) {
-    const imageResults = await Promise.allSettled(
-      pc.map(async (item) => {
-        if (!item.newImagePrompt) return { id: item.id, url: null };
-        const r = await generateAndUploadImage(admin, item.newImagePrompt, tenantId, item.productName);
-        return { id: item.id, url: r.url, err: r.err };
-      }),
-    );
-    const byId = new Map(imageResults.map((r, i) => [pc[i].id, r.status === "fulfilled" ? r.value : null]));
-    for (const item of pc) {
+    const imageResults = await Promise.allSettled(pc.map(async (item)=>{
+      if (!item.newImagePrompt) return {
+        id: item.id,
+        url: null
+      };
+      const r = await generateAndUploadImage(admin, item.newImagePrompt, tenantId, item.productName);
+      return {
+        id: item.id,
+        url: r.url,
+        err: r.err
+      };
+    }));
+    const byId = new Map(imageResults.map((r, i)=>[
+        pc[i].id,
+        r.status === "fulfilled" ? r.value : null
+      ]));
+    for (const item of pc){
       if (!item.newImagePrompt) continue;
       const rec = byId.get(item.id);
       const imageUrl = rec?.url || null;
       if (!imageUrl) errors.push(`foto do produto ${item.id}: ${rec?.err ?? "geração falhou"}`);
       else {
-        const { error } = await admin.from("products").update({ image: imageUrl }).eq("id", item.id).eq("tenant_id", tenantId);
+        const { error } = await admin.from("products").update({
+          image: imageUrl
+        }).eq("id", item.id).eq("tenant_id", tenantId);
         if (error) errors.push(`foto do produto ${item.id}: ${error.message}`);
         else applied.push(`foto do produto ${item.id}`);
       }
     }
-    return { applied, errors };
+    return {
+      applied,
+      errors
+    };
   }
-
   const tc = plan?.tenantChanges || {};
   const tenantKeys = Object.keys(tc);
   if (tenantKeys.length > 0) {
-    const safe: Record<string, unknown> = {};
-    for (const k of tenantKeys) {
-      if (["brand_primary_color", "brand_bg_color", "splash_bg_color", "description", "show_description", "show_title"].includes(k)) {
+    const safe = {};
+    for (const k of tenantKeys){
+      if ([
+        "brand_primary_color",
+        "brand_bg_color",
+        "splash_bg_color",
+        "description",
+        "show_description",
+        "show_title"
+      ].includes(k)) {
         safe[k] = tc[k];
       }
     }
@@ -161,18 +167,24 @@ async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyI
       else applied.push(`identidade (${Object.keys(safe).join(", ")})`);
     }
   }
-
   // Gera todas as imagens EM PARALELO (evita esgotar o compute da Edge Function)
-  const imageResults = await Promise.allSettled(
-    pc.map(async (item) => {
-      if (!item.newImagePrompt) return { id: item.id, url: null };
-      const r = await generateAndUploadImage(admin, item.newImagePrompt, tenantId, item.productName);
-      return { id: item.id, url: r.url, err: r.err };
-    }),
-  );
-  const byId = new Map(imageResults.map((r, i) => [pc[i].id, r.status === "fulfilled" ? r.value : null]));
-
-  for (const item of pc) {
+  const imageResults = await Promise.allSettled(pc.map(async (item)=>{
+    if (!item.newImagePrompt) return {
+      id: item.id,
+      url: null
+    };
+    const r = await generateAndUploadImage(admin, item.newImagePrompt, tenantId, item.productName);
+    return {
+      id: item.id,
+      url: r.url,
+      err: r.err
+    };
+  }));
+  const byId = new Map(imageResults.map((r, i)=>[
+      pc[i].id,
+      r.status === "fulfilled" ? r.value : null
+    ]));
+  for (const item of pc){
     try {
       const rec = byId.get(item.id);
       const imageUrl = rec?.url || null;
@@ -180,7 +192,9 @@ async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyI
         if (!item.newImagePrompt) continue;
         if (!imageUrl) errors.push(`foto do produto ${item.id}: ${rec?.err ?? "geração falhou"}`);
         else {
-          const { error } = await admin.from("products").update({ image: imageUrl }).eq("id", item.id).eq("tenant_id", tenantId);
+          const { error } = await admin.from("products").update({
+            image: imageUrl
+          }).eq("id", item.id).eq("tenant_id", tenantId);
           if (error) errors.push(`foto do produto ${item.id}: ${error.message}`);
           else applied.push(`foto do produto ${item.id}`);
         }
@@ -191,7 +205,7 @@ async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyI
         if (imageUrl) applied.push(`foto do produto ${item.id}`);
         else errors.push(`foto do produto ${item.id}: ${rec?.err ?? "geração falhou (resto aplicado)"}`);
       }
-      const update: Record<string, unknown> = {};
+      const update = {};
       if (imageUrl) update.image = imageUrl;
       if (item.newName != null && String(item.newName).trim()) update.name = String(item.newName).trim();
       if (item.newDescription != null) update.description = String(item.newDescription);
@@ -207,16 +221,15 @@ async function applyPlan(admin: any, plan: any, tenantId: string, opts?: { onlyI
       errors.push(`produto ${item.id}: ${e instanceof Error ? e.message : "erro"}`);
     }
   }
-
-  return { applied, errors };
+  return {
+    applied,
+    errors
+  };
 }
-
 // ============ HANDLER ============
-
 import { PLATFORM_KNOWLEDGE } from "../../../_shared/platform_knowledge.ts";
-
 // Helper para streaming da Sofia pública (similar ao da Store)
-async function trySofiaPublicStream(messages: any[], role: string, admin: any): Promise<Response | null> {
+async function trySofiaPublicStream(messages, role, admin) {
   const systemPrompt = `Você é a **Sofia**, a assistente inteligente da plataforma SmartHubly.
 Sua missão é ajudar visitantes a entenderem a plataforma, lojistas a gerenciarem seus negócios e interessados a criarem suas próprias lojas.
 
@@ -236,26 +249,22 @@ ${PLATFORM_KNOWLEDGE}
 4. Se não souber algo, peça para falar com o suporte humano no WhatsApp.
 
 Papel atual do usuário: ${role}`;
-
   // Usar a mesma lógica de cascata do store/clara (simplificado aqui para brevidade, chamando o ai-fallback)
   const { callAiStream } = await import("../../../_shared/ai-fallback.ts");
   return callAiStream(admin, {
     systemPrompt,
     messages,
     temperature: 0.7,
-    maxTokens: 800,
+    maxTokens: 800
   });
 }
-
-export async function sofia_agent(req: Request, body?: unknown): Promise<Response> {
+export async function sofia_agent(req, body) {
   try {
     const ct = req.headers.get("content-type") || "";
-    const parsed: any = body ?? (ct.includes("application/json") ? await req.json().catch(() => ({})) : {});
-    
+    const parsed = body ?? (ct.includes("application/json") ? await req.json().catch(()=>({})) : {});
     let path = "";
     let method = req.method;
-    let payload: any = parsed;
-
+    let payload = parsed;
     if (method === "POST") {
       if (payload && payload?._path) {
         path = String(payload._path);
@@ -263,16 +272,13 @@ export async function sofia_agent(req: Request, body?: unknown): Promise<Respons
         path = payload.action === "list" ? "plans" : "";
       }
     }
-    
     if (!path) {
       const url = new URL(req.url);
       path = url.pathname.split("/").pop() || "";
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const admin = getAdmin(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const admin = getAdmin(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
     const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
-
     // Rota de Chat Público (Streaming) - Usada pelo widget SofiaChat
     if (method === "POST" && (!path || path === "sofia-agent" || path === "chat")) {
       const { messages, role = "visitor" } = payload;
@@ -282,17 +288,18 @@ export async function sofia_agent(req: Request, body?: unknown): Promise<Respons
         throw new Error("Falha ao iniciar stream da Sofia");
       }
     }
-
     if (path === "plan" && method === "POST") {
-      const { tenantId, messages } = payload as { tenantId?: string; messages?: any[] };
+      const { tenantId, messages } = payload;
       if (!tenantId || !Array.isArray(messages) || messages.length === 0) {
-        return json({ error: "tenantId e messages são obrigatórios" }, 400);
+        return json({
+          error: "tenantId e messages são obrigatórios"
+        }, 400);
       }
       const userId = await requireTenantAdmin(admin, authHeader, tenantId);
-
       const ctx = await buildStoreContext(admin, tenantId);
-      const lastMsg = [...messages].reverse().find((m: any) => m?.role === "user")?.content || "";
-
+      const lastMsg = [
+        ...messages
+      ].reverse().find((m)=>m?.role === "user")?.content || "";
       // ===== FERRAMENTA: PROSPECÇÃO REAL =====
       // Se o pedido pedir para ACHAR empresas/clientes em uma cidade (prospecção),
       // executa a prospecção real via EF prospect-google-search e devolve os leads.
@@ -301,22 +308,22 @@ export async function sofia_agent(req: Request, body?: unknown): Promise<Respons
       if (prospectRe.test(lastMsg)) {
         try {
           // Extrai cidade e nicho com ajuda da IA
-          const route: any = await callAiJson(admin, {
+          const route = await callAiJson(admin, {
             systemPrompt: "Você é um roteador. Extraia de um pedido de prospecção: city (cidade principal, normalize: Belo Horizonte, São Paulo, Rio de Janeiro etc; se for 'BH' use 'Belo Horizonte'), state (UF da cidade, ex MG, SP, RJ), niche (o tipo de negócio procurado, ex 'distribuidora de laticínios', 'pizzaria', 'conveniência', 'supermercado'), neighborhood (bairro, se citado), sector (segmento de atuação do lojista, se citado). Responda só JSON.",
             userPrompt: `PEDIDO: "${lastMsg}"
 Loja do lojista: ${ctx.summary}
 Retorne: {"city":"","state":"","niche":"","neighborhood":"","sector":"","query":"frase curta da busca"}`,
             temperature: 0.3,
-            maxTokens: 600,
+            maxTokens: 600
           });
           let pCity = String(route?.city || "").trim();
           if (!pCity) {
             // Tenta pegar a cidade do próprio pedido via IA (a store context não tem cidade)
-            const cityOnly: any = await callAiJson(admin, {
+            const cityOnly = await callAiJson(admin, {
               systemPrompt: "Diga em que CIDADE o lojista quer achar clientes. Responda só JSON: {\"city\":\"\",\"state\":\"\"} (normalize ex: Belo Horizonte MG). Se o pedido não mencionar cidade, deixe vazio.",
               userPrompt: `PEDIDO: "${lastMsg}"`,
               temperature: 0.3,
-              maxTokens: 200,
+              maxTokens: 200
             });
             pCity = String(cityOnly?.city || "").trim();
             if (pCity && !String(route?.state || "").trim()) {
@@ -333,14 +340,13 @@ Retorne: {"city":"","state":"","niche":"","neighborhood":"","sector":"","query":
               inserted: 0,
               leads: [],
               status: "needs_city",
-              message: "Entendi, você quer achar clientes! Mas não identifiquei a CIDADE no pedido. Me fala a cidade (ex: \"ache pizzarias em Belo Horizonte\") que eu já executo a prospecção.",
+              message: "Entendi, você quer achar clientes! Mas não identifiquei a CIDADE no pedido. Me fala a cidade (ex: \"ache pizzarias em Belo Horizonte\") que eu já executo a prospecção."
             });
           }
           const pState = String(route?.state || "").trim().toUpperCase();
           const pNiche = String(route?.niche || "").trim();
           const pNb = String(route?.neighborhood || "").trim();
           const pSector = String(route?.sector || "").trim();
-
           // Chama a EF de prospecção real com a sessão do usuário (super admin: leads ficam globais; lojista: ficam no tenant dele)
           const pAuth = authHeader;
           const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY") || "";
@@ -348,7 +354,7 @@ Retorne: {"city":"","state":"","niche":"","neighborhood":"","sector":"","query":
             method: "POST",
             headers: {
               Authorization: pAuth || "",
-              "Content-Type": "application/json",
+              "Content-Type": "application/json"
             },
             body: JSON.stringify({
               city: pCity,
@@ -356,48 +362,45 @@ Retorne: {"city":"","state":"","niche":"","neighborhood":"","sector":"","query":
               niche: pNiche,
               neighborhood: pNb || undefined,
               sector: pSector || undefined,
-              tenantId,
-            }),
+              tenantId
+            })
           });
-          const pRes = await r.json().catch(() => ({}));
+          const pRes = await r.json().catch(()=>({}));
           if (pRes?.error) throw new Error(pRes.error);
-          const pLeads: any[] = pRes?.leads || [];
+          const pLeads = pRes?.leads || [];
           return json({
             prospecting: true,
             query: pRes?.query || String(route?.query || ""),
             city: pCity,
             state: pState,
             inserted: pRes?.inserted || 0,
-            leads: pLeads.map((l: any) => ({
-              id: l.id,
-              business_name: l.business_name,
-              category: l.category,
-              neighborhood: l.neighborhood,
-              address: l.address,
-              city: l.city,
-              state: l.state,
-              phone: l.phone,
-              whatsapp: l.whatsapp,
-              email: l.email,
-              website_url: l.website_url,
-              instagram_handle: l.instagram_handle,
-              maps_url: l.maps_url,
-              rating: l.rating,
-              reviews_count: l.reviews_count,
-              priority_score: l.priority_score,
-              source: l.scrape_source || l.source,
-            })),
+            leads: pLeads.map((l)=>({
+                id: l.id,
+                business_name: l.business_name,
+                category: l.category,
+                neighborhood: l.neighborhood,
+                address: l.address,
+                city: l.city,
+                state: l.state,
+                phone: l.phone,
+                whatsapp: l.whatsapp,
+                email: l.email,
+                website_url: l.website_url,
+                instagram_handle: l.instagram_handle,
+                maps_url: l.maps_url,
+                rating: l.rating,
+                reviews_count: l.reviews_count,
+                priority_score: l.priority_score,
+                source: l.scrape_source || l.source
+              })),
             status: "applied",
-            message: pLeads.length
-              ? `Prospecção concluída! Achei ${pLeads.length} empresas em ${pCity}${pState ? ", " + pState : ""}. Os leads já estão salvos na sua aba Prospecção Remota — vá lá ver e chamar no WhatsApp.`
-              : "Busquei mas não achei empresas com esses termos nessa região. Tente um termo mais comum (ex: 'pizzaria', 'conveniência') ou outra cidade.",
+            message: pLeads.length ? `Prospecção concluída! Achei ${pLeads.length} empresas em ${pCity}${pState ? ", " + pState : ""}. Os leads já estão salvos na sua aba Prospecção Remota — vá lá ver e chamar no WhatsApp.` : "Busquei mas não achei empresas com esses termos nessa região. Tente um termo mais comum (ex: 'pizzaria', 'conveniência') ou outra cidade."
           });
         } catch (e) {
           // Falha na prospecção: cai de volta para o plano de loja explicando o que acontece
           console.error("[sofia] prospecção falhou:", e);
         }
       }
-
       const SYSTEM = `Você é a SOFIA AGENTE DE LOJA — agente autônomo de repaginação de lojas da plataforma SmartHubly.
 SUA MISSÃO: transformar a loja do lojista a partir do pedido dele (linguagem natural), devolvendo SEMPRE um PLANO estruturado JSON.
 O plano NÃO altera nada — ele será revisado e aprovado pelo lojista antes da aplicação.
@@ -427,209 +430,250 @@ REGRAS DO PLANO JSON:
 5. Jamais invente produtos que não estão no contexto. Use apenas os IDs listados.
 6. Jamais INVENTE leads de empresas — leads só existem se a ferramenta de prospecção trouxe. Se não houver prospecção no pedido, leads deve ser lista vazia [].
 7. Responda só o JSON, sem markdown, sem comentários.`;
-
       const userPrompt = `PEDIDO DO LOJISTA: "${lastMsg}"
 
 Responda apenas com o JSON do plano. Produtos com imagem faltando e visíveis na loja são candidatos a newImagePrompt.`;
-
-      let plan: any;
+      let plan;
       try {
         plan = await callAiJson(admin, {
           systemPrompt: SYSTEM,
           userPrompt,
           temperature: 0.7,
-          maxTokens: 4000,
+          maxTokens: 4000
         });
       } catch (e) {
-        return json({ error: "ai_unavailable", detail: e instanceof Error ? e.message : "IA indisponível no momento" }, 503);
+        return json({
+          error: "ai_unavailable",
+          detail: e instanceof Error ? e.message : "IA indisponível no momento"
+        }, 503);
       }
-
       // Sanitiza: garante estrutura e valida tenantChanges
       const safePlan = {
         rationale: String(plan?.rationale || ""),
-        tenantChanges: (typeof plan?.tenantChanges === "object" && plan.tenantChanges) || {},
-        productChanges: Array.isArray(plan?.productChanges)
-          ? plan.productChanges.map((p: any) => ({
-              id: String(p?.id || ""),
-              newName: p?.newName != null ? String(p.newName) : undefined,
-              newDescription: p?.newDescription != null ? String(p.newDescription) : undefined,
-              newPrice: typeof p?.newPrice === "number" ? p.newPrice : undefined,
-              newImagePrompt: p?.newImagePrompt != null ? String(p.newImagePrompt) : undefined,
-              // productName ancora o tema da imagem no worker (evita fotos genéricas)
-              productName: p?.productName != null ? String(p.productName).slice(0, 40)
-                : String(p?.newName || ctx.products.find((x: any) => x.id === String(p?.id))?.name || "").slice(0, 40) || undefined,
-            })).filter((p: any) => p.id)
-          : [],
-        userRequest: lastMsg,
+        tenantChanges: typeof plan?.tenantChanges === "object" && plan.tenantChanges || {},
+        productChanges: Array.isArray(plan?.productChanges) ? plan.productChanges.map((p)=>({
+            id: String(p?.id || ""),
+            newName: p?.newName != null ? String(p.newName) : undefined,
+            newDescription: p?.newDescription != null ? String(p.newDescription) : undefined,
+            newPrice: typeof p?.newPrice === "number" ? p.newPrice : undefined,
+            newImagePrompt: p?.newImagePrompt != null ? String(p.newImagePrompt) : undefined,
+            // productName ancora o tema da imagem no worker (evita fotos genéricas)
+            productName: p?.productName != null ? String(p.productName).slice(0, 40) : String(p?.newName || ctx.products.find((x)=>x.id === String(p?.id))?.name || "").slice(0, 40) || undefined
+          })).filter((p)=>p.id) : [],
+        userRequest: lastMsg
       };
-
       // Snapshot antes de aplicar (para rollback)
-      const snapshotBefore: any = {
+      const snapshotBefore = {
         tenant: {
           brand_primary_color: ctx.tenant.brand_primary_color,
           brand_bg_color: ctx.tenant.brand_bg_color,
           splash_bg_color: ctx.tenant.splash_bg_color,
           description: ctx.tenant.description,
           show_description: ctx.tenant.show_description,
-          show_title: ctx.tenant.show_title,
+          show_title: ctx.tenant.show_title
         },
-        products: (safePlan.productChanges as any[])
-          .filter((p) => p.newPrice != null || p.newName != null || p.newDescription != null)
-          .map((p: any) => {
-            const orig = ctx.products.find((x: any) => x.id === p.id);
-            return orig
-              ? { id: orig.id, name: orig.name, description: orig.description, price: orig.price, image: orig.image }
-              : null;
-          }).filter(Boolean),
+        products: safePlan.productChanges.filter((p)=>p.newPrice != null || p.newName != null || p.newDescription != null).map((p)=>{
+          const orig = ctx.products.find((x)=>x.id === p.id);
+          return orig ? {
+            id: orig.id,
+            name: orig.name,
+            description: orig.description,
+            price: orig.price,
+            image: orig.image
+          } : null;
+        }).filter(Boolean)
       };
-
-      const { data: planRow, error: planErr } = await admin
-        .from("store_agent_plans")
-        .insert({
-          tenant_id: tenantId,
-          user_id: userId,
-          user_request: lastMsg,
-          plan: safePlan,
-          snapshot_before: snapshotBefore,
-          status: "pending",
-        })
-        .select("id")
-        .single();
+      const { data: planRow, error: planErr } = await admin.from("store_agent_plans").insert({
+        tenant_id: tenantId,
+        user_id: userId,
+        user_request: lastMsg,
+        plan: safePlan,
+        snapshot_before: snapshotBefore,
+        status: "pending"
+      }).select("id").single();
       if (planErr) throw planErr;
-
-      const autoApply = Boolean((body as { autoApply?: boolean })?.autoApply);
-      let applyResult: { applied: string[]; errors: string[] } | null = null;
+      const autoApply = Boolean(body?.autoApply);
+      let applyResult = null;
       if (autoApply) {
         const { applied, errors } = await applyPlan(admin, safePlan, tenantId);
         await admin.from("store_agent_plans").update({
           status: applied.length > 0 ? "applied" : "failed",
           applied_by: userId,
           applied_at: new Date().toISOString(),
-          snapshot_after: { applied, errors },
+          snapshot_after: {
+            applied,
+            errors
+          }
         }).eq("id", planRow.id);
-        applyResult = { applied, errors };
+        applyResult = {
+          applied,
+          errors
+        };
       }
-
       return json({
         planId: planRow.id,
         rationale: safePlan.rationale,
         tenantChanges: safePlan.tenantChanges,
         productChanges: safePlan.productChanges,
-        status: applyResult ? (applyResult.applied.length > 0 ? "applied" : "failed") : "pending",
+        status: applyResult ? applyResult.applied.length > 0 ? "applied" : "failed" : "pending",
         applied: applyResult?.applied,
         errors: applyResult?.errors,
-        message: applyResult
-          ? (applyResult.applied.length > 0
-              ? `Aplicado direto! ${applyResult.applied.length} mudança(s) na sua loja. Recarregue a loja para ver.`
-              : "Nada foi aplicado — verifique os erros.")
-          : "Plano pronto! Revise abaixo e toque em APLICAR quando aprovar.",
+        message: applyResult ? applyResult.applied.length > 0 ? `Aplicado direto! ${applyResult.applied.length} mudança(s) na sua loja. Recarregue a loja para ver.` : "Nada foi aplicado — verifique os erros." : "Plano pronto! Revise abaixo e toque em APLICAR quando aprovar."
       });
     }
-
     if ((path === "plans" || path === "plan-detail") && method === "POST") {
-      const { tenantId, planId } = body as { tenantId?: string; planId?: string };
-      if (!tenantId) return json({ error: "tenantId obrigatório" }, 400);
+      const { tenantId, planId } = body;
+      if (!tenantId) return json({
+        error: "tenantId obrigatório"
+      }, 400);
       if (path === "plan-detail") {
-        if (!planId) return json({ error: "planId obrigatório" }, 400);
-        const { data: row, error: fErr } = await admin
-          .from("store_agent_plans").select("id, status, user_request, plan, snapshot_before").eq("id", planId).eq("tenant_id", tenantId).single();
-        if (fErr || !row) return json({ error: "plano_nao_encontrado" }, 404);
+        if (!planId) return json({
+          error: "planId obrigatório"
+        }, 400);
+        const { data: row, error: fErr } = await admin.from("store_agent_plans").select("id, status, user_request, plan, snapshot_before").eq("id", planId).eq("tenant_id", tenantId).single();
+        if (fErr || !row) return json({
+          error: "plano_nao_encontrado"
+        }, 404);
         await requireTenantAdmin(admin, authHeader, tenantId);
-        return json({ plan: row.plan, status: row.status, userRequest: row.user_request });
+        return json({
+          plan: row.plan,
+          status: row.status,
+          userRequest: row.user_request
+        });
       }
       await requireTenantAdmin(admin, authHeader, tenantId);
-      const { data, error } = await admin
-        .from("store_agent_plans")
-        .select("id, status, user_request, rationale, created_at, applied_at")
-        .eq("tenant_id", tenantId)
-        .order("created_at", { ascending: false })
-        .limit(50);
+      const { data, error } = await admin.from("store_agent_plans").select("id, status, user_request, rationale, created_at, applied_at").eq("tenant_id", tenantId).order("created_at", {
+        ascending: false
+      }).limit(50);
       if (error) throw error;
-      return json({ plans: data || [] });
+      return json({
+        plans: data || []
+      });
     }
-
     if (path === "apply" && method === "POST") {
-      const { planId } = body as { planId?: string };
-      if (!planId) return json({ error: "planId obrigatório" }, 400);
-      const { data: planRow, error: fErr } = await admin
-        .from("store_agent_plans").select("*").eq("id", planId).single();
-      if (fErr || !planRow) return json({ error: "plano_nao_encontrado" }, 404);
+      const { planId } = body;
+      if (!planId) return json({
+        error: "planId obrigatório"
+      }, 400);
+      const { data: planRow, error: fErr } = await admin.from("store_agent_plans").select("*").eq("id", planId).single();
+      if (fErr || !planRow) return json({
+        error: "plano_nao_encontrado"
+      }, 404);
       const userId = await requireTenantAdmin(admin, authHeader, planRow.tenant_id);
-      if (planRow.status === "applied") return json({ error: "plano_ja_aplicado" }, 409);
-
+      if (planRow.status === "applied") return json({
+        error: "plano_ja_aplicado"
+      }, 409);
       const { applied, errors } = await applyPlan(admin, planRow.plan, planRow.tenant_id);
       const status = applied.length > 0 ? "applied" : "failed";
       await admin.from("store_agent_plans").update({
         status,
         applied_by: userId,
         applied_at: new Date().toISOString(),
-        snapshot_after: { applied, errors },
+        snapshot_after: {
+          applied,
+          errors
+        }
       }).eq("id", planId);
-
-      return json({ status, applied, errors, message:
-        status === "applied"
-          ? `Aplicado! ${applied.length} mudança(s) na sua loja. Recarregue a loja para ver.`
-          : "Nada foi aplicado — verifique os erros."
+      return json({
+        status,
+        applied,
+        errors,
+        message: status === "applied" ? `Aplicado! ${applied.length} mudança(s) na sua loja. Recarregue a loja para ver.` : "Nada foi aplicado — verifique os erros."
       });
     }
-
     if (path === "rollback" && method === "POST") {
-      const { planId } = body as { planId?: string };
-      if (!planId) return json({ error: "planId obrigatório" }, 400);
-      const { data: planRow, error: fErr } = await admin
-        .from("store_agent_plans").select("*").eq("id", planId).single();
-      if (fErr || !planRow) return json({ error: "plano_nao_encontrado" }, 404);
+      const { planId } = body;
+      if (!planId) return json({
+        error: "planId obrigatório"
+      }, 400);
+      const { data: planRow, error: fErr } = await admin.from("store_agent_plans").select("*").eq("id", planId).single();
+      if (fErr || !planRow) return json({
+        error: "plano_nao_encontrado"
+      }, 404);
       await requireTenantAdmin(admin, authHeader, planRow.tenant_id);
-      if (planRow.status !== "applied") return json({ error: "plano_nao_aplicado" }, 409);
-
+      if (planRow.status !== "applied") return json({
+        error: "plano_nao_aplicado"
+      }, 409);
       const sb = planRow.snapshot_before || {};
-      const restored: string[] = [];
-      const errs: string[] = [];
+      const restored = [];
+      const errs = [];
       if (sb.tenant) {
         const { error } = await admin.from("tenants").update(sb.tenant).eq("id", planRow.tenant_id);
         if (error) errs.push(`tenants: ${error.message}`);
         else restored.push("identidade da loja");
       }
-      for (const p of sb.products || []) {
-        const { error } = await admin
-          .from("products").update({ name: p.name, description: p.description, price: p.price, image: p.image })
-          .eq("id", p.id).eq("tenant_id", planRow.tenant_id);
+      for (const p of sb.products || []){
+        const { error } = await admin.from("products").update({
+          name: p.name,
+          description: p.description,
+          price: p.price,
+          image: p.image
+        }).eq("id", p.id).eq("tenant_id", planRow.tenant_id);
         if (error) errs.push(`produto ${p.id}`);
         else restored.push(`produto ${p.name}`);
       }
       await admin.from("store_agent_plans").update({
         status: "rolled_back",
-        rolled_back_at: new Date().toISOString(),
+        rolled_back_at: new Date().toISOString()
       }).eq("id", planId);
-
-      return json({ status: "rolled_back", restored, errors: errs, message:
-        errs.length ? "Reversão parcial. Algo falhou — verifique." : "Tudo revertido com sucesso!"
+      return json({
+        status: "rolled_back",
+        restored,
+        errors: errs,
+        message: errs.length ? "Reversão parcial. Algo falhou — verifique." : "Tudo revertido com sucesso!"
       });
     }
-
     if (path === "retry-images" && method === "POST") {
-      const { planId } = body as { planId?: string };
-      if (!planId) return json({ error: "planId obrigatório" }, 400);
-      const { data: planRow, error: fErr } = await admin
-        .from("store_agent_plans").select("*").eq("id", planId).single();
-      if (fErr || !planRow) return json({ error: "plano_nao_encontrado" }, 404);
+      const { planId } = body;
+      if (!planId) return json({
+        error: "planId obrigatório"
+      }, 400);
+      const { data: planRow, error: fErr } = await admin.from("store_agent_plans").select("*").eq("id", planId).single();
+      if (fErr || !planRow) return json({
+        error: "plano_nao_encontrado"
+      }, 404);
       await requireTenantAdmin(admin, authHeader, planRow.tenant_id);
-      if (planRow.status !== "applied") return json({ error: "plano_nao_aplicado" }, 409);
-      const { applied, errors } = await applyPlan(admin, planRow.plan, planRow.tenant_id, { onlyImages: true });
+      if (planRow.status !== "applied") return json({
+        error: "plano_nao_aplicado"
+      }, 409);
+      const { applied, errors } = await applyPlan(admin, planRow.plan, planRow.tenant_id, {
+        onlyImages: true
+      });
       await admin.from("store_agent_plans").update({
-        snapshot_after: { ...(planRow.snapshot_after || {}), retry: { applied, errors } },
+        snapshot_after: {
+          ...planRow.snapshot_after || {},
+          retry: {
+            applied,
+            errors
+          }
+        }
       }).eq("id", planId);
-      return json({ applied, errors, message: errors.length
-        ? `Parcial: ${applied.length} foto(s) regenerada(s).`
-        : `Fotos regeneradas com sucesso: ${applied.length}` });
+      return json({
+        applied,
+        errors,
+        message: errors.length ? `Parcial: ${applied.length} foto(s) regenerada(s).` : `Fotos regeneradas com sucesso: ${applied.length}`
+      });
     }
-
-    return json({ error: "rota desconhecida", paths: ["plan", "plans", "apply", "rollback", "retry-images"] }, 404);
+    return json({
+      error: "rota desconhecida",
+      paths: [
+        "plan",
+        "plans",
+        "apply",
+        "rollback",
+        "retry-images"
+      ]
+    }, 404);
   } catch (e) {
     console.error("[unified:sofia-agent] error", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { 
-      status: 500, 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    return new Response(JSON.stringify({
+      error: e instanceof Error ? e.message : String(e)
+    }), {
+      status: 500,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      }
     });
   }
 }

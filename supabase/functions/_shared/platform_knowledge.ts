@@ -4,9 +4,7 @@
 // KDS, maquininha Stone/conciliação, fiscal NF-e, subcategorias ilimitadas, carrossel de
 // fotos/vídeo, splash opcional, Sofia Agente com aplicação automática, prospecção avançada
 // e motor de imagens editorial em cascata.
-
 export const PLATFORM_NAME = "SmartHubly";
-
 export const PLATFORM_KNOWLEDGE = `
 # A PLATAFORMA INTEIRA (visão geral pra você decorar)
 
@@ -120,7 +118,6 @@ as cores do comércio, o domínio que o lojista quiser (custom domain disponíve
 - iFood não tem fiado, agendamento, comanda de mesa, garçom no celular, KDS, conciliação de maquininha, NF-e, integração com financeiro próprio.
 - Aqui tem TUDO num lugar só: pedido + mesa + cozinha + financeiro + marketing + fidelidade + automação.
 `.trim();
-
 // Estratégia / vocabulário do dono — pra usar no Vendedor IA principalmente.
 export const SALES_PLAYBOOK = `
 # COMO FALAR (vocabulário e tom)

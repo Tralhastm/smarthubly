@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
-const CHAT_URL = `https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/ai-chat-unified/clara`;
+const CHAT_URL = `/api/chat`;
 const PUBLISHABLE = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 interface Props {

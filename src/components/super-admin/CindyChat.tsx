@@ -17,8 +17,8 @@ type CindyAction =
   | { tool: 'gen-post'; payload: Record<string, unknown>; result?: any }
   | { tool: 'reply-ticket'; payload: { ticketId: string; content: string; setResolved?: boolean }; result?: any };
 
-const CHAT_URL = `https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/ai-chat-unified/cindy`;
-const ACTIONS_URL = `https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/ai-chat-unified/cindy-actions`;
+const CHAT_URL = `/api/chat`;
+const ACTIONS_URL = `/api/chat`;
 
 const GREETING = 'Opa Erick — sou a Cindy, sua copiloto do super admin. Vejo todas as lojas, pedidos rolando agora, faturamento, cobranças e saúde da IA. Posso gerar posts de marketing e responder chamados por você — é só pedir.';
 
