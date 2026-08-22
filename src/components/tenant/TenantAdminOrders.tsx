@@ -558,7 +558,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
             )}
 
             {(order as any).needs_fragmentation && (
-              <div className={`rounded-lg border ${highlight ? 'border-primary ring-2 ring-primary/20' : 'border-yellow-500/30'} bg-yellow-500/10 p-3 mb-2 space-y-2`}>
+              <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 mb-2 space-y-2">
                 <div className="flex items-center gap-2 text-yellow-500 font-bold text-sm">
                   <Package className="h-4 w-4" />
                   Inteligência de Preços: Pedido Fragmentado
@@ -569,7 +569,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
                 
                 <div className="space-y-2 mt-2">
                   {Object.entries((order as any).metadata?.fragmentation_map || {}).map(([sid, itemNames]: [string, any]) => {
-                    const supplier = suppliers.find(s => s.id === sid);
+                    const supplier = (order as any).suppliers?.find((s: any) => s.id === sid);
                     return (
                       <div key={sid} className="rounded bg-background/50 p-2 border border-border/50">
                         <div className="flex items-center justify-between mb-1">
