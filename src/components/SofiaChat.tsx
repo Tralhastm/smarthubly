@@ -89,6 +89,10 @@ const SofiaChat = ({
     };
 
     try {
+      console.log("[SofiaChat] enviando fetch para:", CHAT_URL);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
@@ -98,7 +102,11 @@ const SofiaChat = ({
           'x-route': '/sofia-agent'
         },
         body: JSON.stringify({ messages: next, role, tenantId, supplierId, driverId }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
+      console.log("[SofiaChat] resposta status:", resp.status);
 
       if (!resp.ok) {
         const errorBody = await resp.clone().json().catch(() => null);
