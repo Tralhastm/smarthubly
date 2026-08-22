@@ -31,10 +31,11 @@ const TenantPriceIntelligence = ({ tenantId }: { tenantId: string }) => {
 
       if (!products) return;
 
-      // 2. Busca todos os preços de fornecedores registrados para comparação
+      // 2. Busca todos os preços de fornecedores registrados para comparação (filtrado pelo tenant)
       const { data: supplierPrices } = await supabase
         .from('supplier_product_prices')
         .select('product_name, unit_price, suppliers(name)')
+        .eq('tenant_id', tenantId)
         .eq('available', true);
 
       const results: PriceComparison[] = products.map(p => {

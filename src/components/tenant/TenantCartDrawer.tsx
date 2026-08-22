@@ -548,7 +548,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       // O sistema agora verifica se os itens do carrinho podem ser atendidos por fornecedores diferentes
       // com base no menor custo detectado na tabela de inteligência de preços.
       // --- Lógica de Fragmentação por Menor Preço ---
-      const productNames = items.map(i => i.product.name.trim());
+      const productNames = items.map(i => i.product.name.trim().toLowerCase());
       const { data: supplierPrices } = await supabase
         .from('supplier_product_prices')
         .select('supplier_id, product_name, unit_price, price_types')
@@ -560,7 +560,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         const name = sp.product_name.toLowerCase();
         // Prioriza menor preço de custo para fragmentação operacional
         const cur = bestSuppliers.get(name);
-        if (!cur || sp.unit_price < cur.price) {
+        if (!cur || Number(sp.unit_price) < cur.price) {
           bestSuppliers.set(name, { supplier_id: sp.supplier_id, price: Number(sp.unit_price) });
         }
       });
