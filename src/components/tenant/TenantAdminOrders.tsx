@@ -571,7 +571,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
               </div>
             )}
 
-            {(order as any).needs_fragmentation && (
+            {((order as any).needs_fragmentation || (order as any).metadata?.needs_fragmentation) && (
               <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 mb-2 space-y-2">
                 <div className="flex items-center gap-2 text-yellow-500 font-bold text-sm">
                   <Package className="h-4 w-4" />
@@ -590,8 +590,13 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
                           <span className="text-[10px] font-bold text-primary uppercase">{supplier?.name || 'Fornecedor Desconhecido'}</span>
                           <button 
                             onClick={() => {
+                              const itemsText = itemNames.map((item: any) => {
+                                const name = typeof item === 'string' ? item : item.name;
+                                const qty = typeof item === 'string' ? '' : ` (${item.quantity}x)`;
+                                return `• ${name}${qty}`;
+                              }).join('\n');
                               const text = `Olá ${supplier?.name}, tenho um novo pedido fragmentado:\n\n` + 
-                                itemNames.map((n: string) => `• ${n}`).join('\n') + 
+                                itemsText + 
                                 `\n\nCliente: ${order.customer_name}\nEndereço: ${order.customer_address || 'Retirada'}`;
                               window.open(`https://wa.me/${supplier?.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
                             }}
@@ -601,11 +606,15 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
                           </button>
                         </div>
                         <ul className="text-[10px] text-foreground/80 space-y-0.5">
-                          {itemNames.map((name: string, idx: number) => (
-                            <li key={idx} className="flex items-center gap-1">
-                              <div className="h-1 w-1 rounded-full bg-primary" /> {name}
-                            </li>
-                          ))}
+                          {itemNames.map((item: any, idx: number) => {
+                            const name = typeof item === 'string' ? item : item.name;
+                            const qty = typeof item === 'string' ? '' : ` (${item.quantity}x)`;
+                            return (
+                              <li key={idx} className="flex items-center gap-1">
+                                <div className="h-1 w-1 rounded-full bg-primary" /> {name}{qty}
+                              </li>
+                            );
+                          })}
                         </ul>
                       </div>
                     );
