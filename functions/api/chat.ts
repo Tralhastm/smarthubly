@@ -12,6 +12,19 @@ export const onRequest: PagesFunction = async (context) => {
   if (url.pathname.includes('/reply-ticket')) route = '/cindy-actions/reply-ticket';
   if (url.pathname.includes('/gen-post')) route = '/cindy-actions/gen-post';
 
+  // Se for OPTIONS, retornar logo os headers de CORS
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
+  }
+
   // Criar nova requisição para o Supabase
   const newRequest = new Request(SUPABASE_URL + route, {
     method: request.method,
