@@ -2,21 +2,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../../_shared/cors.ts";
 import { _callAiJson, _callAiVisionJson } from "../../_shared/ai-fallback.ts";
-import { _authorizeCaller, _getAuthUser } from "../../_shared/auth.ts";
+import { authorizeCaller } from "../../_shared/authorize-caller.ts";
+import { getAuthUser } from "../../_shared/auth.ts";
 
 const json = (data: any, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-
-// Mock simples para PDF (o Deno não tem suporte nativo fácil a PDF sem libs externas pesadas)
-// Se for PDF, vamos assumir que o usuário deve enviar imagem ou texto puro se a lib falhar.
-async function pdfToText(buffer: ArrayBuffer): Promise<string> {
-  // Em produção, isso usaria uma lib como pdf-parse ou similar via esm.sh
-  // Por enquanto, retorna erro instrutivo se não puder processar.
-  throw new Error("PDF_PARSE_NOT_IMPLEMENTED_IN_EDGE_RUNTIME");
-}
 
 interface CatalogItem {
   name?: string;
@@ -31,7 +24,7 @@ interface CatalogItem {
   variations?: any;
 }
 
-export async function catalog(req: Request, body?: unknown): Promise<Response> {
+export async function catalog(req: Request, body?: any): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   
   const admin = createClient(
@@ -40,10 +33,10 @@ export async function catalog(req: Request, body?: unknown): Promise<Response> {
   );
 
   try {
-    const user = await _getAuthUser(req);
+    const user = await getAuthUser(req);
     if (!user) return json({ error: "unauthorized" }, 401);
 
-    const auth = await _authorizeCaller(admin as any, user.id);
+    const auth = await authorizeCaller(admin as any, user.id);
     if ("error" in auth) return json({ error: auth.error }, auth.status);
 
     const ct = req.headers.get("content-type") || "";
@@ -69,6 +62,7 @@ export async function catalog(req: Request, body?: unknown): Promise<Response> {
         merge: formData.get("merge") !== "false"
       };
     } else {
+      // O router unificado já faz o parse do JSON e passa no segundo argumento 'body'
       payload = body ?? (ct.includes("application/json") ? await req.json() : {});
     }
     
@@ -136,10 +130,10 @@ export async function catalog(req: Request, body?: unknown): Promise<Response> {
 
     const USER = `Extraia desta ${kind === "image" ? "imagem" : "lista"} TODOS os produtos com preços.
 Regras:
-1. JSON: { "items": [{ "name", "price", "category", "description", "available", "variations" }] }
-2. "name": Limpo, ex: "iPhone 15 Pro Max"
-3. "price": Numérico (R$)
-4. "variations": { "storage": "256GB", "color": "Blue" }`;
+1. JSON: { \"items\": [{ \"name\", \"price\", \"category\", \"description\", \"available\", \"variations\" }] }
+2. \"name\": Limpo, ex: \"iPhone 15 Pro Max\"
+3. \"price\": Numérico (R$)
+4. \"variations\": { \"storage\": \"256GB\", \"color\": \"Blue\" }`;
 
     let items: CatalogItem[] = [];
     let warnings: string[] = [];
