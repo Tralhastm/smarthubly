@@ -9,7 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat-unified/clara`;
+const CHAT_URL = `https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/ai-chat-unified/clara`;
 const PUBLISHABLE = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 interface Props {
@@ -82,8 +82,9 @@ const ClaraChat = ({ tenantId, tenantName, open, onClose }: Props) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: PUBLISHABLE, 'x-route': '/clara',
-          Authorization: `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
+          'apikey': PUBLISHABLE || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78',
+          'x-route': '/clara'
         },
         body: JSON.stringify({ messages: next, tenantId }),
       });

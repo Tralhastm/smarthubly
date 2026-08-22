@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct, type Product } from '@/hooks/useProducts';
 import { useSuppliers } from '@/hooks/useSuppliers';
 import { useFeeRequests, useCreateFeeRequest } from '@/hooks/useFeeRequests';
@@ -299,7 +299,14 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const handleStartParsing = async () => {
     setImportStep('parsing');
     try {
-      const { data, error } = await unifiedInvoke("ai-media-unified", "parse-txt", { txtContent: importRawText });
+      const { data, error } = await unifiedInvoke("ai-media-unified", "parse-txt", { 
+        txtContent: importRawText,
+        supplierName: importSupplierName,
+        priceType: importPriceType,
+        profitMargin: parseFloat(importProfitMargin) || 0,
+        shippingFee: parseFloat(importShippingFee) || 0,
+        tenantId,
+      });
 
       if (error) {
         const status = (error as any)?.status;
@@ -634,6 +641,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           className="flex items-center gap-2 rounded-lg bg-destructive text-destructive-foreground px-4 py-2 text-sm font-medium hover:bg-destructive/90 disabled:opacity-50">
           <Trash2 className="h-4 w-4" /> Apagar Tudo
         </button>
+        {importStep === 'importing' && (
+          <button onClick={handleCancelImport}
+            className="flex items-center gap-2 rounded-lg bg-amber-500 text-white px-4 py-2 text-sm font-medium hover:bg-amber-600 animate-pulse">
+            <X className="h-4 w-4" /> Interromper Importação
+          </button>
+        )}
         {productsWithoutImage > 0 && !activeJob && (
           <>
             <button onClick={handleRegenerateImages}
@@ -1085,8 +1098,33 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
   const [feePercent, setFeePercent] = useState('');
   const [showFeeInput, setShowFeeInput] = useState(false);
   const [generatingDesc, setGeneratingDesc] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState<'info' | 'suppliers'>('info');
   const supplierName = suppliers.find(s => s.id === product.supplier_id)?.name;
   const pendingReq = feeRequests.find(r => r.status === 'pending');
+
+  // Preços de outros fornecedores para este produto
+  const [otherPrices, setOtherPrices] = useState<{ supplier_id: string; supplier_name: string; unit_price: number; price_types: string[] }[]>([]);
+  const [loadingPrices, setLoadingPrices] = useState(false);
+
+  useEffect(() => {
+    if (activeSubTab === 'suppliers' && product.name) {
+      setLoadingPrices(true);
+      supabase
+        .from('supplier_product_prices')
+        .select('supplier_id, unit_price, price_types, suppliers(name)')
+        .ilike('product_name', product.name.trim())
+        .eq('available', true)
+        .then(({ data }) => {
+          setOtherPrices((data || []).map((d: any) => ({
+            supplier_id: d.supplier_id,
+            supplier_name: d.suppliers?.name || 'Fornecedor',
+            unit_price: Number(d.unit_price),
+            price_types: Array.isArray(d.price_types) ? d.price_types : [],
+          })));
+          setLoadingPrices(false);
+        });
+    }
+  }, [activeSubTab, product.name]);
 
   const handleGenerateDesc = async () => {
     if (generatingDesc) return;
@@ -1116,6 +1154,14 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
     return (
       <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3">
         <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+        
+        <div className="flex gap-1 border-b border-border mb-2">
+          <button type="button" onClick={() => setActiveSubTab('info')} className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-all ${activeSubTab === 'info' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Informações</button>
+          <button type="button" onClick={() => setActiveSubTab('suppliers')} className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-all ${activeSubTab === 'suppliers' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>Fornecedores</button>
+        </div>
+
+        {activeSubTab === 'info' && (
+          <>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-xs text-muted-foreground">Preço venda</label>
@@ -1210,6 +1256,48 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
               {(form as any).affiliate_coupon_expires_at && new Date((form as any).affiliate_coupon_expires_at) < new Date() && (
                 <p className="text-[10px] text-destructive mt-1">⚠️ Cupom expirado — clientes verão preço normal.</p>
               )}
+            </div>
+          </div>
+        )}
+          </>
+        )}
+
+        {activeSubTab === 'suppliers' && (
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground">Fornecedores que possuem este produto cadastrado:</p>
+            {loadingPrices ? (
+              <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
+            ) : otherPrices.length === 0 ? (
+              <div className="text-center py-4 text-xs text-muted-foreground bg-secondary/30 rounded-lg border border-dashed border-border">
+                Nenhum fornecedor com este preço cadastrado.
+                <br/>Suba um catálogo TXT na aba "Importar" informando o fornecedor.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {otherPrices.sort((a,b) => a.unit_price - b.unit_price).map((op, idx) => (
+                  <div key={op.supplier_id} className={`flex items-center justify-between p-2 rounded-lg border ${op.supplier_id === form.supplier_id ? 'bg-primary/10 border-primary/30' : 'bg-secondary border-border'}`}>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground truncate">{op.supplier_name}</p>
+                      <p className="text-[10px] text-muted-foreground">{op.price_types.includes('cost') ? 'Preço de custo' : 'Preço de revenda'}</p>
+                    </div>
+                    <div className="text-right flex items-center gap-2">
+                      <span className={`text-xs font-mono font-bold ${idx === 0 ? 'text-emerald-400' : 'text-foreground'}`}>R$ {op.unit_price.toFixed(2)}</span>
+                      {op.supplier_id !== form.supplier_id ? (
+                        <button type="button" onClick={() => setForm({ ...form, supplier_id: op.supplier_id, original_price: op.unit_price } as any)} className="text-[10px] bg-primary text-primary-foreground px-2 py-1 rounded hover:opacity-90">Usar este</button>
+                      ) : (
+                        <span className="text-[10px] text-primary font-bold">Principal</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="pt-2 border-t border-border">
+              <label className="text-[10px] text-muted-foreground block mb-1">Fornecedor principal manual:</label>
+              <select value={form.supplier_id || ''} onChange={e => setForm({ ...form, supplier_id: e.target.value || null })} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground">
+                <option value="">Sem fornecedor</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
             </div>
           </div>
         )}

@@ -558,20 +558,45 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
             )}
 
             {(order as any).needs_fragmentation && (
-              <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 mb-2 space-y-2">
+              <div className={`rounded-lg border ${highlight ? 'border-primary ring-2 ring-primary/20' : 'border-yellow-500/30'} bg-yellow-500/10 p-3 mb-2 space-y-2`}>
                 <div className="flex items-center gap-2 text-yellow-500 font-bold text-sm">
                   <Package className="h-4 w-4" />
-                  Pedido Fragmentado (Múltiplos Fornecedores)
+                  Inteligência de Preços: Pedido Fragmentado
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Este pedido contém itens que devem ser coletados de fornecedores diferentes para garantir o melhor preço.
+                <p className="text-[10px] text-muted-foreground leading-tight">
+                  A IA detectou que este pedido pode ser otimizado comprando de múltiplos fornecedores pelo menor custo.
                 </p>
-                <button 
-                  onClick={() => toast.info("Funcionalidade de divisão automática em desenvolvimento. Por favor, trate os itens individualmente no WhatsApp dos fornecedores.")}
-                  className="w-full rounded bg-yellow-500 text-black py-1.5 text-xs font-bold hover:bg-yellow-600 transition-colors"
-                >
-                  Ver Divisão de Itens
-                </button>
+                
+                <div className="space-y-2 mt-2">
+                  {Object.entries((order as any).metadata?.fragmentation_map || {}).map(([sid, itemNames]: [string, any]) => {
+                    const supplier = suppliers.find(s => s.id === sid);
+                    return (
+                      <div key={sid} className="rounded bg-background/50 p-2 border border-border/50">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-bold text-primary uppercase">{supplier?.name || 'Fornecedor Desconhecido'}</span>
+                          <button 
+                            onClick={() => {
+                              const text = `Olá ${supplier?.name}, tenho um novo pedido fragmentado:\n\n` + 
+                                itemNames.map((n: string) => `• ${n}`).join('\n') + 
+                                `\n\nCliente: ${order.customer_name}\nEndereço: ${order.customer_address || 'Retirada'}`;
+                              window.open(`https://wa.me/${supplier?.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
+                            }}
+                            className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded hover:bg-primary/30"
+                          >
+                            Enviar p/ WhatsApp
+                          </button>
+                        </div>
+                        <ul className="text-[10px] text-foreground/80 space-y-0.5">
+                          {itemNames.map((name: string, idx: number) => (
+                            <li key={idx} className="flex items-center gap-1">
+                              <div className="h-1 w-1 rounded-full bg-primary" /> {name}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

@@ -1,8 +1,9 @@
 // _shared/router.ts — utilitário de roteamento por rota (path) para Edge Functions unificadas.
 export const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-route, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-route, x-tenant-id",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
 };
 
 export function json(body: unknown, status = 200): Response {
@@ -25,11 +26,10 @@ function normalizePath(url: string): string {
 
 function stripSlug(path: string): string {
   const parts = path.split("/").filter((p) => p.length > 0);
-  // No Supabase, o path é /functions/v1/ai-chat-unified/sofia-agent
-  const slug = "ai-chat-unified";
-  const idx = parts.indexOf(slug);
-  if (idx !== -1) {
-    const subPath = "/" + parts.slice(idx + 1).join("/");
+  // Identifica o slug da função no path /functions/v1/{slug}/...
+  const v1Idx = parts.indexOf("v1");
+  if (v1Idx !== -1 && parts[v1Idx + 1]) {
+    const subPath = "/" + parts.slice(v1Idx + 2).join("/");
     return subPath.replace(/\/+$/, "") || "/";
   }
   // Se for chamado via CNAME ou direto na raiz da função
@@ -40,7 +40,7 @@ function stripSlug(path: string): string {
 }
 
 export async function route(req: Request, handlers: Record<string, Handler>): Promise<Response> {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: CORS });
 
   const hdr = (req.headers.get("x-route") || "").trim();
   const rawPath = normalizePath(req.url);

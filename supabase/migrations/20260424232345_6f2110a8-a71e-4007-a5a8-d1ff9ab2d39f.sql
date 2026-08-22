@@ -18,6 +18,7 @@ SELECT
   fee_mode, fee_split_store_percent, billing_mode, monthly_fee, is_donated,
   auto_dropshipping_enabled, dropshipping_review_mode,
   sound_alert_enabled, sound_alert_loud, created_at, updated_at,
+  blocked, blocked_reason, blocked_at, admin_tabs_config, storefront_config,
   -- nova flag: indica se a loja aceita pagamento online (sem expor o token)
   (mercadopago_token IS NOT NULL AND length(mercadopago_token) > 0) AS has_online_payment
 FROM public.tenants;

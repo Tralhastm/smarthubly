@@ -547,27 +547,43 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       // Lógica de Fragmentação Inteligente (Best Price):
       // O sistema agora verifica se os itens do carrinho podem ser atendidos por fornecedores diferentes
       // com base no menor custo detectado na tabela de inteligência de preços.
-      const isDropshipping = (tenant as any).is_dropshipping ?? false;
-      let autoSupplierId: string | null = null;
-      
-      // Se for dropshipping, tentamos identificar se há um fornecedor "vencedor" para o pedido principal
-      // ou se o pedido precisará de fragmentação manual no admin.
-      const itemWithSupplier = items.find(i => (i.product as any).supplier_id);
-      if (itemWithSupplier) autoSupplierId = (itemWithSupplier.product as any).supplier_id;
+      // --- Lógica de Fragmentação por Menor Preço ---
+      const productNames = items.map(i => i.product.name.trim());
+      const { data: supplierPrices } = await supabase
+        .from('supplier_product_prices')
+        .select('supplier_id, product_name, unit_price')
+        .in('product_name', productNames)
+        .eq('available', true);
+
+      const bestSuppliers = new Map<string, { supplier_id: string; price: number }>();
+      (supplierPrices || []).forEach((sp: any) => {
+        const name = sp.product_name.toLowerCase();
+        const cur = bestSuppliers.get(name);
+        if (!cur || sp.unit_price < cur.price) {
+          bestSuppliers.set(name, { supplier_id: sp.supplier_id, price: Number(sp.unit_price) });
+        }
+      });
+
+      const fragments = new Map<string, string[]>();
+      items.forEach(item => {
+        const best = bestSuppliers.get(item.product.name.toLowerCase());
+        const targetSupplierId = best?.supplier_id || (item.product as any).supplier_id;
+        if (targetSupplierId) {
+          const list = fragments.get(targetSupplierId) || [];
+          list.push(item.product.name);
+          fragments.set(targetSupplierId, list);
+        }
+      });
+
+      const supplierIdsInCart = Array.from(fragments.keys());
+      const needsFragmentation = supplierIdsInCart.length > 1;
+      const autoSupplierId = supplierIdsInCart[0] || null;
 
       const initialStatus = simulateApproved
         ? 'received'
         : payOnline
           ? PENDING_PAYMENT_STATUS
-          : ((tenant as any).dropshipping_review_mode && isDropshipping ? 'pending_review' : 'received');
-      
-      // Armazena no metadata do pedido se ele é um candidato a fragmentação (itens de fornecedores diferentes)
-      const supplierIdsInCart = Array.from(new Set(items.map(i => (i.product as any).supplier_id).filter(Boolean)));
-      const needsFragmentation = supplierIdsInCart.length > 1;
-
-      // Salva dados do cliente pra auto-carregar no próximo checkout (e "Meus Pedidos")
-      try { localStorage.setItem('lastCustomer:' + tenant.slug, JSON.stringify({ name, phone, email, address })); } catch { /* ignore */ }
-      try { localStorage.setItem(`lastPhone:${tenant.slug}`, phone.replace(/\D/g, '')); } catch { /* ignore */ }
+          : ((tenant as any).dropshipping_review_mode ? 'pending_review' : 'received');
 
       const orderResult = await addOrderMutation.mutateAsync({
         order: {
@@ -591,7 +607,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           change_for: !payOnline && paymentMethod === 'dinheiro' && changeFor ? parseFloat(changeFor.replace(',', '.')) || 0 : 0,
           metadata: { 
             needs_fragmentation: needsFragmentation,
-            supplier_ids: supplierIdsInCart 
+            supplier_ids: supplierIdsInCart,
+            fragmentation_map: Object.fromEntries(fragments.entries())
           }
         } as any,
         items: items.map(i => ({

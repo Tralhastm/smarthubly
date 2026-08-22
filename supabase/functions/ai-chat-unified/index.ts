@@ -23,4 +23,22 @@ const handlers: Record<string, (req: Request, body?: unknown) => Promise<Respons
   "/": (req) => Promise.resolve(new Response(JSON.stringify({ error: "route_required", available: ["cindy", "cindy-actions", "sofia-agent", "store", "financial", "clara"] }), { status: 400, headers: { "Content-Type": "application/json" } })),
 };
 
-Deno.serve(async (req: Request) => route(req, handlers));
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Max-Age": "86400",
+      },
+    });
+  }
+
+  const res = await route(req, handlers);
+  res.headers.set("Access-Control-Allow-Origin", "*");
+  res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.headers.set("Access-Control-Allow-Headers", "*");
+  return res;
+});

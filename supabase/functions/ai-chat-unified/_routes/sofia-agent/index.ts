@@ -17,7 +17,8 @@ import { generateImageCascade } from "../../../_shared/image-gen.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-route, x-my-custom-header",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 function json(body: unknown, status = 200) {
@@ -247,8 +248,6 @@ Papel atual do usuário: ${role}`;
 }
 
 export async function sofia_agent(req: Request, body?: unknown): Promise<Response> {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
   try {
     const ct = req.headers.get("content-type") || "";
     const parsed: any = body ?? (ct.includes("application/json") ? await req.json().catch(() => ({})) : {});
@@ -630,7 +629,7 @@ Responda apenas com o JSON do plano. Produtos com imagem faltando e visíveis na
     console.error("[unified:sofia-agent] error", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { 
       status: 500, 
-      headers: { ...CORS, 'Content-Type': 'application/json' } 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     });
   }
 }

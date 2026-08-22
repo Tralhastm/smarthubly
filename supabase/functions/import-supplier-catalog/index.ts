@@ -526,11 +526,29 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { supplierId, kind, content, merge = true } = body || {};
+    let { supplierId, supplierName, kind, content, merge = true, priceType = 'both', profitMargin = 0, shippingFee = 0, tenantId } = body || {};
 
-    if (!supplierId || !kind || !content) {
+    if ((!supplierId && !supplierName) || !kind || !content) {
       return json({ error: "missing_fields" }, 400);
     }
+
+    // --- Lógica de Criação Automática de Fornecedor ---
+    if (!supplierId && supplierName && (tenantId || auth.tenantId)) {
+      const tid = tenantId || auth.tenantId;
+      const { data: existing } = await admin.from('suppliers').select('id').eq('tenant_id', tid).ilike('name', supplierName.trim()).single();
+      if (existing) {
+        supplierId = existing.id;
+      } else {
+        const { data: newSup } = await admin.from('suppliers').insert({
+          tenant_id: tid,
+          name: supplierName.trim(),
+          active: true
+        }).select('id').single();
+        supplierId = newSup?.id;
+      }
+    }
+
+    if (!supplierId) return json({ error: "supplier_id_or_name_required" }, 400);
     if (!["pdf", "image", "txt"].includes(kind)) {
       return json({ error: "invalid_kind" }, 400);
     }
@@ -636,6 +654,8 @@ Responda APENAS com JSON no formato: { "items": [...], "warnings": [...] }`;
           product_name: name,
           unit_price: price,
           available: it.available ?? it.disponivel ?? true,
+          price_types: priceType === 'both' ? ['cost', 'resale'] : [priceType],
+          metadata: { profit_margin: profitMargin, shipping_fee: shippingFee }
         });
       }
       return json({ total: items.length, skipped, warnings, items: items.slice(0, 100) });
@@ -656,6 +676,8 @@ Responda APENAS com JSON no formato: { "items": [...], "warnings": [...] }`;
           product_name: name,
           unit_price: price,
           available: it.available ?? it.disponivel ?? true,
+          price_types: priceType === 'both' ? ['cost', 'resale'] : [priceType],
+          metadata: { profit_margin: profitMargin, shipping_fee: shippingFee }
         },
         { onConflict: "supplier_id,product_name" },
       );

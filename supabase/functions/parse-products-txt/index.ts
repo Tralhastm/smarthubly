@@ -356,7 +356,9 @@ async function tryWorker(txtContent: string, workers: AiWorker[], supabase: any)
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
-    const { txtContent } = await req.json();
+    const body = await req.json();
+    const { txtContent, supplierName, priceType, profitMargin, shippingFee, tenantId } = body;
+    
     if (!txtContent || typeof txtContent !== "string") {
       return new Response(JSON.stringify({ error: "txtContent is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -376,7 +378,33 @@ serve(async (req) => {
     const r4 = await tryWorker(txtContent, workers, supabase);
     if (r4) return new Response(JSON.stringify(r4), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+    // --- Nova Lógica de Ingestão com Fornecedor ---
+    let targetSupplierId = null;
+    if (supplierName && tenantId) {
+      // Busca ou cria o fornecedor
+      const { data: existing } = await supabase.from('suppliers').select('id').eq('tenant_id', tenantId).ilike('name', supplierName.trim()).single();
+      if (existing) {
+        targetSupplierId = existing.id;
+      } else {
+        const { data: newSup } = await supabase.from('suppliers').insert({
+          tenant_id: tenantId,
+          name: supplierName.trim(),
+          active: true
+        }).select('id').single();
+        targetSupplierId = newSup?.id;
+      }
+    }
+
     const fallback = parseLocally(txtContent);
+    if (fallback.products) {
+      fallback.products = fallback.products.map(p => ({
+        ...p,
+        supplier_id: targetSupplierId,
+        price_type: priceType || 'both',
+        profit_margin: profitMargin || 0,
+        shipping_fee: shippingFee || 0
+      }));
+    }
     if (fallback.products.length > 0) {
       console.info(`parse-products-txt: IA indisponível, usando parser local (${fallback.products.length} itens)`);
       return new Response(JSON.stringify(fallback), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

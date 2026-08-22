@@ -80,5 +80,5 @@ export function useSubTabs<T extends { id: string; label: string }>(tabId: strin
       const custom = cfg[subTabKey(tabId, d.id)]?.label;
       return custom ? ({ ...d, label: custom } as T) : d;
     });
-  return filtered.length > 0 ? filtered : defs;
+  return filtered;
 }

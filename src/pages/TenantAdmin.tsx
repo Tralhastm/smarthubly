@@ -248,7 +248,13 @@ const TenantAdmin = () => {
 
   // Filtro por modo da loja (mantém a lógica anterior de hide-by-mode).
   const visibleTabs = allTabs.filter(t => {
-    if (tabsConfig[t.id]?.hidden) return false;
+    // PRIORIDADE MÁXIMA: Configuração explícita do Super Admin (admin_tabs_config)
+    if (tabsConfig[t.id]?.hidden === true) {
+      console.log(`[AdminTabs] Ocultando aba ${t.id} por config Super Admin`);
+      return false;
+    }
+    
+    // Se não estiver explicitamente escondido, segue a lógica de modo
     if (isAffiliate) {
       const hidden: Tab[] = ['orders', 'quicksale', 'drivers', 'shipping', 'coupons', 'sales', 'suppliers', 'printer', 'scheduling', 'financial'];
       return !hidden.includes(t.id);
@@ -258,9 +264,11 @@ const TenantAdmin = () => {
     if ((t.id === 'drivers' || t.id === 'shipping') && !hasDelivery) return false;
     if (t.id === 'suppliers' && !hasDropshipping) return false;
     if (t.id === 'consultora' && !isWhatsAppDropshipping) return false;
-    // Features controladas pelo super admin (default: desligadas)
+    
+    // Features controladas pelo super admin via flags específicas (default: desligadas)
     if (t.id === 'scheduling' && !((tenant as any).scheduling_enabled)) return false;
     if (t.id === 'quotes' && !((tenant as any).quotes_feature_enabled)) return false;
+    
     return true;
   }).map(t => (tabsConfig[t.id]?.label ? { ...t, label: tabsConfig[t.id].label as string } : t));
 

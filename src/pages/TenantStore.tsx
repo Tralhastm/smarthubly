@@ -63,18 +63,34 @@ const TenantStore = () => {
     );
   }
 
-  if ((tenant as any).blocked) {
+  if (tenant.active === false || (tenant as any).blocked) {
+    const isBlocked = (tenant as any).blocked;
     const blockedReason = (tenant as any).blocked_reason;
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="text-center max-w-md">
-          <div className="text-5xl mb-4">🚫</div>
-          <h1 className="text-xl font-bold text-foreground mb-2">Loja temporariamente indisponível</h1>
-          <p className="text-muted-foreground text-sm">
-            Esta loja está com o atendimento suspenso no momento.
-            {blockedReason && ` Motivo: ${blockedReason}.`}
-            {' '}Tente novamente mais tarde.
-          </p>
+        <div className="text-center max-w-md p-8 rounded-3xl border-2 border-border bg-card shadow-2xl animate-in zoom-in-95 duration-300">
+          <div className="text-6xl mb-6">{isBlocked ? '🚫' : '🏪'}</div>
+          <h1 className="text-2xl font-bold text-foreground mb-4">
+            {isBlocked ? 'LOJA BLOQUEADA' : 'LOJA INDISPONÍVEL'}
+          </h1>
+          <div className="space-y-4">
+            <p className="text-foreground font-medium">
+              {isBlocked 
+                ? 'Esta loja foi suspensa pela administração da plataforma SmartHubly.'
+                : 'Esta loja está temporariamente fora do ar ou em manutenção.'}
+            </p>
+            {isBlocked && blockedReason && (
+              <div className="p-4 rounded-xl bg-destructive/5 border border-destructive/10 text-left">
+                <p className="text-xs font-bold text-destructive uppercase mb-1">Motivo do Bloqueio:</p>
+                <p className="text-sm text-foreground leading-relaxed">{blockedReason}</p>
+              </div>
+            )}
+            <p className="text-muted-foreground text-xs pt-4 border-t border-border">
+              {isBlocked 
+                ? 'Se você é o proprietário, entre em contato com o suporte para regularizar sua situação.'
+                : 'Tente novamente mais tarde ou entre em contato com o lojista.'}
+            </p>
+          </div>
         </div>
       </div>
     );

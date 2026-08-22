@@ -29,8 +29,6 @@ export const useTenantBySlug = (slug?: string) => {
         .from('tenants_public')
         .select('*')
         .ilike('slug', slug)
-        .eq('active', true)
-        .eq('blocked', false)
         .maybeSingle();
       if (error) throw error;
       return data as Tenant | null;

@@ -18,8 +18,8 @@ interface SofiaChatProps {
   greeting?: string;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat-unified/sofia-agent`;
-const PUBLISHABLE = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const CHAT_URL = `https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/ai-chat-unified/sofia-agent`;
+const PUBLISHABLE = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78';
 
 const SofiaChat = ({
   role = 'visitor',
@@ -93,8 +93,9 @@ const SofiaChat = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: PUBLISHABLE, 'x-route': '/sofia-agent',
-          Authorization: `Bearer ${PUBLISHABLE}`,
+          'Authorization': `Bearer ${PUBLISHABLE}`,
+          'apikey': PUBLISHABLE,
+          'x-route': '/sofia-agent'
         },
         body: JSON.stringify({ messages: next, role, tenantId, supplierId, driverId }),
       });

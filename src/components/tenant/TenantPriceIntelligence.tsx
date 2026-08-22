@@ -152,13 +152,19 @@ const TenantPriceIntelligence = ({ tenantId }: { tenantId: string }) => {
                 toast.loading(`Sincronizando ${targets.length} preços...`);
                 let count = 0;
                 for (const t of targets) {
+                  // Busca o ID do fornecedor pelo nome
+                  const { data: sup } = await supabase.from('suppliers').select('id').eq('tenant_id', tenantId).eq('name', t.best_supplier_name).single();
+                  
+                  const updateData: any = { original_price: t.best_cost };
+                  if (sup) updateData.supplier_id = sup.id;
+
                   const { error } = await supabase
                     .from('products')
-                    .update({ original_price: t.best_cost } as any)
+                    .update(updateData)
                     .eq('id', t.product_id);
                   if (!error) count++;
                 }
-                toast.success(`${count} preços atualizados com sucesso!`);
+                toast.success(`${count} preços e fornecedores atualizados com sucesso!`);
                 fetchData();
               }}
               className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full hover:bg-primary/20 font-bold transition-colors"

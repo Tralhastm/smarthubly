@@ -17,8 +17,8 @@ type CindyAction =
   | { tool: 'gen-post'; payload: Record<string, unknown>; result?: any }
   | { tool: 'reply-ticket'; payload: { ticketId: string; content: string; setResolved?: boolean }; result?: any };
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat-unified/cindy`;
-const ACTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat-unified/cindy-actions`;
+const CHAT_URL = `https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/ai-chat-unified/cindy`;
+const ACTIONS_URL = `https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/ai-chat-unified/cindy-actions`;
 
 const GREETING = 'Opa Erick — sou a Cindy, sua copiloto do super admin. Vejo todas as lojas, pedidos rolando agora, faturamento, cobranças e saúde da IA. Posso gerar posts de marketing e responder chamados por você — é só pedir.';
 
@@ -140,8 +140,9 @@ const CindyChat = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, 'x-route': '/cindy',
-          Authorization: `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78',
+          'x-route': '/cindy'
         },
         body: JSON.stringify({ messages: next }),
       });
@@ -203,8 +204,9 @@ const CindyChat = () => {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, 'x-route': '/cindy',
-                Authorization: `Bearer ${tok}`
+                'Authorization': `Bearer ${tok}`,
+                'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78',
+                'x-route': '/cindy'
               },
               body: JSON.stringify(action.payload),
             });

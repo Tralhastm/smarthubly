@@ -354,12 +354,12 @@ async function tryWorker(txtContent: string, workers: AiWorker[], supabase: any)
 }
 
 export async function parse_txt(req: Request, body?: unknown): Promise<Response> {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const ct = req.headers.get("content-type") || "";
-    const parsed: any = body ?? (ct.includes("application/json") ? await req.json() : {});
-if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  try {
-    const { txtContent } = await req.json();
+    const payload: any = body ?? (ct.includes("application/json") ? await req.json() : {});
+    const { txtContent, supplierName, priceType, profitMargin, shippingFee, tenantId } = payload;
+    
     if (!txtContent || typeof txtContent !== "string") {
       return new Response(JSON.stringify({ error: "txtContent is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -367,22 +367,51 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
     const supabase = getSupabaseAdmin();
     const [keys, workers] = await Promise.all([getGoogleKeys(supabase), getAiWorkers(supabase)]);
 
+    // --- Lógica de Fornecedor (pré-processamento) ---
+    let targetSupplierId = null;
+    if (supplierName && tenantId) {
+      const { data: existing } = await supabase.from('suppliers').select('id').eq('tenant_id', tenantId).ilike('name', supplierName.trim()).single();
+      if (existing) {
+        targetSupplierId = existing.id;
+      } else {
+        const { data: newSup } = await supabase.from('suppliers').insert({
+          tenant_id: tenantId,
+          name: supplierName.trim(),
+          active: true
+        }).select('id').single();
+        targetSupplierId = newSup?.id;
+      }
+    }
+
+    const injectSupplier = (result: any) => {
+      if (result && result.products) {
+        result.products = result.products.map((p: any) => ({
+          ...p,
+          supplier_id: targetSupplierId,
+          price_type: priceType || 'both',
+          profit_margin: profitMargin || 0,
+          shipping_fee: shippingFee || 0
+        }));
+      }
+      return result;
+    };
+
     const r1 = await tryGoogle(txtContent, keys, supabase);
-    if (r1) return new Response(JSON.stringify(r1), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (r1) return new Response(JSON.stringify(injectSupplier(r1)), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const r2 = await tryLovable(txtContent);
-    if (r2) return new Response(JSON.stringify(r2), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (r2) return new Response(JSON.stringify(injectSupplier(r2)), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const r3 = await tryOpenRouter(txtContent);
-    if (r3) return new Response(JSON.stringify(r3), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (r3) return new Response(JSON.stringify(injectSupplier(r3)), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const r4 = await tryWorker(txtContent, workers, supabase);
-    if (r4) return new Response(JSON.stringify(r4), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (r4) return new Response(JSON.stringify(injectSupplier(r4)), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const fallback = parseLocally(txtContent);
     if (fallback.products.length > 0) {
       console.info(`parse-products-txt: IA indisponível, usando parser local (${fallback.products.length} itens)`);
-      return new Response(JSON.stringify(fallback), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify(injectSupplier(fallback)), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({ error: "Não consegui interpretar esse TXT nem com IA nem com leitura local. Verifique se cada item termina com preço, por exemplo: Nome - R$ 35,00" }), { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } });

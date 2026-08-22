@@ -63,8 +63,8 @@ const AdminTabsConfigEditor = ({ value, onChange }: { value: TabsConfig; onChang
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const set = (id: string, patch: { hidden?: boolean; label?: string }) => {
+    // Força a persistência do estado 'hidden' no objeto
     const next = { ...value, [id]: { ...(value[id] || {}), ...patch } };
-    if (!next[id].hidden && !next[id].label) delete next[id];
     onChange(next);
   };
   const groups = Array.from(new Set(ADMIN_TABS.map(t => t.group)));
