@@ -89,17 +89,17 @@ const SofiaChat = ({
     };
 
     try {
-      console.log("[SofiaChat] enviando fetch para:", CHAT_URL);
+      const SUPABASE_URL = "https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/ai-chat-unified/sofia-agent";
+      console.log("[SofiaChat] enviando fetch para:", SUPABASE_URL);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const resp = await fetch(CHAT_URL, {
+      const resp = await fetch(SUPABASE_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${PUBLISHABLE}`,
-          'apikey': PUBLISHABLE,
-          'x-route': '/sofia-agent'
+          'apikey': PUBLISHABLE
         },
         body: JSON.stringify({ messages: next, role, tenantId, supplierId, driverId }),
         signal: controller.signal
