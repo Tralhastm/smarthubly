@@ -581,7 +581,7 @@ const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCan
               {products.map(p => (
                 <div key={p.id} className="flex items-center justify-between text-xs bg-secondary rounded-md px-2 py-1.5">
                   <span className="text-foreground">{p.name}</span>
-                  <span className="text-primary font-medium">R${p.price.toFixed(2)}</span>
+	                  <span className="text-primary font-medium">R${(Number(p.price) || 0).toFixed(2)}</span>
                 </div>
               ))}
             </div>

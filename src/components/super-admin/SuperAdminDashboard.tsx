@@ -7,12 +7,12 @@ const SuperAdminDashboard = () => {
   const { data: orders = [], isLoading } = useAllOrders({ refetchInterval: 30000 });
 
   const activeTenants = tenants.filter(t => t.active);
-  const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
-  const totalPlatformFees = orders.reduce((s, o) => s + o.platform_fee, 0);
+  const totalRevenue = orders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+  const totalPlatformFees = orders.reduce((s, o) => s + (Number(o.platform_fee) || 0), 0);
 
   const today = new Date().toDateString();
   const todayOrders = orders.filter(o => new Date(o.created_at).toDateString() === today);
-  const todayFees = todayOrders.reduce((s, o) => s + o.platform_fee, 0);
+  const todayFees = todayOrders.reduce((s, o) => s + (Number(o.platform_fee) || 0), 0);
 
   const stats = [
     { label: 'Comércios Ativos', value: activeTenants.length, icon: <Store className="h-5 w-5" />, sub: `${tenants.length} total` },

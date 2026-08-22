@@ -231,6 +231,15 @@ export async function callAiJson<T = any>(supabase: any, opts: AiCallOptions): P
   return JSON.parse(m[0]);
 }
 
+export async function _callAiJson<T = any>(supabase: any, opts: AiCallOptions): Promise<T> {
+  return callAiJson(supabase, opts);
+}
+
+export async function _callAiVisionJson<T = any>(supabase: any, opts: any): Promise<T> {
+  // Vision logic delegada para o fallback se suportado ou erro
+  return callAiJson(supabase, { ...opts, model: "google/gemini-2.0-flash" });
+}
+
 export async function callAiStream(supabase: any, opts: AiCallOptions) {
   const { systemPrompt, messages = [], temperature = 0.7, maxTokens = 1000 } = opts;
   const corsHeaders = {

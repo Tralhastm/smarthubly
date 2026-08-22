@@ -18,10 +18,16 @@ export const useProducts = (tenantId?: string) => {
       // The real fix is migrating to storage, but this prevents repeated download of multi-MB rows.
       const cleaned = (data as Product[]).map((p) => {
         const img = (p as any).image as string | null;
+        const normalized = {
+          ...p,
+          price: Number(p.price) || 0,
+          original_price: Number((p as any).original_price) || 0,
+          stock_quantity: (p as any).stock_quantity != null ? Number((p as any).stock_quantity) : null,
+        };
         if (img && img.startsWith('data:') && img.length > 100_000) {
-          return { ...p, image: '' } as Product;
+          return { ...normalized, image: '' } as Product;
         }
-        return p;
+        return normalized as Product;
       });
       return cleaned;
     },

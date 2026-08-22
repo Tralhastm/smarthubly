@@ -107,10 +107,10 @@ export async function catalog(req: Request, body?: any): Promise<Response> {
     let imageData: { data: string; mimeType: string } | undefined;
 
     if (kind === "pdf") {
-      return json({ 
-        error: "pdf_not_supported", 
-        hint: "O processamento direto de PDF está em manutenção. Por favor, envie o catálogo como imagem ou copie o texto e envie como TXT." 
-      }, 400);
+      // PDF handling: pass as document to AI or text if possible. 
+      // For now, treat as text/binary if short, or vision if we have a bridge.
+      // Re-enabling with vision fallback.
+      imageData = { data: content, mimeType: "application/pdf" };
     } else if (kind === "image") {
       let b64 = content;
       let mimeType = "image/png";

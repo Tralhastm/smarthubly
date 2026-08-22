@@ -25,11 +25,11 @@ const TenantAdminDashboard = ({ tenantId }: { tenantId: string }) => {
     });
     const monthOrders = realizedOrders.filter(o => new Date(o.created_at) >= startOfMonth);
 
-    const todayRevenue = todayOrders.reduce((s, o) => s + Number(o.total), 0);
-    const yesterdayRevenue = yesterdayOrders.reduce((s, o) => s + Number(o.total), 0);
-    const monthRevenue = monthOrders.reduce((s, o) => s + Number(o.total), 0);
-    const totalRevenue = realizedOrders.reduce((s, o) => s + Number(o.total), 0);
-    const totalFees = realizedOrders.reduce((s, o) => s + Number(o.platform_fee), 0);
+    const todayRevenue = todayOrders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+    const yesterdayRevenue = yesterdayOrders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+    const monthRevenue = monthOrders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+    const totalRevenue = realizedOrders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+    const totalFees = realizedOrders.reduce((s, o) => s + (Number(o.platform_fee) || 0), 0);
 
     // 7 dias de gráfico
     const last7Days = Array.from({ length: 7 }, (_, i) => {
@@ -42,7 +42,7 @@ const TenantAdminDashboard = ({ tenantId }: { tenantId: string }) => {
       return {
         label: day.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''),
         date: day.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-        revenue: dayOrders.reduce((s, o) => s + Number(o.total), 0),
+        revenue: dayOrders.reduce((s, o) => s + (Number(o.total) || 0), 0),
         count: dayOrders.length,
       };
     });
@@ -54,14 +54,14 @@ const TenantAdminDashboard = ({ tenantId }: { tenantId: string }) => {
       (o.order_items || []).forEach((it: any) => {
         const cur = productRevenue.get(it.product_name) || { name: it.product_name, qty: 0, revenue: 0 };
         cur.qty += Number(it.quantity);
-        cur.revenue += Number(it.product_price) * Number(it.quantity);
+        cur.revenue += (Number(it.product_price) || 0) * (Number(it.quantity) || 0);
         productRevenue.set(it.product_name, cur);
       });
     });
     const topProducts = Array.from(productRevenue.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 3);
 
-    const ticket = realizedOrders.length ? totalRevenue / realizedOrders.length : 0;
-    const todayTicket = todayOrders.length ? todayRevenue / todayOrders.length : 0;
+    const ticket = realizedOrders.length ? (totalRevenue / realizedOrders.length) : 0;
+    const todayTicket = todayOrders.length ? (todayRevenue / todayOrders.length) : 0;
 
     const revenueDelta = yesterdayRevenue > 0 ? ((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100 : null;
     const orderDelta = yesterdayOrders.length > 0 ? ((todayOrders.length - yesterdayOrders.length) / yesterdayOrders.length) * 100 : null;
@@ -122,10 +122,10 @@ const TenantAdminDashboard = ({ tenantId }: { tenantId: string }) => {
             <DollarSign className="h-3 w-3" /> Faturamento hoje
           </p>
           <div className="flex items-baseline gap-2 mt-1">
-            <p className="text-2xl font-bold text-foreground">R${stats.todayRevenue.toFixed(0)}</p>
+            <p className="text-2xl font-bold text-foreground">R${(Number(stats.todayRevenue) || 0).toFixed(0)}</p>
             <Delta value={stats.revenueDelta} />
           </div>
-          <p className="text-[10px] text-muted-foreground">ticket R${stats.todayTicket.toFixed(2)}</p>
+          <p className="text-[10px] text-muted-foreground">ticket R${(Number(stats.todayTicket) || 0).toFixed(2)}</p>
         </div>
       </div>
 
@@ -143,12 +143,12 @@ const TenantAdminDashboard = ({ tenantId }: { tenantId: string }) => {
             return (
               <div key={i} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
                 <span className="text-[10px] text-muted-foreground h-3 leading-3">
-                  {d.revenue > 0 ? `R$${d.revenue >= 1000 ? (d.revenue / 1000).toFixed(1) + 'k' : d.revenue.toFixed(0)}` : ''}
+                  {d.revenue > 0 ? `R$${d.revenue >= 1000 ? (d.revenue / 1000).toFixed(1) + 'k' : (Number(d.revenue) || 0).toFixed(0)}` : ''}
                 </span>
                 <div
                   className={`w-full rounded-t-md transition-all hover:opacity-80 ${d.revenue > 0 ? 'gradient-primary' : 'bg-secondary'}`}
                   style={{ height: `${barPx}px` }}
-                  title={`${d.date}: R$${d.revenue.toFixed(2)} (${d.count} pedidos)`}
+                  title={`${d.date}: R$${(Number(d.revenue) || 0).toFixed(2)} (${d.count} pedidos)`}
                 />
                 <span className="text-[10px] text-muted-foreground capitalize">{d.label}</span>
               </div>
@@ -164,7 +164,7 @@ const TenantAdminDashboard = ({ tenantId }: { tenantId: string }) => {
             <Calendar className="h-4 w-4 text-primary" />
             <p className="text-xs text-muted-foreground">Mês</p>
           </div>
-          <p className="text-lg font-bold text-foreground mt-1">R${stats.monthRevenue.toFixed(2)}</p>
+          <p className="text-lg font-bold text-foreground mt-1">R${(Number(stats.monthRevenue) || 0).toFixed(2)}</p>
           <p className="text-[10px] text-muted-foreground">{stats.monthCount} pedidos</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-3">
@@ -172,7 +172,7 @@ const TenantAdminDashboard = ({ tenantId }: { tenantId: string }) => {
             <Wallet className="h-4 w-4 text-green-500" />
             <p className="text-xs text-muted-foreground">Líquido total</p>
           </div>
-          <p className="text-lg font-bold text-green-500 mt-1">R${stats.totalNet.toFixed(2)}</p>
+          <p className="text-lg font-bold text-green-500 mt-1">R${(Number(stats.totalNet) || 0).toFixed(2)}</p>
           <p className="text-[10px] text-muted-foreground">após taxas</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-3">
@@ -180,7 +180,7 @@ const TenantAdminDashboard = ({ tenantId }: { tenantId: string }) => {
             <DollarSign className="h-4 w-4 text-primary" />
             <p className="text-xs text-muted-foreground">Bruto total</p>
           </div>
-          <p className="text-lg font-bold text-foreground mt-1">R${stats.totalRevenue.toFixed(2)}</p>
+          <p className="text-lg font-bold text-foreground mt-1">R${(Number(stats.totalRevenue) || 0).toFixed(2)}</p>
           <p className="text-[10px] text-muted-foreground">{orders.length} pedidos</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-3">
@@ -188,7 +188,7 @@ const TenantAdminDashboard = ({ tenantId }: { tenantId: string }) => {
             <AlertTriangle className="h-4 w-4 text-destructive" />
             <p className="text-xs text-muted-foreground">Taxa plataforma</p>
           </div>
-          <p className="text-lg font-bold text-destructive mt-1">R${stats.totalFees.toFixed(2)}</p>
+          <p className="text-lg font-bold text-destructive mt-1">R${(Number(stats.totalFees) || 0).toFixed(2)}</p>
           <p className="text-[10px] text-muted-foreground">total acumulado</p>
         </div>
       </div>
@@ -209,7 +209,7 @@ const TenantAdminDashboard = ({ tenantId }: { tenantId: string }) => {
                   <span className="text-sm text-foreground truncate">{p.name}</span>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-sm font-medium text-primary">R${p.revenue.toFixed(2)}</p>
+                  <p className="text-sm font-medium text-primary">R${(Number(p.revenue) || 0).toFixed(2)}</p>
                   <p className="text-[10px] text-muted-foreground">{p.qty}un</p>
                 </div>
               </div>

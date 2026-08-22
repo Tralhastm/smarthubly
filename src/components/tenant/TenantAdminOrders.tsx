@@ -273,7 +273,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
       if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message || 'Erro Lalamove');
       await supabase.from('orders').update({ status: 'out-for-delivery', kds_status: 'done' } as any).eq('id', orderId);
       queryClient.invalidateQueries({ queryKey: ['orders', tenantId] });
-      toast.success(`✅ Lalamove acionada! Preço: R$${(data as any).price || '?'}`, { id: toastId, duration: 6000 });
+      toast.success(`✅ Lalamove acionada! Preço: R$${(Number((data as any).price) || 0).toFixed(2)}`, { id: toastId, duration: 6000 });
     } catch (e: any) {
       const isTimeout = /timeout/i.test(e.message || '');
       toast.error(
@@ -407,7 +407,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
                   </div>
                 );
               })()}
-              {order.delivery_type === 'delivery' && order.distance != null && <p className="text-xs mt-0.5">📏 {order.distance} km · Taxa: R${order.delivery_fee.toFixed(2)}</p>}
+              {order.delivery_type === 'delivery' && order.distance != null && <p className="text-xs mt-0.5">📏 {order.distance} km · Taxa: R${(Number(order.delivery_fee) || 0).toFixed(2)}</p>}
               <p className="mt-1 flex items-center gap-2 flex-wrap">
                 <span>{order.delivery_type === 'delivery' ? '🚗 Entrega' : '🏪 Retirada'} · 💳 <strong className="text-foreground">{order.payment_method}</strong></span>
                 {(order as any).payment_received || /mercadopago/i.test(order.payment_method) ? (
@@ -432,9 +432,9 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
                 )}
               </p>
               {(order as any).change_for > 0 && /dinheiro|cash/i.test(order.payment_method || '') && (
-                <p className="text-xs mt-0.5 text-yellow-400 font-medium">💵 Troco para R${(order as any).change_for.toFixed(2)} (levar R${((order as any).change_for - order.total).toFixed(2)} de troco)</p>
+                <p className="text-xs mt-0.5 text-yellow-400 font-medium">💵 Troco para R${(Number((order as any).change_for) || 0).toFixed(2)} (levar R${(Math.max(0, (Number((order as any).change_for) || 0) - (Number(order.total) || 0))).toFixed(2)} de troco)</p>
               )}
-              <p className="text-xs mt-0.5 text-primary">Taxa plataforma: R${order.platform_fee.toFixed(2)}</p>
+              <p className="text-xs mt-0.5 text-primary">Taxa plataforma: R${(Number(order.platform_fee) || 0).toFixed(2)}</p>
               {assignedDriver && (
                 <p className="text-xs mt-0.5 flex items-center gap-1 text-orange-400">
                   <User className="h-3 w-3" /> Motoboy: {assignedDriver.name}
@@ -464,7 +464,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
                         {(order as any).lalamove_driver_name && (
                           <p className="text-muted-foreground">Motoboy: {(order as any).lalamove_driver_name} · {(order as any).lalamove_driver_phone} · Placa {(order as any).lalamove_driver_plate}</p>
                         )}
-                        {(order as any).lalamove_price && <p className="text-muted-foreground">Custo Lalamove: R${Number((order as any).lalamove_price).toFixed(2)}</p>}
+                        {(order as any).lalamove_price && <p className="text-muted-foreground">Custo Lalamove: R${(Number((order as any).lalamove_price) || 0).toFixed(2)}</p>}
                         {(order as any).lalamove_share_link && (
                           <a href={(order as any).lalamove_share_link} target="_blank" rel="noreferrer" className="text-primary underline">Acompanhar entrega →</a>
                         )}
@@ -501,12 +501,12 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
               {order.order_items.map(i => (
                 <div key={i.id} className="flex justify-between text-muted-foreground">
                   <span>{i.quantity}x {i.product_name}</span>
-                  <span>R${(i.product_price * i.quantity).toFixed(2)}</span>
+                  <span>R${(Number(i.product_price || 0) * Number(i.quantity || 1)).toFixed(2)}</span>
                 </div>
               ))}
               <div className="flex justify-between font-bold text-foreground border-t border-border pt-1">
                 <span>Total</span>
-                <span className="text-primary">R${order.total.toFixed(2)}</span>
+                <span className="text-primary">R${(Number(order.total) || 0).toFixed(2)}</span>
               </div>
             </div>
 

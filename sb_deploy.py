@@ -54,14 +54,10 @@ def deploy_function(slug, project_ref, token, entrypoint_path):
         print(res.text)
 
 if __name__ == "__main__":
-    TOKEN = "sbp_fbb1f4879b22f2fa59eb35cdd514b8251a3a18bc"
+    TOKEN = "sbp_a6224b87903a42bfffe67c2cf1083fc1e33b124f"
     REF = "qbcplbcdxoyqpmcehnvu"
     
-    # Sofia Agent
-    deploy_function("sofia-agent", REF, TOKEN, "supabase/functions/sofia-agent/index.ts")
-    # Clara Agent
-    deploy_function("clara-agent", REF, TOKEN, "supabase/functions/clara-agent/index.ts")
-    # Cindy Agent
-    deploy_function("cindy-agent", REF, TOKEN, "supabase/functions/cindy-agent/index.ts")
-    # Store Agent
-    deploy_function("store-agent", REF, TOKEN, "supabase/functions/store-agent/index.ts")
+    # Unified Chat (Sofia, Clara, Cindy, WhatsApp Bot)
+    deploy_function("ai-chat-unified", REF, TOKEN, "/home/ubuntu/ProjectCompanion_v2/supabase/functions/ai-chat-unified/index.ts")
+    # Unified Media (Catalog, Vision, Generate)
+    deploy_function("ai-media-unified", REF, TOKEN, "/home/ubuntu/ProjectCompanion_v2/supabase/functions/ai-media-unified/index.ts")

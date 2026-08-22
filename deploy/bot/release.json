@@ -1,5 +1,6 @@
 {
-  "versao": "6.2",
-  "url": "https://smarthubly.pages.dev/bot/botv6.2.zip",
-  "notas": "v6.2 — excluir/cancelar com prioridade máxima, sanidade rejeita medidas absurdas (local e IA), IA classifica cancelamentos."
+  "versao": "v6.3.2",
+  "url": "https://smarthubly.pages.dev/bot/botv6.3.2.zip",
+  "data": "2026-08-22T22:35:00Z",
+  "notas": "Humanização completa: remoção de loops rígidos e conversa fluída via IA ativada."
 }

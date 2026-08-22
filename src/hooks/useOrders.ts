@@ -23,7 +23,13 @@ export const useOrders = (tenantId?: string) => {
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return ((data as OrderWithItems[]) || []).filter(isVisibleOrder);
+      return ((data as OrderWithItems[]) || []).filter(isVisibleOrder).map(o => ({
+        ...o,
+        delivery_fee: Number(o.delivery_fee) || 0,
+        platform_fee: Number(o.platform_fee) || 0,
+        total: Number(o.total) || 0,
+        discount_amount: Number(o.discount_amount) || 0
+      }));
     },
     enabled: !!tenantId,
     // Polling lento de fallback (caso o WebSocket caia). Realtime cuida do tempo real.
@@ -93,7 +99,13 @@ export const useAllOrders = ({ includeItems = false, refetchInterval = 30000 }: 
         : supabase.from('orders').select('*').order('created_at', { ascending: false });
       const { data, error } = await query;
       if (error) throw error;
-      return ((data as unknown as OrderWithItems[]) || []).filter(isVisibleOrder);
+      return ((data as unknown as OrderWithItems[]) || []).filter(isVisibleOrder).map(o => ({
+        ...o,
+        delivery_fee: Number(o.delivery_fee) || 0,
+        platform_fee: Number(o.platform_fee) || 0,
+        total: Number(o.total) || 0,
+        discount_amount: Number(o.discount_amount) || 0
+      }));
     },
     refetchInterval,
     refetchIntervalInBackground: false,

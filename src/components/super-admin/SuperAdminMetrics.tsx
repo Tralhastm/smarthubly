@@ -12,8 +12,8 @@ const SuperAdminMetrics = () => {
 
   const tenantMetrics = tenants.map(t => {
     const tenantOrders = orders.filter(o => o.tenant_id === t.id);
-    const revenue = tenantOrders.reduce((s, o) => s + o.total, 0);
-    const fees = tenantOrders.reduce((s, o) => s + o.platform_fee, 0);
+    const revenue = tenantOrders.reduce((s, o) => s + (Number(o.total) || 0), 0);
+    const fees = tenantOrders.reduce((s, o) => s + (Number(o.platform_fee) || 0), 0);
     const isDonated = (t as any).is_donated ?? false;
     return { ...t, orderCount: tenantOrders.length, revenue, fees, isDonated };
   }).sort((a, b) => b.revenue - a.revenue);
