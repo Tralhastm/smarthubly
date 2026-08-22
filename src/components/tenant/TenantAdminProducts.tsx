@@ -279,18 +279,33 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.name.endsWith('.txt')) { toast.error('Selecione um arquivo .txt'); return; }
+    
+    const isText = file.type === 'text/plain' || file.name.endsWith('.txt');
+    const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+    const isImage = file.type.startsWith('image/');
 
-    const text = await file.text();
-    if (!text.trim()) { toast.error('Arquivo vazio'); return; }
+    if (!isText && !isPdf && !isImage) {
+      toast.error('Formato não suportado. Use TXT, PDF ou Imagem (PNG/JPG).');
+      return;
+    }
 
-    // Salva o texto e abre a tela de configuração (fornecedor + custo/revenda) antes de processar
-    setImportRawText(text);
     setImportFileName(file.name);
     setImportSupplierName('');
     setImportPriceType('resale');
     setImportSupplierId(null);
     setImportCancelled(false);
+    
+    if (isText) {
+      const text = await file.text();
+      if (!text.trim()) { toast.error('Arquivo vazio'); return; }
+      setImportRawText(text);
+      (window as any)._importFile = null;
+    } else {
+      // Para PDF/Imagem, guardamos o arquivo para upload multipart no step seguinte
+      setImportRawText('[Arquivo Binário: PDF/Imagem]');
+      (window as any)._importFile = file;
+    }
+
     setImportStep('config');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -299,14 +314,45 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const handleStartParsing = async () => {
     setImportStep('parsing');
     try {
-      const { data, error } = await unifiedInvoke("ai-media-unified", "parse-txt", { 
-        txtContent: importRawText,
-        supplierName: importSupplierName,
-        priceType: importPriceType,
-        profitMargin: parseFloat(importProfitMargin) || 0,
-        shippingFee: parseFloat(importShippingFee) || 0,
-        tenantId,
-      });
+      const file = (window as any)._importFile;
+      let result;
+      
+      if (file) {
+        // Fluxo Binário (PDF/Imagem)
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('supplierName', importSupplierName);
+        formData.append('priceType', importPriceType);
+        formData.append('profitMargin', String(importProfitMargin));
+        formData.append('shippingFee', String(importShippingFee));
+        formData.append('tenantId', tenantId);
+
+        // Usamos a Management API ou endpoint direto para multipart
+        const { data: { session } } = await supabase.auth.getSession();
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-media-unified/catalog`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session?.access_token || ''}` },
+          body: formData
+        });
+        
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ error: 'Erro no processamento do arquivo' }));
+          throw new Error(err.error || `Erro HTTP ${response.status}`);
+        }
+        result = { data: await response.json() };
+      } else {
+        // Fluxo TXT original
+        result = await unifiedInvoke("ai-media-unified", "parse-txt", { 
+          txtContent: importRawText,
+          supplierName: importSupplierName,
+          priceType: importPriceType,
+          profitMargin: parseFloat(importProfitMargin) || 0,
+          shippingFee: parseFloat(importShippingFee) || 0,
+          tenantId,
+        });
+      }
+
+      const { data, error } = result;
 
       if (error) {
         const status = (error as any)?.status;
@@ -329,11 +375,19 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         return;
       }
 
-      // Resolve (ou cria) o fornecedor informado
+      // IA: Se o arquivo veio com fornecedor, associa automaticamente
+      // Caso contrário, usa o fornecedor informado no formulário
       const supplierId = await resolveImportSupplier(importSupplierName);
       setImportSupplierId(supplierId);
 
-      setParsedProducts(data.products);
+      // Associa o fornecedor a cada produto parseado para exibição no preview
+      const productsWithSupplier = data.products.map((p: any) => ({
+        ...p,
+        supplier_id: supplierId,
+        supplier_name: importSupplierName
+      }));
+
+      setParsedProducts(productsWithSupplier);
       setImportStep('preview');
     } catch (err) {
       console.error(err);
@@ -365,7 +419,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       if (importCancelled) break;
       const p = uniqueParsed[i];
       try {
-        const isCost = importPriceType === 'cost';
+        const isCost = importPriceType === 'cost' || importPriceType === 'both';
         const shipping = parseFloat(importShippingFee) || 0;
         const margin = parseFloat(importProfitMargin) || 0;
         
@@ -383,26 +437,24 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           .maybeSingle();
 
         if (existing) {
-          // Lógica de Melhor Preço: 
-          // Se o novo preço de custo for menor que o atual, atualiza o fornecedor principal e o preço.
-          const currentCost = existing.original_price || 0;
-          const shouldUpdateMain = isCost && (currentCost === 0 || original_price < currentCost);
-
+          // Requisito: "valor de revenda N MUDARIA MAS IRIA TER UM ALERTA SOBRE A MARGEM DE LUCRO"
+          // Para produtos existentes, não alteramos o 'price' (revenda) da tabela products.
           const updateData: any = {
             updated_at: new Date().toISOString(),
           };
           
-          if (shouldUpdateMain) {
+          // Se for custo, atualizamos o custo original se for menor (melhor preço)
+          const currentCost = existing.original_price || 0;
+          if (isCost && (currentCost === 0 || original_price < currentCost)) {
             updateData.original_price = original_price;
-            updateData.price = price; // Atualiza a revenda com a nova margem do fornecedor mais barato
             updateData.supplier_id = currentSupplierId;
-            // Melhora a descrição se a nova for maior/melhor
-            if (p.description && (!existing.description || p.description.length > existing.description.length)) {
-              updateData.description = p.description;
+            
+            // Alerta de margem (apenas log/console por enquanto conforme pedido)
+            const currentResale = parseFloat(existing.price?.toString() || '0');
+            const newMargin = currentResale > 0 ? ((currentResale - original_price) / original_price) * 100 : 0;
+            if (newMargin < margin) {
+              console.log(`[Import] Margem baixa para ${p.name}: ${newMargin.toFixed(1)}%`);
             }
-          } else if (!isCost) {
-            updateData.price = price;
-            updateData.supplier_id = currentSupplierId;
           }
 
           await supabase.from('products').update(updateData).eq('id', existing.id);
@@ -634,8 +686,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           <Plus className="h-4 w-4" /> Novo Produto
         </button>
         <button onClick={() => fileInputRef.current?.click()} disabled={importStep !== 'idle'}
-          className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50">
-          <FileText className="h-4 w-4" /> Importar TXT
+          className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50"
+          title="Importe catálogos em TXT, PDF ou Imagem. A IA extrairá os produtos e preços automaticamente.">
+          <FileText className="h-4 w-4" /> Importar Catálogo (IA)
         </button>
         <button onClick={handleDeleteAll} disabled={deletingAll}
           className="flex items-center gap-2 rounded-lg bg-destructive text-destructive-foreground px-4 py-2 text-sm font-medium hover:bg-destructive/90 disabled:opacity-50">
@@ -699,7 +752,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             Apagar todos os produtos ({products.length})
           </button>
         )}
-        <input ref={fileInputRef} type="file" accept=".txt" className="hidden" onChange={handleFileSelect} />
+        <input ref={fileInputRef} type="file" accept=".txt,.pdf,.png,.jpg,.jpeg" className="hidden" onChange={handleFileSelect} />
       </div>
 
       {/* Affiliate URL importer (only in affiliate mode) */}
@@ -1103,28 +1156,47 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
   const pendingReq = feeRequests.find(r => r.status === 'pending');
 
   // Preços de outros fornecedores para este produto
-  const [otherPrices, setOtherPrices] = useState<{ supplier_id: string; supplier_name: string; unit_price: number; price_types: string[] }[]>([]);
+  const [otherPrices, setOtherPrices] = useState<{ supplier_id: string; supplier_name: string; unit_price: number; price_types: string[]; description?: string; variations?: any }[]>([]);
   const [loadingPrices, setLoadingPrices] = useState(false);
 
+  const fetchPrices = useCallback(() => {
+    if (!product.name) return;
+    setLoadingPrices(true);
+    supabase
+      .from('supplier_product_prices')
+      .select('supplier_id, unit_price, price_types, description, variations, suppliers(name)')
+      .ilike('product_name', product.name.trim())
+      .eq('available', true)
+      .then(({ data }) => {
+        setOtherPrices((data || []).map((d: any) => ({
+          supplier_id: d.supplier_id,
+          supplier_name: d.suppliers?.name || 'Fornecedor',
+          unit_price: Number(d.unit_price),
+          price_types: Array.isArray(d.price_types) ? d.price_types : [],
+          description: d.description,
+          variations: d.variations,
+        })));
+        setLoadingPrices(false);
+      });
+  }, [product.name]);
+
   useEffect(() => {
-    if (activeSubTab === 'suppliers' && product.name) {
-      setLoadingPrices(true);
-      supabase
-        .from('supplier_product_prices')
-        .select('supplier_id, unit_price, price_types, suppliers(name)')
-        .ilike('product_name', product.name.trim())
-        .eq('available', true)
-        .then(({ data }) => {
-          setOtherPrices((data || []).map((d: any) => ({
-            supplier_id: d.supplier_id,
-            supplier_name: d.suppliers?.name || 'Fornecedor',
-            unit_price: Number(d.unit_price),
-            price_types: Array.isArray(d.price_types) ? d.price_types : [],
-          })));
-          setLoadingPrices(false);
-        });
+    if (activeSubTab === 'suppliers') fetchPrices();
+  }, [activeSubTab, fetchPrices]);
+
+  const handleDissociate = async (supplierId: string) => {
+    const { error } = await supabase
+      .from('supplier_product_prices')
+      .delete()
+      .eq('supplier_id', supplierId)
+      .ilike('product_name', product.name.trim());
+    
+    if (error) toast.error('Erro ao desassociar fornecedor');
+    else {
+      toast.success('Fornecedor desassociado');
+      fetchPrices();
     }
-  }, [activeSubTab, product.name]);
+  };
 
   const handleGenerateDesc = async () => {
     if (generatingDesc) return;
@@ -1282,11 +1354,18 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
                     </div>
                     <div className="text-right flex items-center gap-2">
                       <span className={`text-xs font-mono font-bold ${idx === 0 ? 'text-emerald-400' : 'text-foreground'}`}>R$ {op.unit_price.toFixed(2)}</span>
-                      {op.supplier_id !== form.supplier_id ? (
-                        <button type="button" onClick={() => setForm({ ...form, supplier_id: op.supplier_id, original_price: op.unit_price } as any)} className="text-[10px] bg-primary text-primary-foreground px-2 py-1 rounded hover:opacity-90">Usar este</button>
-                      ) : (
-                        <span className="text-[10px] text-primary font-bold">Principal</span>
-                      )}
+                      <div className="flex gap-1">
+                        {op.supplier_id !== form.supplier_id ? (
+                          <button type="button" onClick={() => setForm({ ...form, supplier_id: op.supplier_id, original_price: op.unit_price } as any)} 
+                            className="text-[10px] bg-primary text-primary-foreground px-2 py-1 rounded hover:opacity-90"
+                            title="Definir como fornecedor principal deste produto">Principal</button>
+                        ) : (
+                          <span className="text-[10px] text-primary font-bold px-2 py-1">⭐</span>
+                        )}
+                        <button type="button" onClick={() => handleDissociate(op.supplier_id)}
+                          className="text-[10px] bg-destructive/10 text-destructive px-2 py-1 rounded hover:bg-destructive/20"
+                          title="Remover associação deste fornecedor com este produto">Remover</button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1374,7 +1453,24 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
           </p>
           <p className="text-xs text-muted-foreground">
             {product.category}{(product as any).subcategory ? ` › ${(product as any).subcategory}` : ''} · R${product.price.toFixed(2)}
-            {(product as any).original_price > 0 && <span> (custo: R${(product as any).original_price.toFixed(2)})</span>}
+            {(product as any).original_price > 0 && (
+              <>
+                <span className="text-muted-foreground"> (custo: R${(product as any).original_price.toFixed(2)})</span>
+                {(() => {
+                  const price = product.price || 0;
+                  const cost = (product as any).original_price || 0;
+                  const profit = price - cost;
+                  const margin = price > 0 ? (profit / price) * 100 : 0;
+                  const isLow = margin < 15;
+                  return (
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${isLow ? 'bg-destructive/20 text-destructive' : 'bg-green-500/20 text-green-500'}`}>
+                      {isLow ? <AlertTriangle className="h-3 w-3 inline mr-1" /> : null}
+                      Margem: {margin.toFixed(0)}% (R${profit.toFixed(2)})
+                    </span>
+                  );
+                })()}
+              </>
+            )}
             {(product as any).platform_fee_percent != null && <span className="text-primary"> · Taxa: {(product as any).platform_fee_percent}%</span>}
             {(product as any).stock_quantity != null && <span className="text-primary"> · Estoque: {(product as any).stock_quantity}</span>}
             {!product.in_stock && <span className="text-destructive"> · Esgotado</span>}

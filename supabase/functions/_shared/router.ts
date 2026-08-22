@@ -24,13 +24,14 @@ function normalizePath(url) {
 }
 function stripSlug(path) {
   const parts = path.split("/").filter((p)=>p.length > 0);
-  // No Supabase, o path é /functions/v1/ai-chat-unified/sofia-agent
-  const slug = "ai-chat-unified";
-  const idx = parts.indexOf(slug);
-  if (idx !== -1) {
-    const subPath = "/" + parts.slice(idx + 1).join("/");
+  // No Supabase, o path é /functions/v1/<slug>/<subpath>
+  // O slug da função é a 3ª parte (ex: ["functions", "v1", "ai-media-unified", "parse-txt"])
+  const v1Idx = parts.indexOf("v1");
+  if (v1Idx !== -1 && parts.length > v1Idx + 2) {
+    const subPath = "/" + parts.slice(v1Idx + 2).join("/");
     return subPath.replace(/\/+$/, "") || "/";
   }
+  
   // Se for chamado via CNAME ou direto na raiz da função
   if (parts.length > 0) {
     return "/" + parts[parts.length - 1];

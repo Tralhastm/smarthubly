@@ -83,8 +83,7 @@ const ClaraChat = ({ tenantId, tenantName, open, onClose }: Props) => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'apikey': PUBLISHABLE || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78',
-          'x-route': '/clara'
+          'apikey': PUBLISHABLE || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78'
         },
         body: JSON.stringify({ messages: next, tenantId }),
       });

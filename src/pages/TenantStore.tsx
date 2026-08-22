@@ -79,15 +79,10 @@ const TenantStore = () => {
                 ? 'Esta loja foi suspensa pela administração da plataforma SmartHubly.'
                 : 'Esta loja está temporariamente fora do ar ou em manutenção.'}
             </p>
-            {isBlocked && blockedReason && (
-              <div className="p-4 rounded-xl bg-destructive/5 border border-destructive/10 text-left">
-                <p className="text-xs font-bold text-destructive uppercase mb-1">Motivo do Bloqueio:</p>
-                <p className="text-sm text-foreground leading-relaxed">{blockedReason}</p>
-              </div>
-            )}
+            {/* O motivo do bloqueio é sensível e deve ser visto apenas pelo lojista no painel admin. */}
             <p className="text-muted-foreground text-xs pt-4 border-t border-border">
               {isBlocked 
-                ? 'Se você é o proprietário, entre em contato com o suporte para regularizar sua situação.'
+                ? 'Se você é o proprietário, acesse seu painel administrativo para ver o motivo e regularizar sua situação.'
                 : 'Tente novamente mais tarde ou entre em contato com o lojista.'}
             </p>
           </div>

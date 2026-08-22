@@ -20,7 +20,10 @@ async function doInvoke(
   body?: unknown,
   opts?: { timeoutMs?: number }
 ): Promise<InvokeResult> {
-  const url = `${SUPA_URL}/functions/v1/${unified}/${pathRoute}`;
+  // Se pathRoute for vazio ou "chat", não adiciona a barra extra (evita // no final)
+  const isIndividual = !pathRoute || pathRoute === 'chat';
+  const url = isIndividual ? `${SUPA_URL}/functions/v1/${unified}` : `${SUPA_URL}/functions/v1/${unified}/${pathRoute}`;
+  
   const timeout = opts?.timeoutMs ?? 300_000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -30,6 +33,7 @@ async function doInvoke(
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       apikey: SUPA_KEY,
+      "x-client-info": "smarthubly-web"
     };
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const res = await fetch(url, {
@@ -38,20 +42,15 @@ async function doInvoke(
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
-    const data = res.ok ? await res.json().catch(() => null) : null;
+    const data = await res.json().catch(() => null);
     if (res.ok) {
       return { data, error: null };
     }
     // Tenta extrair a mensagem de erro detalhada do corpo da Edge Function
     let detail = res.statusText;
-    try {
-      // res já foi consumido pelo res.json() acima; refazer via clone não é possível,
-      // então re-invoca a leitura a partir do data (que pode conter {error})
-      if (data && typeof data === "object" && (data as any).error) {
-        detail = typeof (data as any).error === "string" ? (data as any).error : JSON.stringify((data as any).error);
-      }
-    } catch {
-      /* ignora */
+    if (data && typeof data === "object") {
+      detail = (data as any).error || (data as any).message || detail;
+      if (typeof detail !== "string") detail = JSON.stringify(detail);
     }
     return {
       data: null,

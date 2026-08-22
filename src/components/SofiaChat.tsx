@@ -18,8 +18,9 @@ interface SofiaChatProps {
   greeting?: string;
 }
 
-const CHAT_URL = `/api/chat`;
-const PUBLISHABLE = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78';
+const SUPA_URL = import.meta.env.VITE_SUPABASE_URL;
+const PUBLISHABLE = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
+const CHAT_URL = `${SUPA_URL}/functions/v1/ai-chat-unified/sofia-agent`;
 
 const SofiaChat = ({
   role = 'visitor',
@@ -89,31 +90,30 @@ const SofiaChat = ({
     };
 
     try {
-      const SUPABASE_URL = "https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/ai-chat-unified/sofia-agent";
-      console.log("[SofiaChat] enviando fetch para:", SUPABASE_URL);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-      const resp = await fetch(SUPABASE_URL, {
+      // Fetch simplificado e direto, idêntico ao teste de diagnóstico que funcionou no console.
+      const resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'apikey': PUBLISHABLE,
           'Authorization': `Bearer ${PUBLISHABLE}`,
-          'apikey': PUBLISHABLE
+          'x-client-info': 'smarthubly-web'
         },
-        body: JSON.stringify({ messages: next, role, tenantId, supplierId, driverId }),
-        signal: controller.signal
+        body: JSON.stringify({ 
+          messages: next, 
+          role, 
+          tenantId, 
+          supplierId, 
+          driverId 
+        })
       });
-      clearTimeout(timeoutId);
 
       console.log("[SofiaChat] resposta status:", resp.status);
 
       if (!resp.ok) {
-        const errorBody = await resp.clone().json().catch(() => null);
-        if (errorBody?.error) throw new Error(errorBody.error);
-        if (resp.status === 429) throw new Error('Muitas mensagens em sequência. Aguarde alguns segundos.');
-        if (resp.status === 402) throw new Error('Créditos da IA esgotados. Fale direto no WhatsApp +55 11 91287-0761');
-        throw new Error('Falha na conexão. Tenta de novo.');
+        const text = await resp.text();
+        console.error("[SofiaChat] Erro body:", text);
+        throw new Error(`Falha no servidor (${resp.status})`);
       }
       if (!resp.body) throw new Error('Sem resposta do servidor');
 
@@ -146,7 +146,8 @@ const SofiaChat = ({
         }
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Erro inesperado';
+      console.error("[SofiaChat] ERRO DETALHADO:", e);
+      const msg = e instanceof Error ? `${e.name}: ${e.message}` : 'Erro inesperado';
       setError(msg);
     } finally {
       setLoading(false);

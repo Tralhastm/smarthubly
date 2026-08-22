@@ -55,3 +55,18 @@ verify_jwt = false
 
 [functions.ai-chat-unified]
 verify_jwt = false
+
+[functions.sofia-agent]
+verify_jwt = false
+
+[functions.clara-agent]
+verify_jwt = false
+
+[functions.cindy-agent]
+verify_jwt = false
+
+[functions.store-agent]
+verify_jwt = false
+
+[functions.cindy-actions]
+verify_jwt = false

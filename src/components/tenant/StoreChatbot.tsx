@@ -32,8 +32,7 @@ const StoreChatbot = ({ tenantName, niche, tenantId }: { tenantName: string; nic
         headers: {
           'Content-Type': 'application/json',
           'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78'}`,
-          'x-route': '/store'
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFiY3BsYmNkeG95cXBtY2VobnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2NTk1NjAsImV4cCI6MjEwMjIzNTU2MH0.Qmg4xBNcLhnPYBlB7EWZyRRLHZqSqnAJZCjkHk1Kl78'}`
         },
         body: JSON.stringify({ messages: allMessages, tenantName, niche, tenantId }),
       });

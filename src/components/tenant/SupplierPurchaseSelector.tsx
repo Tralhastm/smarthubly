@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { ShoppingCart, Send, Zap, Plus, Trash2, RefreshCw, Package } from 'lucide-react';
 import { toast } from 'sonner';
 
-type Supplier = { id: string; name: string; phone: string | null; active: string };
+type Supplier = { id: string; name: string; phone: string | null; active: boolean };
 
 type PriceRow = { supplier_id: string; product_name: string; unit_price: number; available: boolean };
 
@@ -36,7 +36,7 @@ const SupplierPurchaseSelector = ({ tenantId }: { tenantId: string }) => {
       .from('suppliers')
       .select('id, name, phone, active')
       .eq('tenant_id', tenantId);
-    setSuppliers(((s as Supplier[]) || []).filter(x => x.active === 't'));
+    setSuppliers(((s as Supplier[]) || []).filter(x => Boolean(x.active)));
     const { data: p } = await supabase
       .from('supplier_product_prices')
       .select('supplier_id, product_name, unit_price, available')

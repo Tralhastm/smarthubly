@@ -29,6 +29,7 @@ const TenantAdminSuppliers = ({ tenantId, slug }: { tenantId: string; slug: stri
   };
 
   const copyLink = (token: string) => {
+    // A rota correta definida no App.tsx é /loja/:slug/fornecedor/:token
     const url = `${window.location.origin}/loja/${slug}/fornecedor/${token}`;
     navigator.clipboard.writeText(url);
     toast.success('Link copiado!');

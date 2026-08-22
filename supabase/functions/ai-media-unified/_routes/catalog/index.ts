@@ -168,19 +168,30 @@ Regras:
     let skipped = 0;
     const priceTypes = payload.priceType === 'both' ? ['cost', 'resale'] : [payload.priceType || 'resale'];
 
+    const results = [];
     for (const it of items) {
       const name = String(it.name || it.product_name || "").trim().toLowerCase();
-      const price = Number(it.price ?? it.unit_price ?? it.preco ?? NaN);
-      if (!name || !Number.isFinite(price) || price <= 0) {
+      const newPrice = Number(it.price ?? it.unit_price ?? it.preco ?? NaN);
+      if (!name || !Number.isFinite(newPrice) || newPrice <= 0) {
         skipped++;
         continue;
       }
       
+      // Busca produto real para ver margem se for custo
+      let marginAlert = null;
+      if (priceTypes.includes('cost')) {
+        const { data: prod } = await admin.from('products').select('id, price').eq('tenant_id', targetTenantId).ilike('name', name).maybeSingle();
+        if (prod && prod.price > 0) {
+          const margin = ((prod.price - newPrice) / prod.price) * 100;
+          if (margin < 10) marginAlert = `Margem crítica: ${margin.toFixed(0)}% (Venda: R$${prod.price})`;
+        }
+      }
+
       const { error } = await admin.from("supplier_product_prices").upsert(
         {
           supplier_id: targetSupplierId,
           product_name: name,
-          unit_price: price,
+          unit_price: newPrice,
           available: it.available ?? it.disponivel ?? true,
           description: it.description || null,
           variations: it.variations || null,
@@ -188,10 +199,15 @@ Regras:
         },
         { onConflict: "supplier_id,product_name" }
       );
-      if (error) skipped++;
+      
+      if (error) {
+        skipped++;
+      } else if (marginAlert) {
+        results.push({ name: it.name, alert: marginAlert });
+      }
     }
 
-    return json({ total: items.length, skipped, warnings, items: items.slice(0, 10) });
+    return json({ total: items.length, skipped, warnings, alerts: results.slice(0, 20), items: items.slice(0, 10) });
 
   } catch (e) {
     console.error("[catalog] error", e);

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useOrders, useUpdateOrderStatus, useDeleteOrder, type OrderWithItems } from '@/hooks/useOrders';
 import { parseAddress } from '@/lib/address-utils';
 import { useDrivers } from '@/hooks/useDrivers';
+import { useTenants } from '@/hooks/useTenants';
 import { supabase } from '@/integrations/supabase/client';
 import { Package, Clock, ChefHat, Truck, CheckCircle, MapPin, Trash2, User, Bell, History, MessageCircle, Printer, BellOff, BellRing } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -56,7 +57,20 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
   const updateStatus = useUpdateOrderStatus();
   const deleteOrder = useDeleteOrder();
   const queryClient = useQueryClient();
+  
+  // O hook useTenants() não recebe tenantId como argumento direto, ele retorna todos os tenants.
+  const { data: allTenants = [] } = useTenants();
+  const tenant = allTenants.find((t: any) => t.id === tenantId);
   const [filter, setFilter] = useState<string>('all');
+  const [allSuppliers, setAllSuppliers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!tenantId) return;
+    supabase.from('suppliers').select('id, name, phone').eq('tenant_id', tenantId)
+      .then(({ data }) => {
+        if (data) setAllSuppliers(data);
+      });
+  }, [tenantId]);
   const [selectingDriver, setSelectingDriver] = useState<string | null>(null);
   const [choosingDispatch, setChoosingDispatch] = useState<string | null>(null);
   const [lalamoveEnabled, setLalamoveEnabled] = useState(false);
@@ -569,7 +583,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
                 
                 <div className="space-y-2 mt-2">
                   {Object.entries((order as any).metadata?.fragmentation_map || {}).map(([sid, itemNames]: [string, any]) => {
-                    const supplier = (order as any).suppliers?.find((s: any) => s.id === sid);
+                    const supplier = allSuppliers.find((s: any) => s.id === sid);
                     return (
                       <div key={sid} className="rounded bg-background/50 p-2 border border-border/50">
                         <div className="flex items-center justify-between mb-1">

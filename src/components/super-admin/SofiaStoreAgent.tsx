@@ -59,7 +59,7 @@ const SofiaStoreAgent = ({ tenantId, tenantName }: { tenantId: string; tenantNam
   };
 
   const invoke = async (path: string, body: any) => {
-    const { data, error } = await unifiedInvoke("ai-chat-unified", `sofia-agent/${path}`, body);
+    const { data, error } = await unifiedInvoke("sofia-agent", path, body);
     if (error) throw new Error(error.message || 'Falha na conexão com a Sofia Agente');
     if (data?.error) throw new Error(data.error === 'ai_unavailable' ? 'A IA está instável agora. Tenta de novo em alguns segundos.' : data.error);
     return data;
@@ -152,7 +152,7 @@ const SofiaStoreAgent = ({ tenantId, tenantName }: { tenantId: string; tenantNam
     if (expanded === plan.id) { setExpanded(null); setDetails(null); return; }
     setExpanded(plan.id);
     try {
-      const { data } = await unifiedInvoke("ai-chat-unified", "sofia-agent/plan-detail", { tenantId, planId: plan.id });
+      const { data } = await unifiedInvoke("sofia-agent", "plan-detail", { tenantId, planId: plan.id });
       setDetails(data?.plan || null);
     } catch {
       setDetails(null);

@@ -551,13 +551,14 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       const productNames = items.map(i => i.product.name.trim());
       const { data: supplierPrices } = await supabase
         .from('supplier_product_prices')
-        .select('supplier_id, product_name, unit_price')
+        .select('supplier_id, product_name, unit_price, price_types')
         .in('product_name', productNames)
         .eq('available', true);
 
       const bestSuppliers = new Map<string, { supplier_id: string; price: number }>();
       (supplierPrices || []).forEach((sp: any) => {
         const name = sp.product_name.toLowerCase();
+        // Prioriza menor preço de custo para fragmentação operacional
         const cur = bestSuppliers.get(name);
         if (!cur || sp.unit_price < cur.price) {
           bestSuppliers.set(name, { supplier_id: sp.supplier_id, price: Number(sp.unit_price) });
@@ -622,6 +623,34 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       });
 
       // Cria appointments pra cada item de serviço (sequencial dentro do horário escolhido)
+      // Cria fragmentos operacionais se o pedido for fragmentado (#4)
+      if (orderResult?.id && needsFragmentation) {
+        try {
+          for (const [supplierId, productNames] of fragments.entries()) {
+            const fragmentItems = items.filter(i => productNames.includes(i.product.name));
+            const fragmentTotal = fragmentItems.reduce((sum, i) => sum + (getCartLineUnitPrice(i) * i.quantity), 0);
+            
+            await supabase.from('order_fragments').insert({
+              order_id: orderResult.id,
+              tenant_id: tenant.id,
+              supplier_id: supplierId,
+              status: initialStatus,
+              total: fragmentTotal,
+              items: fragmentItems.map(i => ({
+                product_name: i.product.name,
+                product_price: getCartLineUnitPrice(i),
+                quantity: i.quantity,
+                variant_name: i.variantName || null,
+                addons: i.addons || null,
+                notes: i.notes || null
+              }))
+            });
+          }
+        } catch (e) {
+          console.error('Erro ao criar fragmentos operacionais:', e);
+        }
+      }
+
       if (orderResult?.id && needsScheduling && scheduledStart) {
         let cursor = new Date(scheduledStart);
         for (const it of serviceItems) {
