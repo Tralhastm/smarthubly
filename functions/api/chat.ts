@@ -5,10 +5,10 @@ export const onRequest: PagesFunction = async (context) => {
   const SUPABASE_URL = "https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/ai-chat-unified";
   
   // Pegar a rota do header ou query
-  let route = request.headers.get("x-route") || "/sofia-agent";
+  const url = new URL(request.url);
+  let route = request.headers.get("x-route") || url.searchParams.get("route") || "/sofia-agent";
   
   // Se for uma ação da Cindy, ajustar o endpoint
-  const url = new URL(request.url);
   if (url.pathname.includes('/reply-ticket')) route = '/cindy-actions/reply-ticket';
   if (url.pathname.includes('/gen-post')) route = '/cindy-actions/gen-post';
 
