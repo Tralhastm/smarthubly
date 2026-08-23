@@ -1,9 +1,9 @@
 // ai-media-unified/_routes/catalog/index.ts
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../../_shared/cors.ts";
-import { _callAiJson, _callAiVisionJson } from "../../_shared/ai-fallback.ts";
-import { authorizeCaller } from "../../_shared/authorize-caller.ts";
-import { getAuthUser } from "../../_shared/auth.ts";
+import { corsHeaders } from "../../../_shared/cors.ts";
+import { _callAiJson, _callAiVisionJson } from "../../../_shared/ai-fallback.ts";
+import { authorizeCaller } from "../../../_shared/authorize-caller.ts";
+import { getAuthUser } from "../../../_shared/auth.ts";
 
 const json = (data: any, status = 200) =>
   new Response(JSON.stringify(data), {

@@ -22,5 +22,6 @@ jobs:
           supabase functions deploy cindy-agent --project-ref qbcplbcdxoyqpmcehnvu --no-verify-jwt
           supabase functions deploy store-agent --project-ref qbcplbcdxoyqpmcehnvu --no-verify-jwt
           supabase functions deploy cindy-actions --project-ref qbcplbcdxoyqpmcehnvu --no-verify-jwt
+          supabase functions deploy ai-media-unified --project-ref qbcplbcdxoyqpmcehnvu --no-verify-jwt
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

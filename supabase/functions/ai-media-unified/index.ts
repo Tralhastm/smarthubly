@@ -6,7 +6,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { createHmac, randomUUID } from "node:crypto";
 
 
-import { parse_txt } from "./_routes/parse-txt/index.ts";
+import parse_txt from "./_routes/parse-txt/index.ts";
 import { import_route } from "./_routes/import/index.ts";
 import { catalog } from "./_routes/catalog/index.ts";
 import { generate } from "./_routes/generate/index.ts";
