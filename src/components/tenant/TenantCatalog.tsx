@@ -530,7 +530,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                     <ChevronDown className="h-5 w-5 rotate-45" />
                   </button>
                   {(detail as any).original_price != null && (detail as any).original_price > detail.price && (
-                    <span className="absolute left-3 top-3 rounded-full bg-destructive px-3 py-1 text-xs font-bold text-destructive-foreground">Promoção</span>
+                    <span className="absolute left-3 top-14 rounded-full bg-destructive px-3 py-1 text-xs font-bold text-destructive-foreground">Promoção</span>
                   )}
                 </div>
               ) : null;
@@ -572,7 +572,10 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                   <span className="rounded-full bg-yellow-400/15 px-3 py-1 text-xs font-medium text-yellow-500">Restam {(detail as any).stock_quantity}</span>
                 ) : null}
               </div>
-              <div className="h-4" />
+              <button type="button" onClick={() => setDetail(null)}
+                className="mb-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-secondary">
+                <ChevronLeft className="h-4 w-4" /> Voltar
+              </button>
               <button onClick={() => { addToCart(detail); setDetail(null); }} disabled={!detail.in_stock}
                 className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold uppercase tracking-wider gradient-primary text-primary-foreground transition hover:opacity-90 disabled:opacity-40">
                 <ShoppingCart className="h-5 w-5" />
