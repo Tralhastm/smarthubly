@@ -53,6 +53,7 @@ const getNextStatus = (current: string, deliveryType: string): string | null => 
   return flow[current] ?? null;
 };
 
+// Painel fornecedor completo: importação/exportação, estoque, chats e avaliações.
 const SupplierPanel = () => {
   const { token } = useParams<{ token: string }>();
   const { data: supplier, isLoading } = useSupplierByToken(token);
