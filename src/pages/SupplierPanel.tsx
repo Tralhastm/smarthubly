@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useSupplierByToken } from '@/hooks/useSuppliers';
-import { Package, Clock, ChefHat, Truck, CheckCircle, MapPin, PackageX, PackageCheck, Bell, MessageCircle, Star, Send, Settings, User, Printer, Sun, Moon } from 'lucide-react';
+import { Package, Clock, ChefHat, Truck, CheckCircle, MapPin, PackageX, PackageCheck, Bell, MessageCircle, Star, Send, Settings, User, Printer, Sun, Moon, Upload, Download, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { printOrder } from '@/lib/order-print';
 import { isPrinterPaired } from '@/lib/printer-bluetooth';
@@ -33,7 +33,7 @@ type OrderWithItems = {
 };
 
 type Product = {
-  id: string; name: string; price: number; in_stock: boolean; category: string; supplier_id: string | null;
+  id: string; name: string; price: number; original_price?: number | null; in_stock: boolean; category: string; supplier_id: string | null;
   stock_quantity: number | null;
 };
 
@@ -59,7 +59,7 @@ const SupplierPanel = () => {
   const { data: supplier, isLoading } = useSupplierByToken(token);
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tab, setTab] = useState<'orders' | 'deliveries' | 'stock' | 'chats' | 'reviews' | 'lalamove' | 'shipping' | 'drivers'>('orders');
+  const [tab, setTab] = useState<'orders' | 'deliveries' | 'stock' | 'import-export' | 'chats' | 'reviews' | 'lalamove' | 'shipping' | 'drivers'>('orders');
   const [group, setGroup] = useState<'operacao' | 'catalogo' | 'config'>('operacao');
   const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
@@ -78,6 +78,9 @@ const SupplierPanel = () => {
   const [selectingDriver, setSelectingDriver] = useState<string | null>(null);
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
+  const [priceText, setPriceText] = useState('');
+  const [importingPrices, setImportingPrices] = useState(false);
+  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[] } | null>(null);
   const [tenant, setTenant] = useState<any>(null);
   const [isActive, setIsActive] = useState<boolean>(true);
   const [togglingActive, setTogglingActive] = useState(false);
@@ -177,7 +180,7 @@ const SupplierPanel = () => {
   const fetchProducts = useCallback(async () => {
     if (!supplier) return;
     // Only fetch products assigned to this supplier
-    const { data } = await supabase.from('products').select('id, name, price, in_stock, category, supplier_id')
+    const { data } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, supplier_id')
       .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
     setProducts((data as Product[]) || []);
   }, [supplier]);
@@ -188,7 +191,7 @@ const SupplierPanel = () => {
     if (!supplier) return;
     try {
       // Always fetch supplier's products fresh to avoid stale state
-      const { data: freshProducts } = await supabase.from('products').select('id, name, price, in_stock, category, supplier_id, stock_quantity')
+      const { data: freshProducts } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, supplier_id, stock_quantity')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
       const myProducts = (freshProducts as Product[]) || [];
       setProducts(prev => (prev.length === 0 && myProducts.length > 0 ? myProducts : prev));
@@ -475,6 +478,71 @@ const SupplierPanel = () => {
     toast.success(`Estoque atualizado: ${newQty}`);
   };
 
+  const normalizeProductName = (value: string) => value.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+  const parsePrice = (value: string) => {
+    const normalized = value.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    const number = Number(normalized);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+  };
+
+  const parsePriceLine = (line: string) => {
+    const costMarker = line.search(/\s+-\s*CUSTO\s*:/i);
+    const resaleMarker = line.search(/\s+-\s*REVENDA\s*:/i);
+    const firstMarker = [costMarker, resaleMarker].filter(i => i >= 0).sort((a, b) => a - b)[0];
+    if (firstMarker == null) return null;
+    const name = line.slice(0, firstMarker).replace(/\s+-\s*$/, '').trim();
+    const costMatch = line.match(/\s+-\s*CUSTO\s*:\s*R?\$?\s*([\d.]+(?:,\d{1,2})?)/i);
+    const resaleMatch = line.match(/\s+-\s*REVENDA\s*:\s*R?\$?\s*([\d.]+(?:,\d{1,2})?)/i);
+    const cost = costMatch ? parsePrice(costMatch[1]) : null;
+    const resale = resaleMatch ? parsePrice(resaleMatch[1]) : null;
+    return name && (cost != null || resale != null) ? { name, cost, resale } : null;
+  };
+
+  const importPrices = async () => {
+    if (!supplier || importingPrices) return;
+    const entries = priceText.split(/\r?\n/).map(parsePriceLine).filter(Boolean) as { name: string; cost: number | null; resale: number | null }[];
+    if (entries.length === 0) {
+      toast.error('Nenhuma linha válida encontrada. Use: produto - CUSTO: R$ 990,00 - REVENDA: R$ 1.199,00');
+      return;
+    }
+    setImportingPrices(true);
+    const byName = new Map(products.map(p => [normalizeProductName(p.name), p]));
+    const updated: string[] = [];
+    const notFound: string[] = [];
+    const invalid: string[] = [];
+    try {
+      for (const entry of entries) {
+        const product = byName.get(normalizeProductName(entry.name));
+        if (!product) { notFound.push(entry.name); continue; }
+        const patch: Record<string, number> = {};
+        if (entry.cost != null) patch.original_price = entry.cost;
+        if (entry.resale != null) patch.price = entry.resale;
+        if (Object.keys(patch).length === 0) { invalid.push(entry.name); continue; }
+        const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
+        if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
+        updated.push(entry.name);
+        Object.assign(product, patch);
+      }
+      setProducts([...products]);
+      setImportResult({ updated, notFound, invalid });
+      if (updated.length) toast.success(`${updated.length} produto(s) atualizado(s)`);
+      if (!updated.length) toast.error('Nenhum produto foi atualizado');
+    } finally {
+      setImportingPrices(false);
+    }
+  };
+
+  const exportPrices = () => {
+    const lines = products.map(p => `${p.name} - CUSTO: R$ ${Number(p.original_price || 0).toFixed(2).replace('.', ',')} - ${p.category || 'PRODUTO'} - REVENDA: R$ ${Number(p.price || 0).toFixed(2).replace('.', ',')}`);
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `precos-${supplier?.name?.replace(/\s+/g, '-').toLowerCase() || 'fornecedor'}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (isLoading) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
   if (!supplier) return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Fornecedor não encontrado.</p></div>;
 
@@ -526,7 +594,7 @@ const SupplierPanel = () => {
       {(() => {
         const TAB_GROUP: Record<typeof tab, 'operacao' | 'catalogo' | 'config'> = {
           orders: 'operacao', deliveries: 'operacao', drivers: 'operacao',
-          stock: 'catalogo', chats: 'catalogo', reviews: 'catalogo',
+          stock: 'catalogo', 'import-export': 'catalogo', chats: 'catalogo', reviews: 'catalogo',
           shipping: 'config', lalamove: 'config',
         };
         // Mantém grupo sincronizado se a tab atual pertence a outro grupo
@@ -570,6 +638,7 @@ const SupplierPanel = () => {
               { id: 'deliveries' as const, label: 'Entregas', icon: <Send className="h-4 w-4" />, group: 'operacao' as const },
               { id: 'drivers' as const, label: 'Motoboys', icon: <User className="h-4 w-4" />, group: 'operacao' as const },
               { id: 'stock' as const, label: 'Estoque', icon: <PackageCheck className="h-4 w-4" />, group: 'catalogo' as const },
+              { id: 'import-export' as const, label: 'Importar / Exportar', icon: <FileText className="h-4 w-4" />, group: 'catalogo' as const },
               { id: 'chats' as const, label: 'Chats', icon: <MessageCircle className="h-4 w-4" />, group: 'catalogo' as const },
               { id: 'reviews' as const, label: 'Avaliações', icon: <Star className="h-4 w-4" />, group: 'catalogo' as const },
               { id: 'shipping' as const, label: 'Frete', icon: <Truck className="h-4 w-4" />, group: 'config' as const },
@@ -600,6 +669,7 @@ const SupplierPanel = () => {
                 deliveries: 'supplierDeliveries',
                 drivers: 'supplierDrivers',
                 stock: 'supplierStock',
+                'import-export': 'supplierImportExport',
                 chats: 'supplierChats',
                 reviews: 'supplierReviews',
                 shipping: 'supplierShipping',
@@ -800,6 +870,43 @@ const SupplierPanel = () => {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {tab === 'import-export' && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-card p-4 space-y-2">
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground"><Upload className="h-5 w-5 text-primary" /> Importar preços</h2>
+              <p className="text-xs text-muted-foreground">Cole o texto abaixo ou escolha um arquivo .txt. Só serão atualizados produtos vinculados a este fornecedor, por nome exato.</p>
+              <div className="rounded-md bg-secondary/60 p-3 text-xs text-muted-foreground font-mono">samsung a9 8.7 64/4gb - CUSTO: R$ 990,00 - TABLET - REVENDA: R$ 1.199,00</div>
+              <textarea value={priceText} onChange={e => { setPriceText(e.target.value); setImportResult(null); }} rows={8} placeholder="Uma linha por produto..." className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground" />
+              <div className="flex flex-wrap gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground hover:border-primary">
+                  <FileText className="h-4 w-4" /> Escolher .txt
+                  <input type="file" accept=".txt,text/plain" className="hidden" onChange={async e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setPriceText(await file.text());
+                    setImportResult(null);
+                    e.currentTarget.value = '';
+                  }} />
+                </label>
+                <button type="button" onClick={importPrices} disabled={importingPrices || !priceText.trim()} className="inline-flex items-center gap-2 rounded-lg gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
+                  <Upload className="h-4 w-4" /> {importingPrices ? 'Atualizando...' : 'Atualizar preços'}
+                </button>
+                <button type="button" onClick={exportPrices} disabled={!products.length} className="inline-flex items-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:border-primary disabled:opacity-50">
+                  <Download className="h-4 w-4" /> Exportar .txt
+                </button>
+              </div>
+            </div>
+            {importResult && (
+              <div className="rounded-lg border border-border bg-card p-4 space-y-2 text-sm">
+                <p className="font-semibold text-foreground">Resultado: {importResult.updated.length} atualizado(s), {importResult.notFound.length} não encontrado(s).</p>
+                {importResult.updated.length > 0 && <p className="text-xs text-green-400">Atualizados: {importResult.updated.join(', ')}</p>}
+                {importResult.notFound.length > 0 && <p className="text-xs text-yellow-400">Não encontrados: {importResult.notFound.join(', ')}</p>}
+                {importResult.invalid.length > 0 && <p className="text-xs text-red-400">Com erro: {importResult.invalid.join(', ')}</p>}
+              </div>
+            )}
           </div>
         )}
 
