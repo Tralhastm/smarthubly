@@ -12,6 +12,10 @@ export function useSplashOverlay() {
       const isOpen = (e as CustomEvent).detail === true;
       document.body.classList.toggle('splash-open', isOpen);
       document.documentElement.classList.toggle('splash-open', isOpen);
+      document.querySelectorAll<HTMLElement>('[data-splash-header="true"]').forEach((header) => {
+        header.style.display = isOpen ? 'none' : '';
+        header.setAttribute('aria-hidden', String(isOpen));
+      });
     };
     window.addEventListener('splash:open', handler);
     return () => window.removeEventListener('splash:open', handler);
