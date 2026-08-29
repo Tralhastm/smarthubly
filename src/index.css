@@ -166,3 +166,11 @@
 body:has([role="dialog"][aria-modal="true"]) header {
   display: none !important;
 }
+
+/* O detalhe é controlado pelo estado do catálogo, não por um diálogo React
+   em todas as versões. O estado product-open cobre também o mobile. */
+html.product-open [data-store-header="true"],
+html.product-open .fixed.bottom-6,
+html.product-open .fixed.bottom-28 {
+  display: none !important;
+}

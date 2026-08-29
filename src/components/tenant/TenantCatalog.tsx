@@ -238,9 +238,14 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
   const [extrasIds, setExtrasIds] = useState<Set<string>>(new Set());
-    const [detail, setDetail] = useState<Product | null>(null);
+  const [detail, setDetail] = useState<Product | null>(null);
   const allProducts = useMemo(() => data?.pages.flatMap(p => p.data) ?? [], [data]);
   const openDetails = splashEnabled ? setDetail : null;
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('product-open', Boolean(detail));
+    return () => document.documentElement.classList.remove('product-open');
+  }, [detail]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -556,6 +561,11 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                   <span className="rounded-full bg-yellow-400/15 px-3 py-1 text-xs font-medium text-yellow-500">Restam {(detail as any).stock_quantity}</span>
                 ) : null}
               </div>
+              <button type="button" onClick={() => setDetail(null)}
+                className="mb-2 flex w-full items-center justify-center gap-2 rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground transition hover:bg-secondary">
+                <ChevronLeft className="h-4 w-4" />
+                Voltar
+              </button>
               <button onClick={() => { addToCart(detail); setDetail(null); }} disabled={!detail.in_stock}
                 className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold uppercase tracking-wider gradient-primary text-primary-foreground transition hover:opacity-90 disabled:opacity-40">
                 <ShoppingCart className="h-5 w-5" />
