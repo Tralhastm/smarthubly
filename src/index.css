@@ -172,6 +172,11 @@
    ========================================================== */
 html.splash-open body { overflow: hidden; }
 
+/* O cabeçalho não deve cobrir o produto enquanto o Splash está aberto. */
+html.splash-open [data-splash-header="true"] {
+  display: none !important;
+}
+
 /* Marcador explícito para impedir que botões externos cubram o Splash,
    independentemente da ordem ou das classes utilitárias geradas. */
 html.splash-open [data-splash-floating="true"] {
