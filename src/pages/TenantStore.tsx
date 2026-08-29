@@ -9,6 +9,7 @@ import StoreSplash from '@/components/tenant/StoreSplash';
 import SupermarketStorefront from '@/components/tenant/SupermarketStorefront';
 import StoreQuoteCalculator from '@/components/tenant/StoreQuoteCalculator';
 import StoreChatbot from '@/components/tenant/StoreChatbot';
+import { useSplashOverlay } from '@/hooks/useSplashOverlay';
 import { ClipboardList, Store, MessageCircle, Heart, Calculator, ShoppingBag } from 'lucide-react';
 import { deriveBrandTokens, applyBrandTokens, clearBrandTokens } from '@/lib/color-utils';
 
@@ -17,6 +18,8 @@ const TenantStore = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [view, setView] = useState<'catalog' | 'quote'>('catalog');
   const hideSplash = useCallback(() => setShowSplash(false), []);
+  // Oculta os botões flutuantes enquanto o splash de detalhes do produto está aberto.
+  useSplashOverlay();
   const { data: tenant, isLoading } = useTenantBySlug(slug);
   // Per-store PWA manifest: instalar a loja mostra o nome+logo dela.
   useStoreManifest({
@@ -195,7 +198,6 @@ const TenantStore = () => {
 
       {tenant.whatsapp && (tenant as any).store_mode !== 'supermarket' && (
         <a href={`https://wa.me/${tenant.whatsapp}`} target="_blank" rel="noopener noreferrer"
-         
           className="fixed bottom-6 left-6 z-40 flex items-center gap-2 rounded-full px-4 py-3 font-medium shadow-lg transition-colors bg-[hsl(142,71%,30%)] text-foreground hover:bg-[hsl(142,71%,35%)]">
           <MessageCircle className="h-5 w-5" />
           <span className="hidden sm:inline text-sm">Contato</span>

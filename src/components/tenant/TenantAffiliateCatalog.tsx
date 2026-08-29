@@ -247,7 +247,7 @@ const ProductDetailModal = ({ product, tenantId, tenantSlug, onClose }: {
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-border bg-background/95 backdrop-blur px-4 py-3">
         <button onClick={onClose}
           className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-foreground hover:bg-secondary transition-colors">
-          <X className="h-5 w-5" aria-label="Fechar" />
+          <X className="h-5 w-5" /> Voltar
         </button>
         <span className="text-xs text-muted-foreground truncate">Detalhes do produto</span>
       </div>
