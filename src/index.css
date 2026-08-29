@@ -160,3 +160,9 @@
 }
 .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
 .animate-scale-in { animation: scale-in 0.3s ease-out forwards; }
+
+/* O detalhe do produto é renderizado dentro do catálogo; :has mantém o
+   cabeçalho fora da tela enquanto o diálogo está aberto, inclusive no mobile. */
+body:has([role="dialog"][aria-modal="true"]) header {
+  display: none !important;
+}
