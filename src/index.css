@@ -172,6 +172,10 @@
    ========================================================== */
 html.splash-open body { overflow: hidden; }
 
+html.splash-open .storefront-header {
+  display: none !important;
+}
+
 html.splash-open .fixed.bottom-6.right-6.z-40,
 html.splash-open .fixed.bottom-6.left-6.z-40,
 html.splash-open .fixed.bottom-5.right-5.z-50,
