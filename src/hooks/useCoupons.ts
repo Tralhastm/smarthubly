@@ -14,6 +14,9 @@ export type Coupon = {
   active: boolean;
   created_at: string;
   updated_at: string;
+  seller_id?: string | null;
+  seller_code_id?: string | null;
+  seller_commission_percent?: number | null;
 };
 
 export const useCoupons = (tenantId?: string) => {
@@ -66,7 +69,16 @@ export const validateCoupon = async (tenantId: string, code: string, subtotal: n
   if (!upper) return { valid: false, discount: 0, reason: 'Informe um código' };
   const { data } = await (supabase as any).from('coupons').select('*').eq('tenant_id', tenantId).ilike('code', upper).maybeSingle();
   const coupon = data as Coupon | null;
-  if (!coupon) return { valid: false, discount: 0, reason: 'Cupom não encontrado' };
+  if (!coupon) {
+    const { data: sellerCode } = await (supabase as any).from('seller_codes_public').select('*').eq('tenant_id', tenantId).ilike('code', upper).maybeSingle();
+    if (!sellerCode) return { valid: false, discount: 0, reason: 'Cupom não encontrado' };
+    const sellerCoupon: Coupon = { ...sellerCode, tenant_id: tenantId, min_order_value: 0, expires_at: sellerCode.expires_at, created_at: '', updated_at: '', seller_id: sellerCode.seller_id, seller_code_id: sellerCode.id };
+    return validateCouponResult(sellerCoupon, subtotal);
+  }
+  return validateCouponResult(coupon, subtotal);
+};
+
+const validateCouponResult = (coupon: Coupon, subtotal: number): { valid: boolean; discount: number; reason?: string; coupon?: Coupon } => {
   if (!coupon.active) return { valid: false, discount: 0, reason: 'Cupom desativado' };
   if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) return { valid: false, discount: 0, reason: 'Cupom expirado' };
   if (coupon.max_uses != null && coupon.uses_count >= coupon.max_uses) return { valid: false, discount: 0, reason: 'Cupom esgotado' };
@@ -79,4 +91,8 @@ export const validateCoupon = async (tenantId: string, code: string, subtotal: n
 
 export const incrementCouponUse = async (couponId: string, currentUses: number) => {
   await (supabase as any).from('coupons').update({ uses_count: currentUses + 1 }).eq('id', couponId);
+};
+
+export const incrementSellerCodeUse = async (codeId: string, currentUses: number) => {
+  await (supabase as any).from('seller_codes').update({ uses_count: currentUses + 1 }).eq('id', codeId);
 };

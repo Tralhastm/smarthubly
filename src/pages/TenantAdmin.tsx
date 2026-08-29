@@ -40,6 +40,7 @@ import TenantQuickSale from '@/components/tenant/TenantQuickSale';
 import TenantAdminTables from '@/components/tenant/TenantAdminTables';
 import TenantLiveFloor from '@/components/tenant/TenantLiveFloor';
 import TenantWaiterCommissions from '@/components/tenant/TenantWaiterCommissions';
+import TenantSellerManagement from '@/components/tenant/TenantSellerManagement';
 import TenantAbcCurve from '@/components/tenant/TenantAbcCurve';
 import TenantBIDashboard from '@/components/tenant/TenantBIDashboard';
 import TenantAdminIntegrations from '@/components/tenant/TenantAdminIntegrations';
@@ -64,7 +65,7 @@ import { LayoutDashboard, Package, ShoppingBag, DollarSign, ArrowLeft, LogOut, U
 import { contrastWarning } from '@/lib/color-utils';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
-type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'categories' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi' | 'sofia-agent' | 'prospecting' | 'remote-prospecting' | 'price-intelligence';
+type Tab = 'dashboard' | 'orders' | 'quicksale' | 'tables' | 'live-floor' | 'products' | 'categories' | 'financial' | 'users' | 'suppliers' | 'drivers' | 'shipping' | 'sales' | 'clicks' | 'appearance' | 'promo' | 'posts' | 'coupons' | 'coupons-test' | 'reviews' | 'billing' | 'printer' | 'scheduling' | 'quotes' | 'integrations' | 'automations' | 'monitor' | 'diagnostic' | 'emails' | 'customer-chats' | 'consultora' | 'fiscal' | 'ficha' | 'stock' | 'finance-deep' | 'reports' | 'support' | 'commissions' | 'abc' | 'bi' | 'sofia-agent' | 'prospecting' | 'remote-prospecting' | 'price-intelligence' | 'sellers';
 
 type GroupId = 'dashboard' | 'operation' | 'catalog' | 'finance' | 'marketing' | 'settings';
 
@@ -221,6 +222,7 @@ const TenantAdmin = () => {
     { id: 'support', label: 'Suporte & Treino', icon: <LayoutDashboard className="h-4 w-4" />, group: 'settings' },
     { id: 'sales', label: 'Vendas', icon: <BarChart3 className="h-4 w-4" />, group: 'finance' },
     { id: 'commissions', label: 'Comissões', icon: <Percent className="h-4 w-4" />, group: 'finance' },
+    { id: 'sellers', label: 'Vendedores', icon: <Users className="h-4 w-4" />, group: 'finance' },
     { id: 'abc', label: 'Curva ABC', icon: <BarChart3 className="h-4 w-4" />, group: 'finance' },
     { id: 'bi', label: 'BI / Previsão', icon: <Activity className="h-4 w-4" />, group: 'finance' },
     { id: 'billing', label: 'Cobranças', icon: <Receipt className="h-4 w-4" />, group: 'finance' },
@@ -417,6 +419,7 @@ const TenantAdmin = () => {
           {tab === 'users' && <TenantAdminUsers tenantId={tenant.id} />}
           {tab === 'sales' && <TenantSalesRanking tenantId={tenant.id} />}
           {tab === 'commissions' && <TenantWaiterCommissions tenantId={tenant.id} />}
+          {tab === 'sellers' && <TenantSellerManagement tenantId={tenant.id} />}
           {tab === 'abc' && <TenantAbcCurve tenantId={tenant.id} />}
           {tab === 'bi' && <TenantBIDashboard tenantId={tenant.id} />}
           {tab === 'clicks' && <TenantAffiliateClicksRanking tenantId={tenant.id} />}

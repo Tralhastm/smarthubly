@@ -7,7 +7,7 @@ import { buildWhatsAppMessage, sanitizeWhatsAppNumber } from '@/lib/store';
 import { PENDING_PAYMENT_STATUS } from '@/lib/order-status';
 import { supabase } from '@/integrations/supabase/client';
 import { logOrderEvent } from '@/lib/order-events';
-import { validateCoupon, incrementCouponUse, type Coupon } from '@/hooks/useCoupons';
+import { validateCoupon, incrementCouponUse, incrementSellerCodeUse, type Coupon } from '@/hooks/useCoupons';
 
 import CepAddressInput from './CepAddressInput';
 import { estimateFreight, type FreightEstimate } from '@/lib/freight-viacep';
@@ -605,6 +605,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           supplier_id: autoSupplierId,
           coupon_code: appliedCoupon?.code ?? null,
           discount_amount: discountAmount,
+          seller_id: appliedCoupon?.seller_id ?? null,
+          seller_code_id: appliedCoupon?.seller_code_id ?? null,
           change_for: !payOnline && paymentMethod === 'dinheiro' && changeFor ? parseFloat(changeFor.replace(',', '.')) || 0 : 0,
           metadata: { 
             needs_fragmentation: needsFragmentation,
@@ -681,6 +683,18 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       }
 
       if (orderResult?.id) {
+        if (appliedCoupon?.seller_id && appliedCoupon?.seller_code_id) {
+          const grossSubtotal = items.reduce((sum, item) => sum + getCartLineUnitPrice(item) * item.quantity, 0);
+          const sellerRows = items.map((item) => {
+            const gross = getCartLineUnitPrice(item) * item.quantity;
+            const itemDiscount = grossSubtotal > 0 ? discountAmount * gross / grossSubtotal : 0;
+            const net = Math.max(0, gross - itemDiscount);
+            const commissionPercent = Number((appliedCoupon as any).seller_commission_percent || 0);
+            return { tenant_id: tenant.id, order_id: orderResult.id, seller_id: appliedCoupon.seller_id, seller_code_id: appliedCoupon.seller_code_id, product_name: item.product.name, quantity: item.quantity, unit_price_before_discount: getCartLineUnitPrice(item), unit_price_after_discount: item.quantity ? net / item.quantity : 0, discount_amount: itemDiscount, line_total: net, commission_percent: commissionPercent, commission_amount: net * commissionPercent / 100 };
+          });
+          try { await (supabase as any).from('seller_order_items').insert(sellerRows); } catch (e) { console.error('seller commission error', e); }
+          await incrementSellerCodeUse(appliedCoupon.seller_code_id, appliedCoupon.uses_count);
+        }
         await logOrderEvent({
           order_id: orderResult.id,
           tenant_id: tenant.id,
