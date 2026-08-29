@@ -561,6 +561,15 @@ const SupplierPanel = () => {
         if (Object.keys(patch).length === 0) { invalid.push(entry.name); continue; }
         const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
         if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
+        if (entry.cost != null) {
+          const { error: priceError } = await (supabase as any).from('supplier_product_prices').upsert({
+            supplier_id: supplier.id,
+            product_name: product.name.trim().toLowerCase(),
+            unit_price: entry.cost,
+            available: true,
+          }, { onConflict: 'supplier_id,product_name' });
+          if (priceError) { invalid.push(`${entry.name} (comparação: ${priceError.message})`); continue; }
+        }
         updated.push(entry.name);
         Object.assign(product, patch);
       }

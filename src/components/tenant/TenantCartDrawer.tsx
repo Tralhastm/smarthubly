@@ -551,7 +551,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       const productNames = items.map(i => i.product.name.trim().toLowerCase());
       const { data: supplierPrices } = await supabase
         .from('supplier_product_prices')
-        .select('supplier_id, product_name, unit_price, price_types')
+        .select('supplier_id, product_name, unit_price')
         .in('product_name', productNames)
         .eq('available', true);
 
