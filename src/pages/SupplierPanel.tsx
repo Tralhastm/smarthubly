@@ -496,6 +496,8 @@ const SupplierPanel = () => {
     if (upper.includes('MOTOROLA')) return 'Motorola';
     if (upper.includes('REALME')) return 'Realme';
     if (upper.includes('INFINIX')) return 'Infinix';
+    if (upper.includes('OPPO')) return 'Oppo';
+    if (upper.includes('HONOR')) return 'Honor';
     if (upper.includes('REDMI')) return 'Redmi';
     if (upper.includes('POCO')) return 'Poco';
     if (/LINHA\s+MI/i.test(line)) return 'Mi';
