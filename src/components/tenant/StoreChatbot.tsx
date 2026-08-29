@@ -84,7 +84,7 @@ const StoreChatbot = ({ tenantName, niche, tenantId }: { tenantName: string; nic
   return (
     <>
       {!open && (
-        <button data-splash-floating="true" onClick={() => setOpen(true)}
+        <button onClick={() => setOpen(true)}
           aria-label="Abrir assistente"
           className="fixed bottom-28 left-6 z-50 rounded-full gradient-primary text-primary-foreground p-3 shadow-lg hover:opacity-90 transition-all">
           <MessageCircle className="h-6 w-6" />
@@ -92,7 +92,7 @@ const StoreChatbot = ({ tenantName, niche, tenantId }: { tenantName: string; nic
       )}
 
       {open && (
-        <div data-splash-floating="true" className="fixed bottom-24 left-6 right-6 sm:right-auto z-50 w-auto sm:w-80 max-h-[70vh] flex flex-col rounded-xl border border-border bg-background shadow-2xl">
+        <div className="fixed bottom-24 left-6 right-6 sm:right-auto z-50 w-auto sm:w-80 max-h-[70vh] flex flex-col rounded-xl border border-border bg-background shadow-2xl">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border gradient-primary rounded-t-xl">
             <span className="text-sm font-medium text-primary-foreground">💬 Assistente {tenantName}</span>
             <button onClick={() => setOpen(false)} className="text-primary-foreground/80 hover:text-primary-foreground">

@@ -748,7 +748,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
 
   return (
     <>
-      <button data-splash-floating="true" onClick={() => setOpen(true)} className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full gradient-primary px-5 py-3 text-primary-foreground font-medium shadow-lg hover-glow">
+      <button onClick={() => setOpen(true)} className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full gradient-primary px-5 py-3 text-primary-foreground font-medium shadow-lg hover-glow">
         <ShoppingCart className="h-5 w-5" />
         {itemCount > 0 && <span className="min-w-[20px] rounded-full bg-background text-foreground text-xs font-bold px-1.5 py-0.5">{itemCount}</span>}
       </button>

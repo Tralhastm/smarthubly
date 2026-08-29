@@ -242,14 +242,6 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const allProducts = useMemo(() => data?.pages.flatMap(p => p.data) ?? [], [data]);
   const openDetails = splashEnabled ? setDetail : null;
 
-  // Notifica a página quando o splash de detalhes abre/fecha para que os botões
-  // flutuantes (carrinho, WhatsApp, chat, tema) sejam ocultados e não cubram o texto.
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('splash:open', { detail: detail !== null }));
-    }
-  }, [detail !== null]);
-
   useEffect(() => {
     if (!tenantId) return;
     let cancelled = false;
@@ -521,10 +513,6 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                     imgClassName="max-h-[32vh] sm:max-h-[45vh] w-full object-contain"
                     videoClassName="max-h-[32vh] sm:max-h-[45vh] w-full object-contain"
                   />
-                  <button onClick={() => setDetail(null)} aria-label="Voltar para os produtos"
-                    className="absolute left-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur transition hover:bg-black/85">
-                    <ChevronLeft className="h-4 w-4" /> Voltar
-                  </button>
                   <button onClick={() => setDetail(null)} aria-label="Fechar"
                     className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80">
                     <ChevronDown className="h-5 w-5 rotate-45" />
@@ -542,10 +530,6 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
               return !hasImage ? (
                 <div className="relative rounded-t-2xl flex items-center justify-center bg-secondary">
                   <Package className="h-20 w-20 text-primary/40" />
-                  <button onClick={() => setDetail(null)} aria-label="Voltar para os produtos"
-                    className="absolute left-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur transition hover:bg-black/85">
-                    <ChevronLeft className="h-4 w-4" /> Voltar
-                  </button>
                   <button onClick={() => setDetail(null)} aria-label="Fechar"
                     className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80">
                     <ChevronDown className="h-5 w-5 rotate-45" />
@@ -572,10 +556,6 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                   <span className="rounded-full bg-yellow-400/15 px-3 py-1 text-xs font-medium text-yellow-500">Restam {(detail as any).stock_quantity}</span>
                 ) : null}
               </div>
-              <button type="button" onClick={() => setDetail(null)}
-                className="mb-2 inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-4 py-3 text-sm font-semibold text-foreground transition hover:bg-secondary">
-                <ChevronLeft className="h-4 w-4" /> Voltar
-              </button>
               <button onClick={() => { addToCart(detail); setDetail(null); }} disabled={!detail.in_stock}
                 className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold uppercase tracking-wider gradient-primary text-primary-foreground transition hover:opacity-90 disabled:opacity-40">
                 <ShoppingCart className="h-5 w-5" />
