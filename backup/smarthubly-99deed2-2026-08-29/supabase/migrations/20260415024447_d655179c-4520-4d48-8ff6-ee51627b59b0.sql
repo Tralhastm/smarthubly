@@ -1,0 +1,1 @@
+ALTER TABLE public.products ADD COLUMN shipping_origin_override text DEFAULT NULL;

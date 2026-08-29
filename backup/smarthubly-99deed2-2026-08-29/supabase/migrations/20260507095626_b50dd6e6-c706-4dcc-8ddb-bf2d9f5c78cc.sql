@@ -1,0 +1,2 @@
+ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS catalog_layout TEXT NOT NULL DEFAULT 'grid';
+ALTER TABLE public.tenants ADD CONSTRAINT tenants_catalog_layout_check CHECK (catalog_layout IN ('grid','list','compact','magazine'));

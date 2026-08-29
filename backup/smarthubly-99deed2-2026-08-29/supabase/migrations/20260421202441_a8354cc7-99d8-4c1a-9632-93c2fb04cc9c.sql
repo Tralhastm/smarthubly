@@ -1,0 +1,1 @@
+DELETE FROM public.quote_variables WHERE tenant_id = 'b2bda0b1-dfea-4061-be23-6c408f3ce4d5' AND name IN ('Tijolo assentado','Hora de ajudante','Reboco');

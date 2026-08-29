@@ -1,0 +1,1 @@
+UPDATE public.tenants SET store_mode = 'hybrid' WHERE slug = 'lanchar';

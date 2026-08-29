@@ -1,0 +1,1 @@
+UPDATE public.integration_settings SET financeflow_url = regexp_replace(financeflow_url, '/functions/v1/inbox-from-store/?$', '', 'i') WHERE financeflow_url ILIKE '%/functions/v1/inbox-from-store%';

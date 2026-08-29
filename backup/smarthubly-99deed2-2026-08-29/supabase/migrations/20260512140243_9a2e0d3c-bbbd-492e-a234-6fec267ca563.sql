@@ -1,0 +1,1 @@
+UPDATE public.tenants SET uber_direct_use_platform_keys = false WHERE slug = 'lanchar';

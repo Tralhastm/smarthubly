@@ -1,0 +1,1 @@
+update public.api_keys set is_exhausted = false where provider = 'google_ai' and is_exhausted = true and (updated_at is null or updated_at < now() - interval '12 hours');

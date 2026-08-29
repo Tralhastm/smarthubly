@@ -1,0 +1,7 @@
+# SmartHubly
+
+> Plataforma de delivery e loja própria pra comércios: cardápio, pedidos, pagamento, fidelidade e automação num só lugar, sem comissão alta.
+
+## Pages
+
+- [Home](/): O que é a SmartHubly, recursos, preços, comparativo com iFood e perguntas frequentes.

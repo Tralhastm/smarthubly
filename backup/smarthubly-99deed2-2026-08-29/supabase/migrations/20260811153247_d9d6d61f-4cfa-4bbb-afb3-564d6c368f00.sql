@@ -1,0 +1,1 @@
+update public.api_keys set is_exhausted = false where provider = 'google_ai';

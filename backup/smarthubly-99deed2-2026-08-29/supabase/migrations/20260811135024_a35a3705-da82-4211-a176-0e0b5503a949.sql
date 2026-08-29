@@ -1,0 +1,1 @@
+UPDATE public.tenants SET storefront_config = storefront_config || jsonb_build_object('hero_image','https://zcnuvemvhhspfrvbttsw.supabase.co/storage/v1/object/public/product-images/storefront/lj-hero.jpg') WHERE slug='lj-distribuidora-de-laticinio';

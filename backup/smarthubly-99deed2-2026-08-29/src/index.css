@@ -1,0 +1,189 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Italianno&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================
+   Tema CLARO por padrão (psicologia: limpeza, confiança, foco
+   no produto). Lojas e painéis usam isto a menos que opt-in
+   pelo modo escuro (.dark) ou cores customizadas do tenant.
+   ========================================================== */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 25% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 25% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 25% 12%;
+
+    /* Azul confiança — bom pra delivery/serviços/varejo */
+    --primary: 217 91% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 30% 96%;
+    --secondary-foreground: 222 25% 12%;
+
+    --muted: 210 25% 95%;
+    --muted-foreground: 220 10% 42%;
+
+    --accent: 217 91% 95%;
+    --accent-foreground: 217 91% 30%;
+
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
+    --ring: 217 91% 55%;
+
+    --radius: 0.875rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 25% 12%;
+    --sidebar-primary: 217 91% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 30% 96%;
+    --sidebar-accent-foreground: 222 25% 12%;
+    --sidebar-border: 220 15% 90%;
+    --sidebar-ring: 217 91% 55%;
+
+    --success: 142 71% 38%;
+    --warning: 38 92% 50%;
+  }
+
+  /* Modo escuro opt-in (lojista pode ativar no painel) */
+  .dark {
+    --background: 222 28% 7%;
+    --foreground: 220 20% 96%;
+
+    --card: 222 25% 10%;
+    --card-foreground: 220 20% 96%;
+
+    --popover: 222 25% 9%;
+    --popover-foreground: 220 20% 96%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 222 20% 15%;
+    --secondary-foreground: 220 20% 96%;
+
+    --muted: 222 18% 14%;
+    --muted-foreground: 220 12% 65%;
+
+    --accent: 217 60% 22%;
+    --accent-foreground: 220 20% 96%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 220 20% 96%;
+
+    --border: 222 18% 18%;
+    --input: 222 18% 18%;
+    --ring: 217 91% 60%;
+
+    --sidebar-background: 222 25% 9%;
+    --sidebar-foreground: 220 20% 96%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 20% 14%;
+    --sidebar-accent-foreground: 220 20% 96%;
+    --sidebar-border: 222 18% 18%;
+    --sidebar-ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer utilities {
+  .font-heading { font-family: 'Inter', sans-serif; font-weight: 700; letter-spacing: -0.015em; }
+  .font-body { font-family: 'Inter', sans-serif; }
+
+  /* Tipografia de luxo (usado na descrição da vitrine, ex: CK Collection) */
+  .font-luxury { font-family: 'Italianno', 'Cormorant Garamond', cursive; font-weight: 400; }
+  .font-luxury-serif { font-family: 'Cormorant Garamond', serif; font-weight: 500; letter-spacing: 0.02em; }
+
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.85));
+  }
+  .gradient-soft {
+    background: linear-gradient(180deg, hsl(var(--background)), hsl(var(--muted)));
+  }
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.7));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .glow-primary {
+    box-shadow: 0 8px 24px -8px hsl(var(--primary) / 0.35);
+  }
+  .hover-glow { @apply transition-all duration-300; }
+  .hover-glow:hover {
+    box-shadow: 0 12px 32px -10px hsl(var(--primary) / 0.4);
+    transform: translateY(-1px);
+  }
+  .surface-elevated {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    box-shadow: 0 1px 2px hsl(220 15% 50% / 0.06), 0 4px 16px -4px hsl(220 15% 50% / 0.08);
+  }
+}
+
+/* Animations */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
+.animate-scale-in { animation: scale-in 0.3s ease-out forwards; }
+
+/* ==========================================================
+   Splash de detalhes do produto aberto (classe injetada pelo
+   hook useSplashOverlay via evento 'splash:open'):
+   - trava o scroll do fundo
+   - esconde os botões flutuantes (carrinho, WhatsApp/Contato,
+     assistente IA, Sofia) que sobrepõem o texto do produto
+   - esconde o botão pequeno "Adicionar" dos cards (o grande
+     do splash já resolve a ação)
+   ========================================================== */
+html.splash-open body { overflow: hidden; }
+
+html.splash-open .fixed.bottom-6.right-6.z-40,
+html.splash-open .fixed.bottom-6.left-6.z-40,
+html.splash-open .fixed.bottom-5.right-5.z-50,
+html.splash-open .fixed.bottom-28.left-6.z-50,
+html.splash-open .fixed.bottom-4.left-4.z-\[9999\] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.2s ease;
+}
+
+html.splash-open .splash-add-btn {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.2s ease;
+}
