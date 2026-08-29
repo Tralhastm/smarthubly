@@ -28,8 +28,8 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
   const isLongDesc = desc.length > 90;
   return (
     <div className="animate-fade-in" style={{ animationDelay: `${Math.min(index, 8) * 50}ms` }}>
-      <div className="group relative overflow-hidden rounded-lg border border-border bg-card p-4 hover-glow transition-all duration-300 hover:border-primary/30">
-        <div className="aspect-square mb-3 overflow-hidden rounded-md bg-secondary flex items-center justify-center relative cursor-pointer" onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={(e) => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpenDetails(product); } }}>
+      <div className="group relative overflow-hidden rounded-lg border border-border bg-card p-4 hover-glow transition-all duration-300 hover:border-primary/30" onClick={() => onOpenDetails?.(product)}>
+        <div className="aspect-square mb-3 overflow-hidden rounded-md bg-secondary flex items-center justify-center relative cursor-pointer" role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined}>
           {Array.isArray(product.media) && product.media.length > 0 ? (
             <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" videoClassName="h-full w-full object-cover" />
           ) : product.image ? (
@@ -85,8 +85,8 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
 const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtras, onOpenPicker, onOpenDetails }: any) => {
   const cta = getItemCTA(product as any, niche);
   return (
-    <div className="group flex gap-3 rounded-lg border border-border bg-card p-3 hover:border-primary/30 transition-colors animate-fade-in">
-      <div className="w-24 h-24 sm:w-28 sm:h-28 shrink-0 overflow-hidden rounded-md bg-secondary flex items-center justify-center relative cursor-pointer" onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={(e) => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpenDetails(product); } }}>
+    <div className="group flex gap-3 rounded-lg border border-border bg-card p-3 hover:border-primary/30 transition-colors animate-fade-in" onClick={() => onOpenDetails?.(product)}>
+      <div className="w-24 h-24 sm:w-28 sm:h-28 shrink-0 overflow-hidden rounded-md bg-secondary flex items-center justify-center relative cursor-pointer" role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined}>
         {Array.isArray(product.media) && product.media.length > 0 ? (
           <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-cover" videoClassName="h-full w-full object-cover" />
         ) : product.image ? (
@@ -133,7 +133,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
 const CompactRow = ({ product, addToCart, niche, hasExtras, onOpenPicker, onOpenDetails }: any) => {
   const cta = getItemCTA(product as any, niche);
   return (
-    <div className="group flex items-start justify-between gap-3 py-3 border-b border-border last:border-0 animate-fade-in" >
+    <div className="group flex items-start justify-between gap-3 py-3 border-b border-border last:border-0 animate-fade-in cursor-pointer" onClick={() => onOpenDetails?.(product)}>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-2 mb-0.5">
           <h3 className="font-heading text-base text-foreground">{product.name}{onOpenDetails && <span className="ml-1 text-primary/60">›</span>}</h3>
@@ -164,8 +164,8 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, onOpenPicker, onOpen
 const MagazineCard = ({ product, addToCart, niche, hasExtras, onOpenPicker, onOpenDetails, large }: any) => {
   const cta = getItemCTA(product as any, niche);
   return (
-    <div className={`group relative overflow-hidden rounded-xl border border-border bg-card hover:border-primary/40 transition-all animate-fade-in ${large ? 'md:col-span-2 md:row-span-2' : ''}`} >
-      <div className={`overflow-hidden bg-secondary cursor-pointer ${large ? 'aspect-[16/10]' : 'aspect-square'}`} onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={(e) => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpenDetails(product); } }}>
+    <div className={`group relative overflow-hidden rounded-xl border border-border bg-card hover:border-primary/40 transition-all animate-fade-in ${large ? 'md:col-span-2 md:row-span-2' : ''}`} onClick={() => onOpenDetails?.(product)}>
+      <div className={`overflow-hidden bg-secondary cursor-pointer ${large ? 'aspect-[16/10]' : 'aspect-square'}`} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined}>
         {Array.isArray(product.media) && product.media.length > 0 ? (
           <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" videoClassName="h-full w-full object-cover" />
         ) : product.image ? (
