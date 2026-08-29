@@ -17,9 +17,17 @@ const TenantStore = () => {
   const { slug } = useParams<{ slug: string }>();
   const [showSplash, setShowSplash] = useState(true);
   const [view, setView] = useState<'catalog' | 'quote'>('catalog');
+  const [productOpen, setProductOpen] = useState(false);
   const hideSplash = useCallback(() => setShowSplash(false), []);
   // Oculta os botões flutuantes enquanto o splash de detalhes do produto está aberto.
   useSplashOverlay();
+  useEffect(() => {
+    const handleProductSplash = (event: Event) => {
+      setProductOpen((event as CustomEvent<boolean>).detail === true);
+    };
+    window.addEventListener('splash:open', handleProductSplash);
+    return () => window.removeEventListener('splash:open', handleProductSplash);
+  }, []);
   const { data: tenant, isLoading } = useTenantBySlug(slug);
   // Per-store PWA manifest: instalar a loja mostra o nome+logo dela.
   useStoreManifest({
@@ -102,7 +110,7 @@ const TenantStore = () => {
         />
       )}
       {(tenant as any).store_mode !== 'supermarket' && (
-      <header data-splash-header="true" className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+      <header data-splash-header="true" aria-hidden={productOpen} className={`sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md ${productOpen ? 'hidden' : ''}`}>
 
         <div className="container mx-auto flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
