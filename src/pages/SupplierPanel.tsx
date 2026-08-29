@@ -485,22 +485,61 @@ const SupplierPanel = () => {
     return Number.isFinite(number) && number >= 0 ? number : null;
   };
 
-  const parsePriceLine = (line: string) => {
-    const costMarker = line.search(/\s+-\s*CUSTO\s*:/i);
-    const resaleMarker = line.search(/\s+-\s*REVENDA\s*:/i);
-    const firstMarker = [costMarker, resaleMarker].filter(i => i >= 0).sort((a, b) => a - b)[0];
-    if (firstMarker == null) return null;
-    const name = line.slice(0, firstMarker).replace(/\s+-\s*$/, '').trim();
-    const costMatch = line.match(/\s+-\s*CUSTO\s*:\s*R?\$?\s*([\d.]+(?:,\d{1,2})?)/i);
-    const resaleMatch = line.match(/\s+-\s*REVENDA\s*:\s*R?\$?\s*([\d.]+(?:,\d{1,2})?)/i);
-    const cost = costMatch ? parsePrice(costMatch[1]) : null;
-    const resale = resaleMatch ? parsePrice(resaleMatch[1]) : null;
-    return name && (cost != null || resale != null) ? { name, cost, resale } : null;
+  const cleanImportedName = (value: string) => value
+    .replace(/\*/g, '').replace(/[_~`]/g, '').replace(/[🇧🇷🇨🇳☀️😍🤩🟢⚠️‼️]/gu, '')
+    .replace(/\(\s*R?\$?.*$/i, '').replace(/\s+-\s*$/, '').replace(/[：:]+$/, '').trim();
+
+  const sectionBrand = (line: string) => {
+    const upper = line.toLocaleUpperCase('pt-BR');
+    if (!line.includes('🟢') && !/LINHA\s+(REDMI|NOTE|POCO|MI)/i.test(line)) return '';
+    if (upper.includes('SAMSUNG')) return 'Samsung';
+    if (upper.includes('MOTOROLA')) return 'Motorola';
+    if (upper.includes('REALME')) return 'Realme';
+    if (upper.includes('INFINIX')) return 'Infinix';
+    if (upper.includes('REDMI')) return 'Redmi';
+    if (upper.includes('POCO')) return 'Poco';
+    if (/LINHA\s+MI/i.test(line)) return 'Mi';
+    if (/LINHA\s+NOTE/i.test(line)) return 'Note';
+    return '';
+  };
+
+  const parseImportedEntries = (text: string) => {
+    const entries: { name: string; cost: number | null; resale: number | null; aliases: string[] }[] = [];
+    let brand = '';
+    let pending = '';
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      const detectedBrand = sectionBrand(line);
+      if (detectedBrand) { brand = detectedBrand; pending = ''; continue; }
+      if (!line) continue;
+      const candidate = pending ? `${pending} ${line}` : line;
+      const priceMatch = candidate.match(/R?\$\s*([\d.]+(?:,\d{1,2})?)/i);
+      if (!priceMatch) {
+        // Produtos WhatsApp normalmente começam com * e recebem o preço na linha seguinte.
+        if (/^\s*\*/.test(line) && !/^(?:\*?\d{1,2}\/\d{1,2}\/\d{2,4}|\*?confira|\*?obs)/i.test(line)) pending = candidate;
+        continue;
+      }
+      pending = '';
+      const costMarker = candidate.search(/\s+-\s*CUSTO\s*:/i);
+      const resaleMarker = candidate.search(/\s+-\s*REVENDA\s*:/i);
+      const explicit = costMarker >= 0 || resaleMarker >= 0;
+      const costMatch = candidate.match(/\s+-\s*CUSTO\s*:\s*R?\$?\s*([\d.]+(?:,\d{1,2})?)/i);
+      const resaleMatch = candidate.match(/\s+-\s*REVENDA\s*:\s*R?\$?\s*([\d.]+(?:,\d{1,2})?)/i);
+      const cost = costMatch ? parsePrice(costMatch[1]) : (explicit ? null : parsePrice(priceMatch[1]));
+      const resale = resaleMatch ? parsePrice(resaleMatch[1]) : null;
+      const marker = [costMarker, resaleMarker].filter(i => i >= 0).sort((a, b) => a - b)[0];
+      const name = cleanImportedName(candidate.slice(0, marker >= 0 ? marker : candidate.search(/R?\$/i)));
+      if (!name || (cost == null && resale == null)) continue;
+      const aliases = [name];
+      if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
+      entries.push({ name, cost, resale, aliases });
+    }
+    return entries;
   };
 
   const importPrices = async () => {
     if (!supplier || importingPrices) return;
-    const entries = priceText.split(/\r?\n/).map(parsePriceLine).filter(Boolean) as { name: string; cost: number | null; resale: number | null }[];
+    const entries = parseImportedEntries(priceText);
     if (entries.length === 0) {
       toast.error('Nenhuma linha válida encontrada. Use: produto - CUSTO: R$ 990,00 - REVENDA: R$ 1.199,00');
       return;
@@ -512,7 +551,7 @@ const SupplierPanel = () => {
     const invalid: string[] = [];
     try {
       for (const entry of entries) {
-        const product = byName.get(normalizeProductName(entry.name));
+        const product = entry.aliases.map(alias => byName.get(normalizeProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
         if (!product) { notFound.push(entry.name); continue; }
         const patch: Record<string, number> = {};
         if (entry.cost != null) patch.original_price = entry.cost;
