@@ -517,9 +517,9 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                     items={hasMedia
                       ? (detail as any).media
                       : [{ kind: 'image', url: img, alt: detail.name }]}
-                    className="max-h-[32vh] sm:max-h-[45vh] w-full"
-                    imgClassName="max-h-[32vh] sm:max-h-[45vh] w-full object-contain"
-                    videoClassName="max-h-[32vh] sm:max-h-[45vh] w-full object-contain"
+                    className="h-[42vh] max-h-[520px] sm:h-[50vh] sm:max-h-[620px] w-full"
+                    imgClassName="h-full w-full object-contain"
+                    videoClassName="h-full w-full object-contain"
                   />
                   <button onClick={() => setDetail(null)} aria-label="Fechar"
                     className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur transition hover:bg-black/80">
