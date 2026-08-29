@@ -177,6 +177,12 @@ html.splash-open [data-splash-header="true"] {
   display: none !important;
 }
 
+/* Fallback para clientes móveis que ainda estejam usando um bundle antigo:
+   o evento do Splash já adiciona a classe ao html antes desta regra atuar. */
+html.splash-open header {
+  display: none !important;
+}
+
 /* Marcador explícito para impedir que botões externos cubram o Splash,
    independentemente da ordem ou das classes utilitárias geradas. */
 html.splash-open [data-splash-floating="true"] {
