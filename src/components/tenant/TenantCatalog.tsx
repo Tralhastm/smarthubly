@@ -211,7 +211,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const [catNodes, setCatNodes] = useState<{ id: string; name: string; parent_id: string | null; hidden: boolean }[]>([]);
   // Seleção em árvore: `activeNode` é o ID do nó selecionado (null = Todos).
   // Chips exibem: raízes quando nenhum nó é selecionado; senão as FILHAS do nó
-  // selecionado (+ botão voltar ao pai). Assim: clicou "Feminino" → aparecem
+  // selecionado (+ navegação para o pai). Assim: clicou "Feminino" → aparecem
   // Blusas, Calças, Vestidos... clicou "Blusas" → aparecem os produtos dela.
   const [activeNode, setActiveNode] = useState<string | null>(null);
   const nodeById = useMemo(() => new Map(catNodes.map(n => [n.id, n])), [catNodes]);
