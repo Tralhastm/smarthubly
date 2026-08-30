@@ -94,5 +94,6 @@ export const incrementCouponUse = async (couponId: string, currentUses: number) 
 };
 
 export const incrementSellerCodeUse = async (codeId: string, currentUses: number) => {
-  await (supabase as any).from('seller_codes').update({ uses_count: currentUses + 1 }).eq('id', codeId);
+  // O checkout pode ser anônimo; o RPC valida ativo, validade e limite no banco.
+  await (supabase as any).rpc('increment_seller_code_use', { _code_id: codeId });
 };
