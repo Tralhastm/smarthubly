@@ -210,7 +210,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     // Em dropshipping, fornecedor vinculado define que o item usa o frete
     // configurado no painel do fornecedor, mesmo que has_shipping seja um
     // valor legado falso no cadastro do produto.
-    if (product.supplier_id) return true;
+    if (product.supplier_id || resolvedSupplierIds[productMatchKey(product.name)]) return true;
     // PostgREST pode entregar booleanos legados como strings; "false" não
     // pode ser tratado como true pelo operador !!.
     return product.has_shipping === true || product.has_shipping === 1 || product.has_shipping === 'true';
