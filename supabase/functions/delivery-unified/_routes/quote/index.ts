@@ -98,12 +98,15 @@ function calculateUberSandboxFee(distanceKm: number | null, tableFee: number) {
   return Math.round(Math.max(estimated, tableFee, 9.9) * 100) / 100;
 }
 
-function resolvePickupContext(tenant: TenantRow, suppliers: SupplierRow[]) {
+function resolvePickupContext(tenant: TenantRow, suppliers: SupplierRow[], supplierIds: string[]) {
   const suppliersWithAddress = suppliers.filter((supplier) => supplier.address);
-  // Quando o checkout informa um fornecedor do item, a origem operacional
-  // deve ser esse fornecedor; só usamos o responsável marcado como fallback.
-  const responsibleSuppliers = suppliersWithAddress.filter((supplier) => supplier.responsible_for_delivery);
-  const selectedSupplier = suppliersWithAddress[0] || responsibleSuppliers[0] || null;
+  // A origem operacional deve ser o fornecedor associado ao item enviado pelo checkout.
+  // A consulta por IDs não garante ordem; por isso não podemos usar suppliers[0].
+  const selectedSupplier = supplierIds
+    .map((supplierId) => suppliersWithAddress.find((supplier) => supplier.id === supplierId))
+    .find(Boolean)
+    || suppliersWithAddress.find((supplier) => supplier.responsible_for_delivery)
+    || null;
   const pickupAddress = selectedSupplier?.address || tenant.shipping_origin_address || tenant.address || "";
   const origin: DeliveryOrigin = selectedSupplier ? "supplier" : "store";
   const feeConfig = selectedSupplier
@@ -236,7 +239,7 @@ if (req.method === "OPTIONS") {
       : { data: [] as SupplierRow[] | null };
 
     const suppliers = (supplierResponse.data || []) as SupplierRow[];
-    const { pickupAddress, origin, feeConfig, selectedSupplier } = resolvePickupContext(tenant, suppliers);
+    const { pickupAddress, origin, feeConfig, selectedSupplier } = resolvePickupContext(tenant, suppliers, supplierIds);
 
     if (!pickupAddress) {
       return new Response(JSON.stringify({ error: "Endereço de origem não configurado" }), {
