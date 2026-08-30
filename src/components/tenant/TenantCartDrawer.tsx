@@ -282,6 +282,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   // Compute shipping using per-product origin distances + tabela do fornecedor (se houver)
   const computeShippingFee = (): number => {
     if (!hasShippingItems || deliveryType !== 'delivery') return 0;
+    // No dropshipping, o frete já é colocado em deliveryFee após a estimativa
+    // CEP→CEP. Não somar novamente a tabela aqui.
+    if (isDropshipping) return 0;
     const tenantBaseFee = (tenant as any).shipping_base_fee ?? 0;
     const tenantBaseRadius = (tenant as any).shipping_base_radius_km ?? 5;
     const tenantPerKmFee = (tenant as any).shipping_per_km_fee ?? 0;
@@ -457,8 +460,23 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         if (destCep && sourceCep) {
           const est = await estimateFreight(sourceCep, destCep);
           if (est) {
+            const supplierProduct = items.find(i => productNeedsShipping(i.product));
+            const supplierId = supplierProduct
+              ? ((supplierProduct.product as any).supplier_id || resolvedSupplierIds[productMatchKey(supplierProduct.product.name)])
+              : null;
+            const supplierConfig = supplierId ? supplierShippings[supplierId] : null;
+            const baseFee = supplierConfig?.shipping_base_fee ?? 0;
+            const baseRadius = supplierConfig?.shipping_base_radius_km ?? 0;
+            const perKm = supplierConfig?.shipping_per_km_fee ?? 0;
+            const maxFee = supplierConfig?.shipping_max_fee;
+            const tableFee = supplierConfig && baseFee > 0
+              ? Math.min(
+                  maxFee != null && maxFee > 0 ? maxFee : Number.POSITIVE_INFINITY,
+                  est.distanceKm <= baseRadius ? baseFee : baseFee + (est.distanceKm - baseRadius) * perKm,
+                )
+              : est.pac;
             setFreightEstimate(est);
-            setDeliveryFee(est.pac);
+            setDeliveryFee(Math.round(tableFee * 100) / 100);
             setDeliveryCheck(null);
             setDistanceError('');
           } else {
