@@ -14,6 +14,8 @@ interface CepAddressInputProps {
   displayFeeLabel?: string;
   /** Override da distância exibida (ex.: distância do fornecedor mais distante quando há dropshipping). */
   displayDistanceOverride?: number | null;
+  /** Dropshipping usa a estimativa CEP→CEP do componente pai, sem Edge Function. */
+  skipDistanceCalculation?: boolean;
 }
 
 const STORAGE_KEY = 'lastCepAddress';
@@ -33,7 +35,7 @@ const formatCep = (raw: string) => {
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 };
 
-const CepAddressInput = ({ onChange, onCalculated, onError, tenantAddress, displayFeeOverride, displayFeeLabel, displayDistanceOverride }: CepAddressInputProps) => {
+const CepAddressInput = ({ onChange, onCalculated, onError, tenantAddress, displayFeeOverride, displayFeeLabel, displayDistanceOverride, skipDistanceCalculation }: CepAddressInputProps) => {
   const [cep, setCep] = useState('');
   const [number, setNumber] = useState('');
   const [complement, setComplement] = useState('');
@@ -153,6 +155,14 @@ const CepAddressInput = ({ onChange, onCalculated, onError, tenantAddress, displ
     setResult(null);
     onError('');
     try {
+      if (skipDistanceCalculation) {
+        setResult({ distance: 0, fee: 0 });
+        onCalculated(0, 0, composed);
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({ cep, number, complement, reference, street, neighborhood, city, uf }));
+        } catch { /* ignore */ }
+        return;
+      }
       const { data, error } = await unifiedInvoke("delivery-unified", "distance", { address: composed, origin: tenantAddress });
       if (error) throw error;
       if (data.error) {
