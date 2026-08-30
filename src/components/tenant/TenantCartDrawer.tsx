@@ -207,7 +207,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   // A tabela do fornecedor continua sendo usada apenas para calcular o valor,
   // mas não para ativar o frete sozinha.
   const productNeedsShipping = (product: any): boolean => {
-    return !!product.has_shipping;
+    // PostgREST pode entregar booleanos legados como strings; "false" não
+    // pode ser tratado como true pelo operador !!.
+    return product.has_shipping === true || product.has_shipping === 1 || product.has_shipping === 'true';
   };
 
   const hasShippingItems = shippingEnabled && items.some(i => productNeedsShipping(i.product));
@@ -396,7 +398,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
 
     const distances: Record<string, number> = { [tenantOrigin]: distanceKm };
 
-    if (uniqueOrigins.size > 0) {
+    if (!isDropshipping && uniqueOrigins.size > 0) {
       _setCalculatingDistance(true);
       const results = await Promise.allSettled(
         Array.from(uniqueOrigins).map(async (origin) => {
@@ -443,6 +445,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             setFreightEstimate(est);
             setDeliveryFee(est.pac);
             setDeliveryCheck(null);
+            setDistanceError('');
           } else {
             setDistanceError('Não foi possível estimar o frete pra esse CEP. Tente novamente.');
           }
