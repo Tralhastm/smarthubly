@@ -99,8 +99,11 @@ function calculateUberSandboxFee(distanceKm: number | null, tableFee: number) {
 }
 
 function resolvePickupContext(tenant: TenantRow, suppliers: SupplierRow[]) {
-  const responsibleSuppliers = suppliers.filter((supplier) => supplier.responsible_for_delivery && supplier.address);
-  const selectedSupplier = responsibleSuppliers[0] || null;
+  const suppliersWithAddress = suppliers.filter((supplier) => supplier.address);
+  // Quando o checkout informa um fornecedor do item, a origem operacional
+  // deve ser esse fornecedor; só usamos o responsável marcado como fallback.
+  const responsibleSuppliers = suppliersWithAddress.filter((supplier) => supplier.responsible_for_delivery);
+  const selectedSupplier = suppliersWithAddress[0] || responsibleSuppliers[0] || null;
   const pickupAddress = selectedSupplier?.address || tenant.shipping_origin_address || tenant.address || "";
   const origin: DeliveryOrigin = selectedSupplier ? "supplier" : "store";
   const feeConfig = selectedSupplier

@@ -489,7 +489,10 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         }
       } else {
         const supplierIds = Array.from(new Set(
-          items.map(i => (i.product as any).supplier_id).filter(Boolean)
+          items
+            .filter(i => productNeedsShipping(i.product))
+            .map(i => (i.product as any).supplier_id || resolvedSupplierIds[productMatchKey(i.product.name)])
+            .filter(Boolean)
         ));
         const { data, error } = await unifiedInvoke("delivery-unified", "quote", { tenantId: tenant.id, customerAddress: calculatedAddress, supplierIds });
         if (!error && data && !data.error) {
