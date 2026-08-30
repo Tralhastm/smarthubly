@@ -4,6 +4,7 @@ import { useCart, getCartLineUnitPrice } from '@/contexts/CartContext';
 import { useAddOrder } from '@/hooks/useOrders';
 import { useCreateAppointment } from '@/hooks/useAppointments';
 import { buildWhatsAppMessage, sanitizeWhatsAppNumber } from '@/lib/store';
+import { productMatchKey } from '@/lib/product-match';
 import { PENDING_PAYMENT_STATUS } from '@/lib/order-status';
 import { supabase } from '@/integrations/supabase/client';
 import { logOrderEvent } from '@/lib/order-events';
@@ -200,6 +201,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   // Carrega dados de frete dos fornecedores envolvidos no carrinho (dropshipping)
   // Declarado antes de productNeedsShipping para que ele possa consultar a tabela do fornecedor
   const [supplierShippings, setSupplierShippings] = useState<Record<string, SupplierShipping>>({});
+  const [resolvedSupplierIds, setResolvedSupplierIds] = useState<Record<string, string>>({});
 
   // Um produto só entra no frete quando foi marcado manualmente no admin.
   // A tabela do fornecedor continua sendo usada apenas para calcular o valor,
@@ -213,17 +215,38 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
 
   // Carrega dados de frete dos fornecedores envolvidos no carrinho (dropshipping)
   useEffect(() => {
-    const ids = Array.from(new Set(
-      items.map(i => (i.product as any).supplier_id).filter(Boolean)
-    )) as string[];
-    if (ids.length === 0) { setSupplierShippings({}); return; }
+    if (items.length === 0) { setSupplierShippings({}); setResolvedSupplierIds({}); return; }
     let cancelled = false;
     (async () => {
-      const { data } = await (supabase as any)
+      // Busca fornecedores da própria loja e resolve ofertas mesmo quando o
+      // produto importado ainda não possui supplier_id preenchido.
+      const { data: tenantSuppliers } = await (supabase as any)
+        .from('suppliers_public')
+        .select('id, tenant_id')
+        .eq('tenant_id', tenant.id);
+      const tenantSupplierIds = (tenantSuppliers || []).map((s: any) => s.id).filter(Boolean);
+      const { data: prices } = tenantSupplierIds.length > 0
+        ? await (supabase as any).from('supplier_product_prices').select('supplier_id, product_name, unit_price').in('supplier_id', tenantSupplierIds).eq('available', true)
+        : { data: [] };
+      const best = new Map<string, { supplier_id: string; unit_price: number }>();
+      (prices || []).forEach((p: any) => {
+        const key = productMatchKey(p.product_name);
+        const current = best.get(key);
+        if (!current || Number(p.unit_price) < current.unit_price) best.set(key, { supplier_id: p.supplier_id, unit_price: Number(p.unit_price) });
+      });
+      const resolved: Record<string, string> = {};
+      items.forEach(i => {
+        const explicit = (i.product as any).supplier_id;
+        const chosen = explicit || best.get(productMatchKey(i.product.name))?.supplier_id;
+        if (chosen) resolved[productMatchKey(i.product.name)] = chosen;
+      });
+      const ids = Array.from(new Set([...Object.values(resolved), ...items.map(i => (i.product as any).supplier_id).filter(Boolean)]));
+      const { data } = ids.length > 0 ? await (supabase as any)
         .from('suppliers_public')
         .select('id, address, shipping_base_fee, shipping_base_radius_km, shipping_per_km_fee, shipping_max_fee, delivery_max_radius_km')
-        .in('id', ids);
+        .in('id', ids) : { data: [] };
       if (cancelled || !data) return;
+      setResolvedSupplierIds(resolved);
       const map: Record<string, SupplierShipping> = {};
       (data as any[]).forEach(s => {
         map[s.id] = {
@@ -244,8 +267,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const getProductOrigin = (product: any): string => {
     // Prioridade: override explícito > endereço do fornecedor > origem da loja > endereço da loja
     if (product.shipping_origin_override) return product.shipping_origin_override;
-    if (product.supplier_id && supplierShippings[product.supplier_id]?.address) {
-      return supplierShippings[product.supplier_id].address;
+    const supplierId = product.supplier_id || resolvedSupplierIds[productMatchKey(product.name)];
+    if (supplierId && supplierShippings[supplierId]?.address) {
+      return supplierShippings[supplierId].address;
     }
     return (tenant as any).shipping_origin_address || tenant.address;
   };
@@ -266,7 +290,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         totalShipping += override * i.quantity;
         return;
       }
-      const supplierId = (i.product as any).supplier_id;
+      const supplierId = (i.product as any).supplier_id || resolvedSupplierIds[productMatchKey(i.product.name)];
       const sup = supplierId ? supplierShippings[supplierId] : null;
       const baseFee = sup ? sup.shipping_base_fee : tenantBaseFee;
       const baseRadius = sup ? sup.shipping_base_radius_km : tenantBaseRadius;
@@ -556,16 +580,22 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       // O sistema agora verifica se os itens do carrinho podem ser atendidos por fornecedores diferentes
       // com base no menor custo detectado na tabela de inteligência de preços.
       // --- Lógica de Fragmentação por Menor Preço ---
-      const productNames = items.map(i => i.product.name.trim().toLowerCase());
-      const { data: supplierPrices } = await supabase
-        .from('supplier_product_prices')
-        .select('supplier_id, product_name, unit_price')
-        .in('product_name', productNames)
-        .eq('available', true);
+      const { data: tenantSuppliers } = await (supabase as any)
+        .from('suppliers_public')
+        .select('id')
+        .eq('tenant_id', tenant.id);
+      const supplierIds = (tenantSuppliers || []).map((s: any) => s.id).filter(Boolean);
+      const { data: supplierPrices } = supplierIds.length > 0
+        ? await supabase
+          .from('supplier_product_prices')
+          .select('supplier_id, product_name, unit_price')
+          .in('supplier_id', supplierIds)
+          .eq('available', true)
+        : { data: [] as any[] };
 
       const bestSuppliers = new Map<string, { supplier_id: string; price: number }>();
       (supplierPrices || []).forEach((sp: any) => {
-        const name = sp.product_name.toLowerCase();
+        const name = productMatchKey(sp.product_name);
         // Prioriza menor preço de custo para fragmentação operacional
         const cur = bestSuppliers.get(name);
         if (!cur || Number(sp.unit_price) < cur.price) {
@@ -575,7 +605,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
 
       const fragments = new Map<string, string[]>();
       items.forEach(item => {
-        const best = bestSuppliers.get(item.product.name.toLowerCase());
+        const best = bestSuppliers.get(productMatchKey(item.product.name));
         const targetSupplierId = best?.supplier_id || (item.product as any).supplier_id;
         if (targetSupplierId) {
           const list = fragments.get(targetSupplierId) || [];
