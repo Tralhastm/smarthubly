@@ -345,6 +345,13 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         : Math.min(appliedCoupon.discount_value, subtotalForCoupon))
     : 0;
   const finalTotal = Math.max(0, subtotalForCoupon - discountAmount);
+  // Em delivery, pagamentos só ficam disponíveis após uma cotação válida.
+  // Em dropshipping, a cotação ViaCEP também é a prova de que o endereço está dentro do raio do fornecedor.
+  const deliveryBlocked = deliveryType === 'delivery' && (
+    checkingDelivery ||
+    !!distanceError ||
+    (isDropshipping && (!freightEstimate || effectiveDeliveryFee <= 0))
+  );
 
   const applyCoupon = async () => {
     setCouponMsg('');
@@ -457,13 +464,27 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         // carregamento assíncrono de supplierShippings terminar. Nesse caso,
         // busca a origem segura diretamente na view pública para não exibir
         // falsamente "Loja sem CEP".
+        let fallbackSupplierId: string | null = null;
+        let fallbackSupplierConfig: SupplierShipping | null = null;
         if (!originCep && isDropshipping) {
           const { data: fallbackSuppliers } = await (supabase as any)
             .from('suppliers_public')
-            .select('id, address')
+            .select('id, address, shipping_base_fee, shipping_base_radius_km, shipping_per_km_fee, shipping_max_fee, delivery_max_radius_km')
             .eq('tenant_id', tenant.id);
-          const fallbackOrigin = (fallbackSuppliers || []).map((s: any) => s.address || '').find((a: string) => extractCep(a));
-          originCep = extractCep(fallbackOrigin || '');
+          const fallbackSupplier = (fallbackSuppliers || []).find((s: any) => extractCep(s.address || ''));
+          if (fallbackSupplier) {
+            fallbackSupplierId = fallbackSupplier.id || null;
+            originCep = extractCep(fallbackSupplier.address || '');
+            fallbackSupplierConfig = {
+              id: fallbackSupplier.id,
+              address: fallbackSupplier.address || '',
+              shipping_base_fee: Number(fallbackSupplier.shipping_base_fee ?? 0),
+              shipping_base_radius_km: Number(fallbackSupplier.shipping_base_radius_km ?? 5),
+              shipping_per_km_fee: Number(fallbackSupplier.shipping_per_km_fee ?? 0),
+              shipping_max_fee: fallbackSupplier.shipping_max_fee != null ? Number(fallbackSupplier.shipping_max_fee) : null,
+              delivery_max_radius_km: Number(fallbackSupplier.delivery_max_radius_km ?? 0),
+            };
+          }
         }
         const tenantCep = (tenant as any).whatsapp_store_cep || extractCep((tenant as any).shipping_origin_address || tenant.address || '');
         const sourceCep = originCep || tenantCep;
@@ -476,9 +497,12 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
               ? await (supabase as any).from('products').select('supplier_id').eq('id', productId).maybeSingle()
               : { data: null };
             const supplierId = supplierProduct
-              ? ((currentProduct as any)?.supplier_id || (supplierProduct.product as any).supplier_id || resolvedSupplierIds[productMatchKey(supplierProduct.product.name)])
-              : null;
+              ? ((currentProduct as any)?.supplier_id || (supplierProduct.product as any).supplier_id || resolvedSupplierIds[productMatchKey(supplierProduct.product.name)] || fallbackSupplierId)
+              : fallbackSupplierId;
             let supplierConfig = supplierId ? supplierShippings[supplierId] : null;
+            if (!supplierConfig && fallbackSupplierConfig && supplierId === fallbackSupplierId) {
+              supplierConfig = fallbackSupplierConfig;
+            }
             if (supplierId && !supplierConfig) {
               const { data: freshSupplier } = await (supabase as any)
                 .from('suppliers_public')
@@ -563,6 +587,10 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       return;
     }
     const needsDistance = deliveryType === 'delivery' && !isDropshipping;
+    if (deliveryType === 'delivery' && (checkingDelivery || distanceError || (isDropshipping && (!freightEstimate || effectiveDeliveryFee <= 0)))) {
+      toast({ title: 'Frete indisponível para este endereço', description: distanceError || 'Calcule o frete antes de prosseguir.', variant: 'destructive' });
+      return;
+    }
     if (!name || !phone || (deliveryType === 'delivery' && !address) || (needsDistance && distance === null)) {
       toast({ title: needsDistance && distance === null ? 'Calcule a distância primeiro' : 'Preencha todos os campos', variant: 'destructive' });
       return;
@@ -599,7 +627,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       }
       // Valida raio de cada fornecedor envolvido
       for (const it of items) {
-        const supId = (it.product as any).supplier_id;
+        const supId = (it.product as any).supplier_id || resolvedSupplierIds[productMatchKey(it.product.name)];
         if (!supId) continue;
         const sup = supplierShippings[supId];
         if (!sup) continue;
@@ -1190,13 +1218,13 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       qualquer ambiguidade de estado. O usuário escolhe pelo botão clicado. */}
                   {hasOnlinePayment && (
                     <>
-                      <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || (deliveryType === 'delivery' && !!distanceError)}
+                      <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
                         className="w-full py-4 rounded-lg font-bold text-base text-primary-foreground gradient-primary hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ring-2 ring-primary/40">
                         {creatingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
                         {creatingPayment ? 'Gerando pagamento...' : `💳 Pagar R$${finalTotal.toFixed(2)} agora (Mercado Pago)`}
                       </button>
                       {!!(tenant as any).demo_payment_enabled && (
-                        <button onClick={() => submitOrder(false, true, true)} disabled={addOrderMutation.isPending || creatingPayment || (deliveryType === 'delivery' && !!distanceError)}
+                        <button onClick={() => submitOrder(false, true, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
                           className="w-full py-3 rounded-lg font-bold text-sm bg-yellow-400 hover:bg-yellow-500 text-black disabled:opacity-50 flex items-center justify-center gap-2">
                           🧪 SIMULAR pagamento online aprovado (TESTE)
                         </button>
@@ -1209,17 +1237,17 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     </>
                   )}
                   {isWhatsAppMode ? (
-                    <button onClick={() => submitOrder(true)} disabled={addOrderMutation.isPending || !waNumber || creatingPayment || (deliveryType === 'delivery' && !!distanceError)}
+                    <button onClick={() => submitOrder(true)} disabled={addOrderMutation.isPending || !waNumber || creatingPayment || deliveryBlocked}
                       className="w-full py-4 rounded-lg font-bold text-base text-white transition-colors flex items-center justify-center gap-2 disabled:opacity-50 bg-[hsl(142,71%,30%)] hover:bg-[hsl(142,71%,35%)] shadow-lg">
                       <MessageCircle className="h-5 w-5" />
                       {addOrderMutation.isPending ? 'Registrando...' : 'Enviar pedido no WhatsApp'}
                     </button>
                   ) : (
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => submitOrder(false)} disabled={addOrderMutation.isPending || creatingPayment || (deliveryType === 'delivery' && !!distanceError)} className={`py-3 rounded-lg font-medium text-sm disabled:opacity-50 ${hasOnlinePayment ? 'bg-secondary text-foreground hover:bg-muted border border-border' : 'gradient-primary text-primary-foreground hover:opacity-90'}`}>
+                    <button onClick={() => submitOrder(false)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked} className={`py-3 rounded-lg font-medium text-sm disabled:opacity-50 ${hasOnlinePayment ? 'bg-secondary text-foreground hover:bg-muted border border-border' : 'gradient-primary text-primary-foreground hover:opacity-90'}`}>
                       {addOrderMutation.isPending ? 'Enviando...' : `Pagar ${deliveryType === 'pickup' ? 'no balcão' : 'na entrega'}`}
                     </button>
-                    <button onClick={() => submitOrder(true)} disabled={addOrderMutation.isPending || !waNumber || creatingPayment || (deliveryType === 'delivery' && !!distanceError)}
+                    <button onClick={() => submitOrder(true)} disabled={addOrderMutation.isPending || !waNumber || creatingPayment || deliveryBlocked}
                       className="py-3 rounded-lg font-medium text-sm text-foreground transition-colors flex items-center justify-center gap-1 disabled:opacity-50 bg-[hsl(142,71%,30%)] hover:bg-[hsl(142,71%,35%)]">
                       <MessageCircle className="h-4 w-4" /> WhatsApp
                     </button>
