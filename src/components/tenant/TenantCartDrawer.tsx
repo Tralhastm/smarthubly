@@ -439,7 +439,21 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           .filter(i => productNeedsShipping(i.product))
           .map(i => getProductOrigin(i.product))
           .find(Boolean) || '';
-        const originCep = extractCep(supplierOrigin);
+        let originCep = extractCep(supplierOrigin);
+        // O cliente pode clicar imediatamente após abrir o checkout, antes do
+        // carregamento assíncrono de supplierShippings terminar. Nesse caso,
+        // busca a origem segura diretamente na view pública para não exibir
+        // falsamente "Loja sem CEP".
+        if (!originCep && isDropshipping) {
+          const ids = items.map(i => (i.product as any).supplier_id).filter(Boolean);
+          const { data: fallbackSuppliers } = await (supabase as any)
+            .from('suppliers_public')
+            .select('id, address')
+            .eq('tenant_id', tenant.id)
+            .in(ids.length > 0 ? 'id' : 'tenant_id', ids.length > 0 ? ids : [tenant.id]);
+          const fallbackOrigin = (fallbackSuppliers || []).map((s: any) => s.address || '').find((a: string) => extractCep(a));
+          originCep = extractCep(fallbackOrigin || '');
+        }
         const tenantCep = (tenant as any).whatsapp_store_cep || extractCep((tenant as any).shipping_origin_address || tenant.address || '');
         const sourceCep = originCep || tenantCep;
         if (destCep && sourceCep) {
