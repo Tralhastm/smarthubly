@@ -3,6 +3,7 @@ import { useSuppliers, useAddSupplier, useDeleteSupplier, useUpdateSupplier, use
 import { Plus, Trash2, Copy, Truck, MapPin, Check, CheckCircle, XCircle, Clock, BarChart3, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { productMatchKey } from '@/lib/product-match';
 
 const TenantAdminSuppliers = ({ tenantId, slug }: { tenantId: string; slug: string }) => {
   const { data: suppliers = [], isLoading } = useSuppliers(tenantId);
@@ -85,14 +86,14 @@ const TenantAdminSuppliers = ({ tenantId, slug }: { tenantId: string; slug: stri
   const compareGroups = (() => {
     const map = new Map<string, PriceRowC[]>();
     for (const r of compareRows) {
-      const key = r.product_name;
+      const key = productMatchKey(r.product_name);
       const arr = map.get(key) || [];
       arr.push(r);
       map.set(key, arr);
     }
     return Array.from(map.entries())
       .filter(([, arr]) => arr.length >= 2)
-      .map(([name, arr]) => ({ name, rows: [...arr].sort((a, b) => a.unit_price - b.unit_price) }));
+      .map(([, arr]) => ({ name: arr[0].product_name, rows: [...arr].sort((a, b) => a.unit_price - b.unit_price) }));
   })();
   const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const typeLabel = (ts: string[]) =>

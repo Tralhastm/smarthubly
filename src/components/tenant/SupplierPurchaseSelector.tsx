@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { ShoppingCart, Send, Zap, Plus, Trash2, RefreshCw, Package } from 'lucide-react';
 import { toast } from 'sonner';
+import { productMatchKey } from '@/lib/product-match';
 
 type Supplier = { id: string; name: string; phone: string | null; active: boolean };
 
@@ -51,7 +52,7 @@ const SupplierPurchaseSelector = ({ tenantId }: { tenantId: string }) => {
   const cheapestByProduct = useMemo(() => {
     const map = new Map<string, { supplier_id: string; unit_price: number }>();
     for (const p of prices) {
-      const key = p.product_name.trim().toLowerCase();
+      const key = productMatchKey(p.product_name);
       const cur = map.get(key);
       if (!cur || p.unit_price < cur.unit_price) map.set(key, { supplier_id: p.supplier_id, unit_price: p.unit_price });
     }
@@ -92,7 +93,7 @@ const SupplierPurchaseSelector = ({ tenantId }: { tenantId: string }) => {
 
     for (const item of items) {
       if (mode === 'auto') {
-        const best = cheapestByProduct.get(item.name.trim().toLowerCase());
+        const best = cheapestByProduct.get(productMatchKey(item.name));
         if (!best) {
           unassigned.push(item.name);
           continue;
