@@ -445,12 +445,10 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         // busca a origem segura diretamente na view pública para não exibir
         // falsamente "Loja sem CEP".
         if (!originCep && isDropshipping) {
-          const ids = items.map(i => (i.product as any).supplier_id).filter(Boolean);
           const { data: fallbackSuppliers } = await (supabase as any)
             .from('suppliers_public')
             .select('id, address')
-            .eq('tenant_id', tenant.id)
-            .in(ids.length > 0 ? 'id' : 'tenant_id', ids.length > 0 ? ids : [tenant.id]);
+            .eq('tenant_id', tenant.id);
           const fallbackOrigin = (fallbackSuppliers || []).map((s: any) => s.address || '').find((a: string) => extractCep(a));
           originCep = extractCep(fallbackOrigin || '');
         }
