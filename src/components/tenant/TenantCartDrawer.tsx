@@ -955,7 +955,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                         onCalculated={handleDistanceCalculated}
                         onError={handleDistanceError}
                         tenantAddress={primaryShippingOrigin}
-                        skipDistanceCalculation={isDropshipping}
+                        skipDistanceCalculation={isDropshipping || (tenant as any).is_dropshipping === true}
                         displayFeeOverride={effectiveDeliveryFee + shippingFee}
                         displayFeeLabel={
                           useLalamoveQuote
