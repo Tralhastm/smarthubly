@@ -240,9 +240,15 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         const current = best.get(key);
         if (!current || Number(p.unit_price) < current.unit_price) best.set(key, { supplier_id: p.supplier_id, unit_price: Number(p.unit_price) });
       });
+      const productIds = items.map(i => (i.product as any).id).filter(Boolean);
+      const { data: freshProducts } = productIds.length > 0
+        ? await (supabase as any).from('products').select('id, supplier_id').in('id', productIds)
+        : { data: [] };
+      const supplierByProductId: Record<string, string> = {};
+      (freshProducts || []).forEach((p: any) => { if (p.id && p.supplier_id) supplierByProductId[p.id] = p.supplier_id; });
       const resolved: Record<string, string> = {};
       items.forEach(i => {
-        const explicit = (i.product as any).supplier_id;
+        const explicit = (i.product as any).supplier_id || supplierByProductId[(i.product as any).id];
         const chosen = explicit || best.get(productMatchKey(i.product.name))?.supplier_id;
         if (chosen) resolved[productMatchKey(i.product.name)] = chosen;
       });
