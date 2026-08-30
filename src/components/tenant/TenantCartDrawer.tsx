@@ -961,6 +961,13 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                   {deliveryType === 'delivery' && (
                     <div>
                       <label className="text-sm font-medium text-foreground mb-2 block">Endereço de entrega</label>
+                      {isDropshipping && (
+                        <div className="mb-2 rounded-lg border border-primary/30 bg-primary/5 p-2 text-xs text-muted-foreground">
+                          <strong className="text-foreground">Origem do frete:</strong> endereço do fornecedor responsável pelo produto
+                          {primaryShippingOrigin ? ` (${primaryShippingOrigin})` : ' (carregando endereço do fornecedor...)'}.
+                          <br />O CEP abaixo é somente o <strong className="text-foreground">destino do cliente</strong>.
+                        </div>
+                      )}
                       <CepAddressInput
                         value={address}
                         onChange={handleAddressChange}
