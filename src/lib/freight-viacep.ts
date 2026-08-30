@@ -3,7 +3,8 @@
  *
  * Estratégia simples e barata pra modo WhatsApp/dropshipping:
  *  - Busca cidade/UF de origem e destino no ViaCEP
- *  - Aproxima distância pelos centróides da capital de cada UF
+ *  - Aproxima distância pelos centróides da capital de cada UF e, na mesma
+ *    cidade, pela diferença das faixas numéricas dos CEPs
  *  - Estima preço Sedex/PAC com tabela linear (placeholder honesto)
  *
  * Não substitui API Correios — é uma cotação de referência.
@@ -83,7 +84,13 @@ export const estimateFreight = async (
 
   const a = UF_COORDS[origin.uf];
   const b = UF_COORDS[dest.uf];
-  const km = sameCity ? 0 : a && b ? haversineKm(a, b) : 500;
+  // O ViaCEP não fornece coordenadas precisas. Para não exibir 0 km quando
+  // os bairros são diferentes, usamos a diferença das faixas de CEP como
+  // estimativa local conservadora. O valor continua sendo apenas referência.
+  const originPrefix = Number(cleanCep(originCep).slice(0, 5));
+  const destPrefix = Number(cleanCep(destCep).slice(0, 5));
+  const sameCityKm = Math.max(1, Math.round(Math.abs(destPrefix - originPrefix) * 0.012 * 10) / 10);
+  const km = sameCity ? sameCityKm : a && b ? haversineKm(a, b) : 500;
 
   let pac = sameCity ? 15 : 18 + 0.04 * km;
   let sedex = sameCity ? 22 : 28 + 0.07 * km;

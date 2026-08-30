@@ -6,6 +6,7 @@ describe('estimateFreight (ViaCEP)', () => {
     const est = await estimateFreight('30130-100', '31846-320');
     expect(est).not.toBeNull();
     expect(est!.sameCity).toBe(true);
+    expect(est!.distanceKm).toBeGreaterThan(0);
     expect(est!.pac).toBe(15);
     expect(est!.sedex).toBe(22);
   }, 15000);
