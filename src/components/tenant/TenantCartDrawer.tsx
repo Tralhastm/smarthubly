@@ -331,7 +331,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const shippingFee = computeShippingFee();
   const effectiveDeliveryFee = useLalamoveQuote
     ? (courierQuote!.fee || 0)
-    : (allItemsHaveShipping ? 0 : deliveryFee);
+    : (isDropshipping ? deliveryFee : (allItemsHaveShipping ? 0 : deliveryFee));
   const subtotalForCoupon = total + (deliveryType === 'delivery' ? effectiveDeliveryFee : 0) + customerFee + shippingFee;
   const discountAmount = appliedCoupon
     ? (appliedCoupon.discount_type === 'percent'
