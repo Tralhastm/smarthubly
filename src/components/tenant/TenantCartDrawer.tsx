@@ -495,6 +495,13 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                 };
               }
             }
+            const maxRadius = Number(supplierConfig?.delivery_max_radius_km ?? 0);
+            if (maxRadius > 0 && est.distanceKm > maxRadius) {
+              setFreightEstimate(est);
+              setDeliveryFee(0);
+              setDistanceError(`Este fornecedor entrega somente em até ${maxRadius} km. O endereço informado está a ${est.distanceKm.toFixed(1)} km da origem.`);
+              return;
+            }
             const baseFee = supplierConfig?.shipping_base_fee ?? 0;
             const baseRadius = supplierConfig?.shipping_base_radius_km ?? 0;
             const perKm = supplierConfig?.shipping_per_km_fee ?? 0;
@@ -1183,13 +1190,13 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       qualquer ambiguidade de estado. O usuário escolhe pelo botão clicado. */}
                   {hasOnlinePayment && (
                     <>
-                      <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment}
+                      <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || (deliveryType === 'delivery' && !!distanceError)}
                         className="w-full py-4 rounded-lg font-bold text-base text-primary-foreground gradient-primary hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ring-2 ring-primary/40">
                         {creatingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
                         {creatingPayment ? 'Gerando pagamento...' : `💳 Pagar R$${finalTotal.toFixed(2)} agora (Mercado Pago)`}
                       </button>
                       {!!(tenant as any).demo_payment_enabled && (
-                        <button onClick={() => submitOrder(false, true, true)} disabled={addOrderMutation.isPending || creatingPayment}
+                        <button onClick={() => submitOrder(false, true, true)} disabled={addOrderMutation.isPending || creatingPayment || (deliveryType === 'delivery' && !!distanceError)}
                           className="w-full py-3 rounded-lg font-bold text-sm bg-yellow-400 hover:bg-yellow-500 text-black disabled:opacity-50 flex items-center justify-center gap-2">
                           🧪 SIMULAR pagamento online aprovado (TESTE)
                         </button>
@@ -1202,17 +1209,17 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     </>
                   )}
                   {isWhatsAppMode ? (
-                    <button onClick={() => submitOrder(true)} disabled={addOrderMutation.isPending || !waNumber || creatingPayment}
+                    <button onClick={() => submitOrder(true)} disabled={addOrderMutation.isPending || !waNumber || creatingPayment || (deliveryType === 'delivery' && !!distanceError)}
                       className="w-full py-4 rounded-lg font-bold text-base text-white transition-colors flex items-center justify-center gap-2 disabled:opacity-50 bg-[hsl(142,71%,30%)] hover:bg-[hsl(142,71%,35%)] shadow-lg">
                       <MessageCircle className="h-5 w-5" />
                       {addOrderMutation.isPending ? 'Registrando...' : 'Enviar pedido no WhatsApp'}
                     </button>
                   ) : (
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => submitOrder(false)} disabled={addOrderMutation.isPending || creatingPayment} className={`py-3 rounded-lg font-medium text-sm disabled:opacity-50 ${hasOnlinePayment ? 'bg-secondary text-foreground hover:bg-muted border border-border' : 'gradient-primary text-primary-foreground hover:opacity-90'}`}>
+                    <button onClick={() => submitOrder(false)} disabled={addOrderMutation.isPending || creatingPayment || (deliveryType === 'delivery' && !!distanceError)} className={`py-3 rounded-lg font-medium text-sm disabled:opacity-50 ${hasOnlinePayment ? 'bg-secondary text-foreground hover:bg-muted border border-border' : 'gradient-primary text-primary-foreground hover:opacity-90'}`}>
                       {addOrderMutation.isPending ? 'Enviando...' : `Pagar ${deliveryType === 'pickup' ? 'no balcão' : 'na entrega'}`}
                     </button>
-                    <button onClick={() => submitOrder(true)} disabled={addOrderMutation.isPending || !waNumber || creatingPayment}
+                    <button onClick={() => submitOrder(true)} disabled={addOrderMutation.isPending || !waNumber || creatingPayment || (deliveryType === 'delivery' && !!distanceError)}
                       className="py-3 rounded-lg font-medium text-sm text-foreground transition-colors flex items-center justify-center gap-1 disabled:opacity-50 bg-[hsl(142,71%,30%)] hover:bg-[hsl(142,71%,35%)]">
                       <MessageCircle className="h-4 w-4" /> WhatsApp
                     </button>
