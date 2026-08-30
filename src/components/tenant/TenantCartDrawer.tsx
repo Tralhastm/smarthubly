@@ -471,10 +471,30 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           const est = await estimateFreight(sourceCep, destCep);
           if (est) {
             const supplierProduct = items.find(i => productNeedsShipping(i.product));
+            const productId = supplierProduct ? (supplierProduct.product as any).id : null;
+            const { data: currentProduct } = productId
+              ? await (supabase as any).from('products').select('supplier_id').eq('id', productId).maybeSingle()
+              : { data: null };
             const supplierId = supplierProduct
-              ? ((supplierProduct.product as any).supplier_id || resolvedSupplierIds[productMatchKey(supplierProduct.product.name)])
+              ? ((currentProduct as any)?.supplier_id || (supplierProduct.product as any).supplier_id || resolvedSupplierIds[productMatchKey(supplierProduct.product.name)])
               : null;
-            const supplierConfig = supplierId ? supplierShippings[supplierId] : null;
+            let supplierConfig = supplierId ? supplierShippings[supplierId] : null;
+            if (supplierId && !supplierConfig) {
+              const { data: freshSupplier } = await (supabase as any)
+                .from('suppliers_public')
+                .select('id, address, shipping_base_fee, shipping_base_radius_km, shipping_per_km_fee, shipping_max_fee, delivery_max_radius_km')
+                .eq('id', supplierId).maybeSingle();
+              if (freshSupplier) {
+                supplierConfig = {
+                  ...freshSupplier,
+                  shipping_base_fee: Number(freshSupplier.shipping_base_fee ?? 0),
+                  shipping_base_radius_km: Number(freshSupplier.shipping_base_radius_km ?? 5),
+                  shipping_per_km_fee: Number(freshSupplier.shipping_per_km_fee ?? 0),
+                  shipping_max_fee: freshSupplier.shipping_max_fee != null ? Number(freshSupplier.shipping_max_fee) : null,
+                  delivery_max_radius_km: Number(freshSupplier.delivery_max_radius_km ?? 0),
+                };
+              }
+            }
             const baseFee = supplierConfig?.shipping_base_fee ?? 0;
             const baseRadius = supplierConfig?.shipping_base_radius_km ?? 0;
             const perKm = supplierConfig?.shipping_per_km_fee ?? 0;
