@@ -404,9 +404,17 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           return m ? m[0] : '';
         };
         const destCep = extractCep(calculatedAddress);
+        // Em dropshipping, a origem cadastrada no fornecedor deve prevalecer
+        // sobre a origem da loja (cada produto pode sair de um endereço distinto).
+        const supplierOrigin = items
+          .filter(i => productNeedsShipping(i.product))
+          .map(i => getProductOrigin(i.product))
+          .find(Boolean) || '';
+        const originCep = extractCep(supplierOrigin);
         const tenantCep = (tenant as any).whatsapp_store_cep || extractCep((tenant as any).shipping_origin_address || tenant.address || '');
-        if (destCep && tenantCep) {
-          const est = await estimateFreight(tenantCep, destCep);
+        const sourceCep = originCep || tenantCep;
+        if (destCep && sourceCep) {
+          const est = await estimateFreight(sourceCep, destCep);
           if (est) {
             setFreightEstimate(est);
             setDeliveryFee(est.pac);
@@ -414,7 +422,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           } else {
             setDistanceError('Não foi possível estimar o frete pra esse CEP. Tente novamente.');
           }
-        } else if (!tenantCep) {
+        } else if (!sourceCep) {
           setDistanceError('Loja sem CEP de origem cadastrado. Avise o vendedor.');
         } else if (!destCep) {
           setDistanceError('CEP de destino inválido.');
