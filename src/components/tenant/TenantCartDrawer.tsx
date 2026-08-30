@@ -275,6 +275,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     }
     return (tenant as any).shipping_origin_address || tenant.address;
   };
+  const primaryShippingOrigin = isDropshipping
+    ? getProductOrigin(items.find(i => productNeedsShipping(i.product))?.product || {})
+    : ((tenant as any).shipping_origin_address || tenant.address);
 
   // Compute shipping using per-product origin distances + tabela do fornecedor (se houver)
   const computeShippingFee = (): number => {
@@ -951,7 +954,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                         onChange={handleAddressChange}
                         onCalculated={handleDistanceCalculated}
                         onError={handleDistanceError}
-                        tenantAddress={(tenant as any).shipping_origin_address || tenant.address}
+                        tenantAddress={primaryShippingOrigin}
                         displayFeeOverride={effectiveDeliveryFee + shippingFee}
                         displayFeeLabel={
                           useLalamoveQuote
