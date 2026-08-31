@@ -7,8 +7,12 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const PROMPT_TXT = (content: string) => `Você é um parser de produtos para um Gestor Financeiro Empresarial. Extraia os produtos do TEXTO abaixo.
-Para cada produto retorne: name, price (number), cost_price (number, 0 se não houver), category (inferida do nome), sku ("" se não houver), barcode ("" se não houver), stock_quantity (number, 0 se não houver), description (curta).
+const PROMPT_TXT = (content: string) => `Você é um parser robusto de catálogos brasileiros. Extraia TODOS os produtos do TEXTO abaixo.
+
+O catálogo pode vir em qualquer formato razoavelmente estruturado: uma linha por produto ("Produto - R$ 35,00"), tabela copiada, ou bloco em que o nome aparece numa linha e os valores aparecem nas linhas seguintes ("Custo: R$ 750" e "Venda sugerida: R$ 849"). Títulos isolados de marcas ou seções, como SAMSUNG, MOTOROLA, REALME, XIAOMI REDMI, REDMI NOTE e POCO, não são produtos; use-os como categoria quando fizer sentido.
+
+Para cada produto retorne name, price (number; prefira venda/resale e use custo se não houver venda), cost_price (number, 0 se ausente), category, sku ("" se ausente), barcode ("" se ausente), stock_quantity (number, 0 se ausente), description (curta). Preserve variantes e especificações do nome, como capacidade, RAM, 4G/5G, NFC, Pro e Max. Não junte produtos diferentes nem invente itens ou preços. Aceite R$ 1.099, R$ 1.099,90, 1099,90 e pontos de milhar.
+
 Responda APENAS com JSON válido neste formato exato, sem markdown:
 {"products":[{"name":"...","price":0,"cost_price":0,"category":"...","sku":"","barcode":"","stock_quantity":0,"description":""}]}
 
@@ -80,41 +84,57 @@ function inferCategory(name: string, fallback = "Geral") {
 }
 
 function parseTxtLocally(content: string): ParsedProduct[] {
-  const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const lines = content.split(/\r?\n/).map(l => l.trim());
   const products: ParsedProduct[] = [];
   let currentCategory = "Geral";
+  let current: { name: string; category: string; cost: number; resale: number } | null = null;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  const flush = () => {
+    if (!current) return;
+    const price = current.resale || current.cost;
+    if (current.name && price > 0) {
+      products.push({ name: current.name, price, cost_price: current.cost, category: inferCategory(current.name, current.category), sku: "", barcode: "", stock_quantity: 0, description: "" });
+    }
+    current = null;
+  };
+  const labeled = (line: string, labels: string[]) => {
+    const m = line.match(new RegExp(`(?:${labels.join("|")})\\s*:?\\s*R?\\$?\\s*([\\d.]+(?:,\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)`, "i"));
+    return m ? parsePrice(m[1]) : 0;
+  };
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
     if (isSectionHeader(line)) {
+      flush();
       currentCategory = cleanCategoryName(line.replace(/^[-=*\s]+|[-=*\s]+$/g, ""));
       continue;
     }
-    const match = line.match(/^(.*?)(?:\s*[-–—:]\s*|\s+)(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2}|\d+(?:[.,]\d{2})?)$/i);
-    if (!match) continue;
-    const [, rawName, rawPrice] = match;
-    const name = rawName.trim();
-    if (!name) continue;
-
-    const descLines: string[] = [];
-    let cursor = i + 1;
-    while (cursor < lines.length && !isSectionHeader(lines[cursor]) && !looksLikeProductLine(lines[cursor])) {
-      descLines.push(lines[cursor]);
-      cursor++;
+    const cost = labeled(line, ["custo", "cost", "preço de custo", "preco de custo"]);
+    const resale = labeled(line, ["venda sugerida", "venda", "revenda", "resale", "preço de venda", "preco de venda"]);
+    if (current && (cost || resale)) {
+      current.cost = current.cost || cost;
+      current.resale = current.resale || resale;
+      continue;
     }
-
-    products.push({
-      name,
-      price: parsePrice(rawPrice),
-      cost_price: 0,
-      category: inferCategory(name, currentCategory),
-      sku: "",
-      barcode: "",
-      stock_quantity: 0,
-      description: descLines.join(" ").slice(0, 280),
-    });
-    i = cursor - 1;
+    if (cost || resale) {
+      const name = line.split(/\b(?:custo|venda sugerida|venda|revenda|resale|preço de custo|preco de custo|preço de venda|preco de venda)\b/i)[0].replace(/[-–—:]+\s*$/, "").trim();
+      if (name) products.push({ name, price: resale || cost, cost_price: cost, category: inferCategory(name, currentCategory), sku: "", barcode: "", stock_quantity: 0, description: "" });
+      continue;
+    }
+    const inline = line.match(/^(.*?)(?:\s*[-–—:]\s*|\s+)(?:R?\$\s*)?(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*$/i);
+    if (inline) {
+      flush();
+      const name = inline[1].trim();
+      const price = parsePrice(inline[2]);
+      if (name && price > 0) products.push({ name, price, cost_price: 0, category: inferCategory(name, currentCategory), sku: "", barcode: "", stock_quantity: 0, description: "" });
+      continue;
+    }
+    if (/^(?:custo|venda|revenda|resale|preço|preco)\b/i.test(line)) continue;
+    flush();
+    current = { name: line.replace(/^[-=*#•]+\s*/, "").trim(), category: currentCategory, cost: 0, resale: 0 };
   }
+  flush();
   return products;
 }
 

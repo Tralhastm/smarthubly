@@ -508,34 +508,65 @@ const SupplierPanel = () => {
   const parseImportedEntries = (text: string) => {
     const entries: { name: string; cost: number | null; resale: number | null; aliases: string[] }[] = [];
     let brand = '';
-    let pending = '';
+    let current: { name: string; cost: number | null; resale: number | null; generic: number | null } | null = null;
+    const flush = () => {
+      if (!current) return;
+      if (current.name && (current.cost != null || current.resale != null || current.generic != null)) {
+        const aliases = [current.name];
+        if (brand && !new RegExp(`^${brand}\\b`, 'i').test(current.name)) aliases.push(`${brand} ${current.name}`);
+        entries.push({ name: current.name, cost: current.cost ?? current.generic, resale: current.resale, aliases });
+      }
+      current = null;
+    };
+    const numberFromLine = (line: string, labels: string[]) => {
+      const label = labels.join('|');
+      const match = line.match(new RegExp(`(?:${label})\\s*:?\\s*R?\\$?\\s*([\\d.]+(?:,\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)`, 'i'));
+      return match ? parsePrice(match[1]) : null;
+    };
+    const genericMatch = (line: string) => line.match(/^(.*?)(?:\s*[-–—:]\s*|\s+)(?:R?\$\s*)?([\d.]+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*$/i);
+
     for (const rawLine of text.split(/\r?\n/)) {
       const line = rawLine.trim();
-      const detectedBrand = sectionBrand(line);
-      if (detectedBrand) { brand = detectedBrand; pending = ''; continue; }
       if (!line) continue;
-      const candidate = pending ? `${pending} ${line}` : line;
-      const priceMatch = candidate.match(/R?\$\s*([\d.]+(?:,\d{1,2})?)/i);
-      if (!priceMatch) {
-        // Produtos WhatsApp normalmente começam com * e recebem o preço na linha seguinte.
-        if (/^\s*\*/.test(line) && !/^(?:\*?\d{1,2}\/\d{1,2}\/\d{2,4}|\*?confira|\*?obs)/i.test(line)) pending = candidate;
+      const detectedBrand = sectionBrand(line);
+      if (detectedBrand) { flush(); brand = detectedBrand; continue; }
+
+      const cost = numberFromLine(line, ['custo', 'cost', 'preço de custo', 'preco de custo']);
+      const resale = numberFromLine(line, ['venda sugerida', 'venda', 'revenda', 'resale', 'preço de venda', 'preco de venda']);
+      if (current && (cost != null || resale != null)) {
+        current.cost = current.cost ?? cost;
+        current.resale = current.resale ?? resale;
         continue;
       }
-      pending = '';
-      const costMarker = candidate.search(/\s+-\s*CUSTO\s*:/i);
-      const resaleMarker = candidate.search(/\s+-\s*REVENDA\s*:/i);
-      const explicit = costMarker >= 0 || resaleMarker >= 0;
-      const costMatch = candidate.match(/\s+-\s*CUSTO\s*:\s*R?\$?\s*([\d.]+(?:,\d{1,2})?)/i);
-      const resaleMatch = candidate.match(/\s+-\s*REVENDA\s*:\s*R?\$?\s*([\d.]+(?:,\d{1,2})?)/i);
-      const cost = costMatch ? parsePrice(costMatch[1]) : (explicit ? null : parsePrice(priceMatch[1]));
-      const resale = resaleMatch ? parsePrice(resaleMatch[1]) : null;
-      const marker = [costMarker, resaleMarker].filter(i => i >= 0).sort((a, b) => a - b)[0];
-      const name = cleanImportedName(candidate.slice(0, marker >= 0 ? marker : candidate.search(/R?\$/i)));
-      if (!name || (cost == null && resale == null)) continue;
-      const aliases = [name];
-      if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
-      entries.push({ name, cost, resale, aliases });
+
+      if (cost != null || resale != null) {
+        const name = cleanImportedName(line.split(/\b(?:custo|venda sugerida|venda|revenda|resale|preço de custo|preco de custo|preço de venda|preco de venda)\b/i)[0].replace(/[-–—:]+\s*$/, ''));
+        if (name && !/^(?:custo|venda|revenda|resale|preço|preco)$/i.test(name)) {
+          const aliases = [name];
+          if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
+          entries.push({ name, cost, resale, aliases });
+        }
+        continue;
+      }
+
+      const oneLine = genericMatch(line);
+      if (oneLine) {
+        flush();
+        const name = cleanImportedName(oneLine[1]);
+        const price = parsePrice(oneLine[2]);
+        if (name && price > 0) {
+          const aliases = [name];
+          if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
+          entries.push({ name, cost: null, resale: price, aliases });
+        }
+        continue;
+      }
+
+      if (/^(?:custo|venda|revenda|resale|preço|preco)\b/i.test(line)) continue;
+      flush();
+      current = { name: cleanImportedName(line), cost: null, resale: null, generic: null };
     }
+    flush();
     return entries;
   };
 
