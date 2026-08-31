@@ -491,6 +491,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         if (destCep && sourceCep) {
           const est = await estimateFreight(sourceCep, destCep);
           if (est) {
+            // A entrada CEP zera a distância enquanto a cotação assíncrona roda;
+            // atualiza o estado com a distância real usada para calcular o frete.
+            setDistance(est.distanceKm);
             const supplierProduct = items.find(i => productNeedsShipping(i.product));
             const productId = supplierProduct ? (supplierProduct.product as any).id : null;
             const { data: currentProduct } = productId
@@ -1063,6 +1066,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                         displayDistanceOverride={
                           Math.max(
                             distance ?? 0,
+                            freightEstimate?.distanceKm ?? 0,
                             ...Object.values(originDistances)
                           )
                         }
