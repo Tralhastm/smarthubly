@@ -34,6 +34,7 @@ type OrderWithItems = {
 
 type Product = {
   id: string; name: string; price: number; original_price?: number | null; in_stock: boolean; category: string; supplier_id: string | null;
+  subcategory?: string | null; subcategory_ids?: string[] | null;
   stock_quantity: number | null;
 };
 
@@ -181,7 +182,7 @@ const SupplierPanel = () => {
   const fetchProducts = useCallback(async () => {
     if (!supplier) return;
     // Only fetch products assigned to this supplier
-    const { data } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, supplier_id')
+    const { data } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id')
       .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
     setProducts((data as Product[]) || []);
   }, [supplier]);
@@ -192,7 +193,7 @@ const SupplierPanel = () => {
     if (!supplier) return;
     try {
       // Always fetch supplier's products fresh to avoid stale state
-      const { data: freshProducts } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, supplier_id, stock_quantity')
+      const { data: freshProducts } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
       const myProducts = (freshProducts as Product[]) || [];
       setProducts(prev => (prev.length === 0 && myProducts.length > 0 ? myProducts : prev));
@@ -494,17 +495,16 @@ const SupplierPanel = () => {
   const inferProductCategory = (value: string) => {
     const name = normalizeSupplierProductName(value);
     const rules: Array<[RegExp, string]> = [
-      [/^(?:samsung|galaxy)\b/i, 'Samsung'],
+      [/^(?:samsung|galaxy)\b/i, 'Samsung Galaxy'],
       [/^(?:motorola|moto)\b/i, 'Motorola'],
-      [/^realme\b/i, 'Realme'],
-      [/^redmi\b/i, 'Redmi'],
-      [/^poco\b/i, 'Poco'],
-      [/^(?:xiaomi|mi|go\s+mi)\b/i, 'Xiaomi'],
-      [/^honor\b/i, 'Honor'],
-      [/^infinix\b/i, 'Infinix'],
-      [/^oppo\b/i, 'Oppo'],
-      [/^(?:tecno|spark)\b/i, 'Tecno'],
-      [/^(?:multilaser|multi)\b/i, 'Multilaser'],
+      [/^realme\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^redmi\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^poco\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^(?:xiaomi|mi|go\s+mi)\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^honor\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^infinix\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^oppo\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^(?:tecno|spark)\b/i, 'Xiaomi · Redmi · Poco'],
     ];
     return rules.find(([pattern]) => pattern.test(name))?.[1] || null;
   };
@@ -625,6 +625,9 @@ const SupplierPanel = () => {
       const keys = [product.name, product.name.replace(/\s*\([^)]*\)\s*$/g, '')];
       keys.forEach(key => byName.set(normalizeSupplierProductName(key).replace(/\bsansung\b/g, 'samsung'), product));
     });
+    const { data: categoryNodes } = await (supabase as any).from('product_categories').select('id, name, parent_id').eq('tenant_id', supplier.tenant_id).limit(200);
+    const normalizedCategory = (value: string) => normalizeProductName(value).replace(/[·•]/g, '').replace(/\s+/g, ' ').trim();
+    const rootCategory = (categoryNodes || []).find((node: any) => !node.parent_id && normalizedCategory(node.name) === 'celulares');
     const updated: string[] = [];
     const notFound: string[] = [];
     const invalid: string[] = [];
@@ -633,7 +636,7 @@ const SupplierPanel = () => {
       for (const entry of entries) {
         const product = entry.aliases.map(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
         if (!product) { notFound.push(entry.name); continue; }
-        const patch: Record<string, number | string> = {};
+        const patch: Record<string, any> = {};
         if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) patch.original_price = entry.cost;
         if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) patch.price = entry.resale;
         if (Object.keys(patch).length === 0) {
@@ -642,7 +645,12 @@ const SupplierPanel = () => {
           continue;
         }
         const category = inferProductCategory(entry.name);
-        if (category) patch.category = category;
+        if (category) {
+          const brandNode = (categoryNodes || []).find((node: any) => node.parent_id === rootCategory?.id && normalizedCategory(node.name) === normalizedCategory(category));
+          patch.category = rootCategory?.name || 'Celulares';
+          patch.subcategory = brandNode?.name || category;
+          patch.subcategory_ids = rootCategory ? [rootCategory.id, ...(brandNode ? [brandNode.id] : [])] : null;
+        }
         const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
         if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
         if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) {
