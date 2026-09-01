@@ -480,6 +480,17 @@ const SupplierPanel = () => {
   };
 
   const normalizeProductName = (value: string) => value.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+  const normalizeSupplierProductName = (value: string) => normalizeProductName(value)
+    .replace(/\s*\([^)]*\)\s*$/g, '')
+    .replace(/\bnfce\b/g, 'nfc')
+    .replace(/\s*-\s*/g, '-')
+    .replace(/\s*\+\s*/g, '+')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const extractColors = (value: string) => {
+    const colorPattern = /\b(preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|black|white|camuflada)\b/giu;
+    return [...value.matchAll(colorPattern)].map(match => match[1]).filter((color, index, all) => all.findIndex(c => c.toLocaleLowerCase('pt-BR') === color.toLocaleLowerCase('pt-BR')) === index);
+  };
   const parsePrice = (value: string) => {
     const normalized = value.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
     const number = Number(normalized);
@@ -488,7 +499,8 @@ const SupplierPanel = () => {
 
   const cleanImportedName = (value: string) => value
     .replace(/\*/g, '').replace(/[_~`]/g, '').replace(/[🇧🇷🇨🇳☀️😍🤩🟢⚠️‼️]/gu, '')
-    .replace(/\(\s*R?\$?.*$/i, '').replace(/\s+-\s*$/, '').replace(/[：:]+$/, '').trim();
+    .replace(/^[^A-Za-zÀ-ÿ0-9]+/, '')
+    .replace(/\(\s*R?\$?.*$/i, '').replace(/\s*[-–—,:;]+\s*$/, '').replace(/[：:]+$/, '').trim();
 
   const sectionBrand = (line: string) => {
     const upper = line.toLocaleUpperCase('pt-BR');
@@ -507,15 +519,15 @@ const SupplierPanel = () => {
   };
 
   const parseImportedEntries = (text: string) => {
-    const entries: { name: string; cost: number | null; resale: number | null; aliases: string[] }[] = [];
+    const entries: { name: string; cost: number | null; resale: number | null; colors: string[]; aliases: string[] }[] = [];
     let brand = '';
-    let current: { name: string; cost: number | null; resale: number | null; generic: number | null } | null = null;
+    let current: { name: string; cost: number | null; resale: number | null; colors: string[]; generic: number | null } | null = null;
     const flush = () => {
       if (!current) return;
       if (current.name && (current.cost != null || current.resale != null || current.generic != null)) {
         const aliases = [current.name];
         if (brand && !new RegExp(`^${brand}\\b`, 'i').test(current.name)) aliases.push(`${brand} ${current.name}`);
-        entries.push({ name: current.name, cost: current.cost ?? current.generic, resale: current.resale, aliases });
+        entries.push({ name: current.name, cost: current.cost ?? current.generic, resale: current.resale, colors: current.colors, aliases });
       }
       current = null;
     };
@@ -532,11 +544,23 @@ const SupplierPanel = () => {
       const detectedBrand = sectionBrand(line);
       if (detectedBrand) { flush(); brand = detectedBrand; continue; }
 
+      const vendorPrice = line.match(/\(\s*R?\$\s*([^)]*)\)/i);
+      if (vendorPrice) {
+        flush();
+        const name = cleanImportedName(line.slice(0, vendorPrice.index ?? 0));
+        const vendorCost = parsePrice(vendorPrice[1]);
+        const aliases = [name];
+        if (brand && name && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
+        if (name && vendorCost != null) entries.push({ name, cost: vendorCost, resale: null, colors: extractColors(line.slice((vendorPrice.index ?? 0) + vendorPrice[0].length)), aliases });
+        continue;
+      }
+
       const cost = numberFromLine(line, ['custo', 'cost', 'preço de custo', 'preco de custo']);
       const resale = numberFromLine(line, ['venda sugerida', 'venda', 'revenda', 'resale', 'preço de venda', 'preco de venda']);
       if (current && (cost != null || resale != null)) {
         current.cost = current.cost ?? cost;
         current.resale = current.resale ?? resale;
+        current.colors = [...new Set([...current.colors, ...extractColors(line)])];
         continue;
       }
 
@@ -545,7 +569,7 @@ const SupplierPanel = () => {
         if (name && !/^(?:custo|venda|revenda|resale|preço|preco)$/i.test(name)) {
           const aliases = [name];
           if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
-          entries.push({ name, cost, resale, aliases });
+          entries.push({ name, cost, resale, colors: extractColors(line), aliases });
         }
         continue;
       }
@@ -558,14 +582,14 @@ const SupplierPanel = () => {
         if (name && price > 0) {
           const aliases = [name];
           if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
-          entries.push({ name, cost: null, resale: price, aliases });
+          entries.push({ name, cost: null, resale: price, colors: extractColors(line), aliases });
         }
         continue;
       }
 
       if (/^(?:custo|venda|revenda|resale|preço|preco)\b/i.test(line)) continue;
       flush();
-      current = { name: cleanImportedName(line), cost: null, resale: null, generic: null };
+      current = { name: cleanImportedName(line), cost: null, resale: null, colors: extractColors(line), generic: null };
     }
     flush();
     return entries;
@@ -579,14 +603,18 @@ const SupplierPanel = () => {
       return;
     }
     setImportingPrices(true);
-    const byName = new Map(products.map(p => [normalizeProductName(p.name), p]));
+    const byName = new Map<string, Product>();
+    products.forEach(product => {
+      const keys = [product.name, product.name.replace(/\s*\([^)]*\)\s*$/g, '')];
+      keys.forEach(key => byName.set(normalizeSupplierProductName(key).replace(/\bsansung\b/g, 'samsung'), product));
+    });
     const updated: string[] = [];
     const notFound: string[] = [];
     const invalid: string[] = [];
     const warnings: string[] = [];
     try {
       for (const entry of entries) {
-        const product = entry.aliases.map(alias => byName.get(normalizeProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
+        const product = entry.aliases.map(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
         if (!product) { notFound.push(entry.name); continue; }
         const patch: Record<string, number> = {};
         if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) patch.original_price = entry.cost;
@@ -609,6 +637,20 @@ const SupplierPanel = () => {
           if (priceError) warnings.push(`${entry.name} (comparação não atualizada: ${priceError.message})`);
         }
         updated.push(entry.name);
+        if (entry.colors.length > 0) {
+          const { data: existingVariants, error: variantsReadError } = await (supabase as any).from('product_variants').select('id, name').eq('product_id', product.id).limit(100);
+          if (variantsReadError) {
+            warnings.push(`${entry.name} (cores não atualizadas: ${variantsReadError.message})`);
+          } else {
+            const existingNames = new Set((existingVariants || []).map((variant: any) => normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, ''))));
+            for (const color of entry.colors) {
+              if (existingNames.has(normalizeProductName(color))) continue;
+              const { error: variantError } = await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, name: color, price_delta: 0, in_stock: true });
+              if (variantError) warnings.push(`${entry.name} (cor ${color} não atualizada: ${variantError.message})`);
+              else existingNames.add(normalizeProductName(color));
+            }
+          }
+        }
         Object.assign(product, patch);
       }
       setProducts([...products]);
@@ -965,7 +1007,7 @@ const SupplierPanel = () => {
           <div className="space-y-4">
             <div className="rounded-lg border border-border bg-card p-4 space-y-2">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground"><Upload className="h-5 w-5 text-primary" /> Importar preços</h2>
-              <p className="text-xs text-muted-foreground">Cole o texto abaixo ou escolha um arquivo .txt. Só serão atualizados produtos já vinculados a este fornecedor, por nome exato.</p>
+              <p className="text-xs text-muted-foreground">Cole a lista original do fornecedor ou escolha um arquivo .txt. O valor entre parênteses é o custo e as cores após o preço também são importadas. Só serão atualizados produtos já vinculados a este fornecedor.</p>
               <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
                 <label className="block text-xs font-semibold text-foreground">O que deseja atualizar?</label>
                 <select value={priceUpdateMode} onChange={e => { setPriceUpdateMode(e.target.value as 'cost' | 'resale' | 'both'); setImportResult(null); }} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
@@ -975,7 +1017,7 @@ const SupplierPanel = () => {
                 </select>
                 <p className="text-[11px] text-muted-foreground">Produtos não vinculados ao fornecedor serão ignorados. No modo “somente custo”, o preço de revenda permanece inalterado.</p>
               </div>
-              <div className="rounded-md bg-secondary/60 p-3 text-xs text-muted-foreground font-mono">samsung a9 8.7 64/4gb - CUSTO: R$ 990,00 - TABLET - REVENDA: R$ 1.199,00</div>
+              <div className="rounded-md bg-secondary/60 p-3 text-xs text-muted-foreground font-mono">🇧🇷 *Galaxy A07 128GB - (R$ 750)* preto</div>
               <textarea value={priceText} onChange={e => { setPriceText(e.target.value); setImportResult(null); }} rows={8} placeholder="Uma linha por produto..." className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground" />
               <div className="flex flex-wrap gap-2">
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground hover:border-primary">
