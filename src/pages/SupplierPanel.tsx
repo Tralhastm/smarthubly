@@ -491,6 +491,23 @@ const SupplierPanel = () => {
     const colorPattern = /\b(preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|black|white|camuflada)\b/giu;
     return [...value.matchAll(colorPattern)].map(match => match[1]).filter((color, index, all) => all.findIndex(c => c.toLocaleLowerCase('pt-BR') === color.toLocaleLowerCase('pt-BR')) === index);
   };
+  const inferProductCategory = (value: string) => {
+    const name = normalizeSupplierProductName(value);
+    const rules: Array<[RegExp, string]> = [
+      [/^(?:samsung|galaxy)\b/i, 'Samsung'],
+      [/^(?:motorola|moto)\b/i, 'Motorola'],
+      [/^realme\b/i, 'Realme'],
+      [/^redmi\b/i, 'Redmi'],
+      [/^poco\b/i, 'Poco'],
+      [/^(?:xiaomi|mi|go\s+mi)\b/i, 'Xiaomi'],
+      [/^honor\b/i, 'Honor'],
+      [/^infinix\b/i, 'Infinix'],
+      [/^oppo\b/i, 'Oppo'],
+      [/^(?:tecno|spark)\b/i, 'Tecno'],
+      [/^(?:multilaser|multi)\b/i, 'Multilaser'],
+    ];
+    return rules.find(([pattern]) => pattern.test(name))?.[1] || null;
+  };
   const parsePrice = (value: string) => {
     const normalized = value.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
     const number = Number(normalized);
@@ -616,7 +633,7 @@ const SupplierPanel = () => {
       for (const entry of entries) {
         const product = entry.aliases.map(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
         if (!product) { notFound.push(entry.name); continue; }
-        const patch: Record<string, number> = {};
+        const patch: Record<string, number | string> = {};
         if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) patch.original_price = entry.cost;
         if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) patch.price = entry.resale;
         if (Object.keys(patch).length === 0) {
@@ -624,6 +641,8 @@ const SupplierPanel = () => {
           invalid.push(`${entry.name} (não contém ${expected})`);
           continue;
         }
+        const category = inferProductCategory(entry.name);
+        if (category) patch.category = category;
         const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
         if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
         if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) {
