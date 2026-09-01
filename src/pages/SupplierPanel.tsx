@@ -34,6 +34,7 @@ type OrderWithItems = {
 
 type Product = {
   id: string; name: string; price: number; original_price?: number | null; in_stock: boolean; category: string; supplier_id: string | null;
+  subcategory?: string | null; subcategory_ids?: string[] | null;
   stock_quantity: number | null;
 };
 
@@ -79,8 +80,9 @@ const SupplierPanel = () => {
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [priceText, setPriceText] = useState('');
+  const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
-  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[] } | null>(null);
   const [tenant, setTenant] = useState<any>(null);
   const [isActive, setIsActive] = useState<boolean>(true);
   const [togglingActive, setTogglingActive] = useState(false);
@@ -180,7 +182,7 @@ const SupplierPanel = () => {
   const fetchProducts = useCallback(async () => {
     if (!supplier) return;
     // Only fetch products assigned to this supplier
-    const { data } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, supplier_id')
+    const { data } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id')
       .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
     setProducts((data as Product[]) || []);
   }, [supplier]);
@@ -191,7 +193,7 @@ const SupplierPanel = () => {
     if (!supplier) return;
     try {
       // Always fetch supplier's products fresh to avoid stale state
-      const { data: freshProducts } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, supplier_id, stock_quantity')
+      const { data: freshProducts } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
       const myProducts = (freshProducts as Product[]) || [];
       setProducts(prev => (prev.length === 0 && myProducts.length > 0 ? myProducts : prev));
@@ -479,6 +481,33 @@ const SupplierPanel = () => {
   };
 
   const normalizeProductName = (value: string) => value.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+  const normalizeSupplierProductName = (value: string) => normalizeProductName(value)
+    .replace(/\s*\([^)]*\)\s*$/g, '')
+    .replace(/\bnfce\b/g, 'nfc')
+    .replace(/\s*-\s*/g, '-')
+    .replace(/\s*\+\s*/g, '+')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const extractColors = (value: string) => {
+    const colorPattern = /\b(preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|black|white|camuflada)\b/giu;
+    return [...value.matchAll(colorPattern)].map(match => match[1]).filter((color, index, all) => all.findIndex(c => c.toLocaleLowerCase('pt-BR') === color.toLocaleLowerCase('pt-BR')) === index);
+  };
+  const inferProductCategory = (value: string) => {
+    const name = normalizeSupplierProductName(value);
+    const rules: Array<[RegExp, string]> = [
+      [/^(?:samsung|galaxy)\b/i, 'Samsung Galaxy'],
+      [/^(?:motorola|moto)\b/i, 'Motorola'],
+      [/^realme\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^redmi\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^poco\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^(?:xiaomi|mi|go\s+mi)\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^honor\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^infinix\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^oppo\b/i, 'Xiaomi · Redmi · Poco'],
+      [/^(?:tecno|spark)\b/i, 'Xiaomi · Redmi · Poco'],
+    ];
+    return rules.find(([pattern]) => pattern.test(name))?.[1] || null;
+  };
   const parsePrice = (value: string) => {
     const normalized = value.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
     const number = Number(normalized);
@@ -487,7 +516,8 @@ const SupplierPanel = () => {
 
   const cleanImportedName = (value: string) => value
     .replace(/\*/g, '').replace(/[_~`]/g, '').replace(/[🇧🇷🇨🇳☀️😍🤩🟢⚠️‼️]/gu, '')
-    .replace(/\(\s*R?\$?.*$/i, '').replace(/\s+-\s*$/, '').replace(/[：:]+$/, '').trim();
+    .replace(/^[^A-Za-zÀ-ÿ0-9]+/, '')
+    .replace(/\(\s*R?\$?.*$/i, '').replace(/\s*[-–—,:;]+\s*$/, '').replace(/[：:]+$/, '').trim();
 
   const sectionBrand = (line: string) => {
     const upper = line.toLocaleUpperCase('pt-BR');
@@ -506,15 +536,15 @@ const SupplierPanel = () => {
   };
 
   const parseImportedEntries = (text: string) => {
-    const entries: { name: string; cost: number | null; resale: number | null; aliases: string[] }[] = [];
+    const entries: { name: string; cost: number | null; resale: number | null; colors: string[]; aliases: string[] }[] = [];
     let brand = '';
-    let current: { name: string; cost: number | null; resale: number | null; generic: number | null } | null = null;
+    let current: { name: string; cost: number | null; resale: number | null; colors: string[]; generic: number | null } | null = null;
     const flush = () => {
       if (!current) return;
       if (current.name && (current.cost != null || current.resale != null || current.generic != null)) {
         const aliases = [current.name];
         if (brand && !new RegExp(`^${brand}\\b`, 'i').test(current.name)) aliases.push(`${brand} ${current.name}`);
-        entries.push({ name: current.name, cost: current.cost ?? current.generic, resale: current.resale, aliases });
+        entries.push({ name: current.name, cost: current.cost ?? current.generic, resale: current.resale, colors: current.colors, aliases });
       }
       current = null;
     };
@@ -531,11 +561,23 @@ const SupplierPanel = () => {
       const detectedBrand = sectionBrand(line);
       if (detectedBrand) { flush(); brand = detectedBrand; continue; }
 
+      const vendorPrice = line.match(/\(\s*R?\$\s*([^)]*)\)/i);
+      if (vendorPrice) {
+        flush();
+        const name = cleanImportedName(line.slice(0, vendorPrice.index ?? 0));
+        const vendorCost = parsePrice(vendorPrice[1]);
+        const aliases = [name];
+        if (brand && name && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
+        if (name && vendorCost != null) entries.push({ name, cost: vendorCost, resale: null, colors: extractColors(line.slice((vendorPrice.index ?? 0) + vendorPrice[0].length)), aliases });
+        continue;
+      }
+
       const cost = numberFromLine(line, ['custo', 'cost', 'preço de custo', 'preco de custo']);
       const resale = numberFromLine(line, ['venda sugerida', 'venda', 'revenda', 'resale', 'preço de venda', 'preco de venda']);
       if (current && (cost != null || resale != null)) {
         current.cost = current.cost ?? cost;
         current.resale = current.resale ?? resale;
+        current.colors = [...new Set([...current.colors, ...extractColors(line)])];
         continue;
       }
 
@@ -544,7 +586,7 @@ const SupplierPanel = () => {
         if (name && !/^(?:custo|venda|revenda|resale|preço|preco)$/i.test(name)) {
           const aliases = [name];
           if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
-          entries.push({ name, cost, resale, aliases });
+          entries.push({ name, cost, resale, colors: extractColors(line), aliases });
         }
         continue;
       }
@@ -557,14 +599,14 @@ const SupplierPanel = () => {
         if (name && price > 0) {
           const aliases = [name];
           if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
-          entries.push({ name, cost: null, resale: price, aliases });
+          entries.push({ name, cost: null, resale: price, colors: extractColors(line), aliases });
         }
         continue;
       }
 
       if (/^(?:custo|venda|revenda|resale|preço|preco)\b/i.test(line)) continue;
       flush();
-      current = { name: cleanImportedName(line), cost: null, resale: null, generic: null };
+      current = { name: cleanImportedName(line), cost: null, resale: null, colors: extractColors(line), generic: null };
     }
     flush();
     return entries;
@@ -578,34 +620,68 @@ const SupplierPanel = () => {
       return;
     }
     setImportingPrices(true);
-    const byName = new Map(products.map(p => [normalizeProductName(p.name), p]));
+    const byName = new Map<string, Product>();
+    products.forEach(product => {
+      const keys = [product.name, product.name.replace(/\s*\([^)]*\)\s*$/g, '')];
+      keys.forEach(key => byName.set(normalizeSupplierProductName(key).replace(/\bsansung\b/g, 'samsung'), product));
+    });
+    const { data: categoryNodes } = await (supabase as any).from('product_categories').select('id, name, parent_id').eq('tenant_id', supplier.tenant_id).limit(200);
+    const normalizedCategory = (value: string) => normalizeProductName(value).replace(/[·•]/g, '').replace(/\s+/g, ' ').trim();
+    const rootCategory = (categoryNodes || []).find((node: any) => !node.parent_id && normalizedCategory(node.name) === 'celulares');
     const updated: string[] = [];
     const notFound: string[] = [];
     const invalid: string[] = [];
+    const warnings: string[] = [];
     try {
       for (const entry of entries) {
-        const product = entry.aliases.map(alias => byName.get(normalizeProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
+        const product = entry.aliases.map(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
         if (!product) { notFound.push(entry.name); continue; }
-        const patch: Record<string, number> = {};
-        if (entry.cost != null) patch.original_price = entry.cost;
-        if (entry.resale != null) patch.price = entry.resale;
-        if (Object.keys(patch).length === 0) { invalid.push(entry.name); continue; }
+        const patch: Record<string, any> = {};
+        if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) patch.original_price = entry.cost;
+        if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) patch.price = entry.resale;
+        if (Object.keys(patch).length === 0) {
+          const expected = priceUpdateMode === 'cost' ? 'CUSTO' : priceUpdateMode === 'resale' ? 'REVENDA' : 'CUSTO ou REVENDA';
+          invalid.push(`${entry.name} (não contém ${expected})`);
+          continue;
+        }
+        const category = inferProductCategory(entry.name);
+        if (category) {
+          const brandNode = (categoryNodes || []).find((node: any) => node.parent_id === rootCategory?.id && normalizedCategory(node.name) === normalizedCategory(category));
+          patch.category = rootCategory?.name || 'Celulares';
+          patch.subcategory = brandNode?.name || category;
+          patch.subcategory_ids = rootCategory ? [rootCategory.id, ...(brandNode ? [brandNode.id] : [])] : null;
+        }
         const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
         if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
-        if (entry.cost != null) {
+        if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) {
           const { error: priceError } = await (supabase as any).from('supplier_product_prices').upsert({
             supplier_id: supplier.id,
             product_name: product.name.trim().toLowerCase(),
             unit_price: entry.cost,
             available: true,
           }, { onConflict: 'supplier_id,product_name' });
-          if (priceError) { invalid.push(`${entry.name} (comparação: ${priceError.message})`); continue; }
+          // A tabela de comparação é auxiliar: não deve fazer a atualização do produto parecer falha.
+          if (priceError) warnings.push(`${entry.name} (comparação não atualizada: ${priceError.message})`);
         }
         updated.push(entry.name);
+        if (entry.colors.length > 0) {
+          const { data: existingVariants, error: variantsReadError } = await (supabase as any).from('product_variants').select('id, name').eq('product_id', product.id).limit(100);
+          if (variantsReadError) {
+            warnings.push(`${entry.name} (cores não atualizadas: ${variantsReadError.message})`);
+          } else {
+            const existingNames = new Set((existingVariants || []).map((variant: any) => normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, ''))));
+            for (const color of entry.colors) {
+              if (existingNames.has(normalizeProductName(color))) continue;
+              const { error: variantError } = await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, name: color, price_delta: 0, in_stock: true });
+              if (variantError) warnings.push(`${entry.name} (cor ${color} não atualizada: ${variantError.message})`);
+              else existingNames.add(normalizeProductName(color));
+            }
+          }
+        }
         Object.assign(product, patch);
       }
       setProducts([...products]);
-      setImportResult({ updated, notFound, invalid });
+      setImportResult({ updated, notFound, invalid, warnings });
       if (updated.length) toast.success(`${updated.length} produto(s) atualizado(s)`);
       if (!updated.length) toast.error('Nenhum produto foi atualizado');
     } finally {
@@ -958,8 +1034,17 @@ const SupplierPanel = () => {
           <div className="space-y-4">
             <div className="rounded-lg border border-border bg-card p-4 space-y-2">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground"><Upload className="h-5 w-5 text-primary" /> Importar preços</h2>
-              <p className="text-xs text-muted-foreground">Cole o texto abaixo ou escolha um arquivo .txt. Só serão atualizados produtos vinculados a este fornecedor, por nome exato.</p>
-              <div className="rounded-md bg-secondary/60 p-3 text-xs text-muted-foreground font-mono">samsung a9 8.7 64/4gb - CUSTO: R$ 990,00 - TABLET - REVENDA: R$ 1.199,00</div>
+              <p className="text-xs text-muted-foreground">Cole a lista original do fornecedor ou escolha um arquivo .txt. O valor entre parênteses é o custo e as cores após o preço também são importadas. Só serão atualizados produtos já vinculados a este fornecedor.</p>
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
+                <label className="block text-xs font-semibold text-foreground">O que deseja atualizar?</label>
+                <select value={priceUpdateMode} onChange={e => { setPriceUpdateMode(e.target.value as 'cost' | 'resale' | 'both'); setImportResult(null); }} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
+                  <option value="cost">Somente preço de custo</option>
+                  <option value="resale">Somente preço de revenda</option>
+                  <option value="both">Preço de custo e revenda</option>
+                </select>
+                <p className="text-[11px] text-muted-foreground">Produtos não vinculados ao fornecedor serão ignorados. No modo “somente custo”, o preço de revenda permanece inalterado.</p>
+              </div>
+              <div className="rounded-md bg-secondary/60 p-3 text-xs text-muted-foreground font-mono">🇧🇷 *Galaxy A07 128GB - (R$ 750)* preto</div>
               <textarea value={priceText} onChange={e => { setPriceText(e.target.value); setImportResult(null); }} rows={8} placeholder="Uma linha por produto..." className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground" />
               <div className="flex flex-wrap gap-2">
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2 text-sm font-medium text-foreground hover:border-primary">
@@ -986,6 +1071,7 @@ const SupplierPanel = () => {
                 {importResult.updated.length > 0 && <p className="text-xs text-green-400">Atualizados: {importResult.updated.join(', ')}</p>}
                 {importResult.notFound.length > 0 && <p className="text-xs text-yellow-400">Não encontrados: {importResult.notFound.join(', ')}</p>}
                 {importResult.invalid.length > 0 && <p className="text-xs text-red-400">Com erro: {importResult.invalid.join(', ')}</p>}
+                {importResult.warnings.length > 0 && <p className="text-xs text-orange-300">Avisos auxiliares: {importResult.warnings.join(', ')}</p>}
               </div>
             )}
           </div>
