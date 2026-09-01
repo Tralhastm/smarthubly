@@ -1629,8 +1629,8 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
         )}
       </div>
 
-      {/* Editor de variantes e adicionais */}
-      {!isAffiliate && <ProductExtrasEditor productId={product.id} tenantId={tenantId} basePrice={Number(product.price) || 0} />}
+      {/* Editor de variáveis e adicionais — disponível em todos os catálogos */}
+      <ProductExtrasEditor productId={product.id} tenantId={tenantId} basePrice={Number(product.price) || 0} />
     </div>
   );
 };

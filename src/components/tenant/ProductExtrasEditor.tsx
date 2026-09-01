@@ -89,7 +89,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       >
           <span className="flex items-center gap-1.5">
           <Layers className="h-3.5 w-3.5" />
-          Variantes ({variants.length}) & Adicionais ({addons.length})
+          Variáveis ({variants.length}) & Adicionais ({addons.length})
           {variantsToReview.length > 0 && <span className="text-amber-500 font-bold">⚠ {variantsToReview.length} revisar</span>}
         </span>
         {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
@@ -99,7 +99,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
         <div className="mt-2 space-y-3 rounded-lg bg-secondary/40 border border-border p-3">
           {/* VARIANTES */}
           <div>
-            <p className="text-[11px] font-medium text-foreground mb-1.5">Variantes (escolha única — ex: P, M, G)</p>
+            <p className="text-[11px] font-medium text-foreground mb-1.5">Variáveis (escolha única — ex: Preto, Cinza, Roxo)</p>
             <div className="space-y-1.5 mb-2">
               {variants.map(v => (
                 <div key={v.id} className="flex items-center gap-1.5 text-xs">
