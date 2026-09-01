@@ -8,7 +8,7 @@ import AutoCategorizeButton from '@/components/shared/AutoCategorizeButton';
 import ProductExtrasEditor from './ProductExtrasEditor';
 import CategoryTreeSelect from './CategoryTreeSelect';
 import TenantCategoriesTree from './TenantCategoriesTree';
-import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Sparkles, Loader2, ImageIcon, Link as LinkIcon, AlertTriangle, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Download, Sparkles, Loader2, ImageIcon, Link as LinkIcon, AlertTriangle, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
@@ -46,6 +46,69 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const [affiliateImportUrl, setAffiliateImportUrl] = useState('');
   const [importingUrl, setImportingUrl] = useState(false);
   const [refreshingPrices, setRefreshingPrices] = useState(false);
+
+  const escapeHtml = (value: unknown) => String(value ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+
+  const getProductImageUrls = (product: Product) => {
+    const extraMedia = Array.isArray((product as any).media) ? (product as any).media : [];
+    const urls = [product.image, ...extraMedia.map((item: any) => typeof item === 'string' ? item : item?.url || item?.src || item?.image)]
+      .filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
+    return [...new Set(urls)];
+  };
+
+  const downloadBlob = (content: string, filename: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const catalogSlug = () => (tenantId || 'catalogo').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'catalogo';
+  const money = (value: unknown) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+  const exportCatalogTxt = () => {
+    if (!products.length) { toast.error('Não há produtos para exportar.'); return; }
+    const lines = [`CATÁLOGO DE PRODUTOS`, `Gerado em: ${new Date().toLocaleString('pt-BR')}`, `Total de produtos: ${products.length}`, ''];
+    products.forEach((product, index) => {
+      const p = product as any;
+      const images = getProductImageUrls(product);
+      lines.push(`${index + 1}. ${product.name}`, `Categoria: ${product.category || 'Geral'}`);
+      if (p.subcategory) lines.push(`Subcategoria: ${p.subcategory}`);
+      lines.push(`Preço de venda: ${money(product.price)}`, `Preço original/custo: ${money(p.original_price)}`, `Em estoque: ${product.in_stock ? 'Sim' : 'Não'}`);
+      if (p.stock_quantity != null) lines.push(`Quantidade: ${p.stock_quantity}`);
+      if (p.unidade) lines.push(`Unidade: ${p.unidade}`);
+      if (p.item_type && p.item_type !== 'product') lines.push(`Tipo: ${p.item_type}`);
+      if (product.description) lines.push(`Descrição: ${product.description}`);
+      if (p.affiliate_url) lines.push(`Link: ${p.affiliate_url}`);
+      if (p.supplier_id) lines.push(`Fornecedor ID: ${p.supplier_id}`);
+      lines.push(`Imagens (${images.length}):`, ...images.map((url: string) => `- ${url}`), '', '---', '');
+    });
+    downloadBlob(lines.join('\n'), `catalogo-${catalogSlug()}.txt`, 'text/plain;charset=utf-8');
+    toast.success('Catálogo TXT exportado.');
+  };
+
+  const exportCatalogHtml = () => {
+    if (!products.length) { toast.error('Não há produtos para exportar.'); return; }
+    const cards = products.map((product, index) => {
+      const p = product as any;
+      const images = getProductImageUrls(product);
+      const imageMarkup = images.length
+        ? `<div class="gallery">${images.map((url: string, imageIndex: number) => `<img src="${escapeHtml(url)}" alt="${escapeHtml(product.name)} — imagem ${imageIndex + 1}" loading="lazy">`).join('')}</div>`
+        : '<div class="no-image">Sem imagem</div>';
+      const stock = product.in_stock ? (p.stock_quantity != null ? `Em estoque · ${escapeHtml(p.stock_quantity)}` : 'Em estoque') : 'Fora de estoque';
+      return `<article class="product ${product.in_stock ? '' : 'out'}">${imageMarkup}<div class="content"><div class="eyebrow">${String(index + 1).padStart(2, '0')} · ${escapeHtml(product.category || 'Geral')}</div><h2>${escapeHtml(product.name)}</h2>${p.subcategory ? `<div class="subcategory">${escapeHtml(p.subcategory)}</div>` : ''}${product.description ? `<p>${escapeHtml(product.description)}</p>` : ''}<div class="price">${escapeHtml(money(product.price))}</div>${p.original_price ? `<div class="old-price">Preço original: ${escapeHtml(money(p.original_price))}</div>` : ''}<div class="stock">${stock}</div>${p.unidade ? `<div class="meta">Unidade: ${escapeHtml(p.unidade)}</div>` : ''}${p.affiliate_url ? `<a class="link" href="${escapeHtml(p.affiliate_url)}">Ver produto</a>` : ''}</div></article>`;
+    }).join('\n');
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Catálogo de Produtos</title><style>:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0f172a;background:#eff6ff}*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#eff6ff,#dbeafe);padding:32px}.wrap{max-width:1180px;margin:auto}.header{background:#fff;border-radius:24px;padding:28px 32px;margin-bottom:24px;box-shadow:0 16px 40px #1e3a8a18}.header h1{margin:0 0 8px;font-size:30px;color:#1e3a8a}.header p{margin:0;color:#64748b}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}.product{overflow:hidden;background:#fff;border-radius:20px;box-shadow:0 12px 30px #1e3a8a18;border:1px solid #dbeafe}.product.out{opacity:.72}.gallery{height:230px;display:flex;gap:8px;overflow-x:auto;padding:12px;background:#f8fafc}.gallery img{height:206px;min-width:206px;width:206px;object-fit:contain;border-radius:12px;background:white}.no-image{height:230px;display:grid;place-items:center;color:#94a3b8;background:#f8fafc}.content{padding:20px}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#2563eb;font-size:11px;font-weight:700}.product h2{font-size:19px;margin:8px 0;color:#0f172a}.subcategory,.meta{color:#64748b;font-size:13px}.product p{color:#475569;line-height:1.5;font-size:14px}.price{font-size:26px;font-weight:800;color:#1d4ed8;margin-top:16px}.old-price{font-size:12px;color:#94a3b8;margin-top:4px}.stock{display:inline-block;margin-top:14px;padding:6px 10px;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:12px;font-weight:700}.link{display:inline-block;margin-top:16px;color:#1d4ed8;font-weight:700;text-decoration:none}@media(max-width:600px){body{padding:16px}.header{padding:22px}.gallery{height:190px}.gallery img{height:166px;min-width:166px;width:166px}}</style></head><body><main class="wrap"><header class="header"><h1>Catálogo de Produtos</h1><p>${products.length} produto(s) · Gerado em ${escapeHtml(new Date().toLocaleString('pt-BR'))}</p></header><section class="grid">${cards}</section></main></body></html>`;
+    downloadBlob(html, `catalogo-${catalogSlug()}.html`, 'text/html;charset=utf-8');
+    toast.success('Catálogo HTML exportado com todas as imagens disponíveis.');
+  };
 
   const handleRefreshAffiliatePrices = async () => {
     if (refreshingPrices) return;
@@ -689,6 +752,16 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50"
           title="Importe catálogos em TXT, PDF ou Imagem. A IA extrairá os produtos e preços automaticamente.">
           <FileText className="h-4 w-4" /> Importar Catálogo (IA)
+        </button>
+        <button onClick={exportCatalogHtml} disabled={!products.length}
+          className="flex items-center gap-2 rounded-lg bg-primary/15 text-primary px-4 py-2 text-sm font-medium hover:bg-primary/25 disabled:opacity-50"
+          title="Baixa um HTML visual com todas as imagens e informações dos produtos">
+          <Download className="h-4 w-4" /> Exportar HTML
+        </button>
+        <button onClick={exportCatalogTxt} disabled={!products.length}
+          className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50"
+          title="Baixa um TXT com informações, preços e URLs de todas as imagens">
+          <FileText className="h-4 w-4" /> Exportar TXT
         </button>
         <button onClick={handleDeleteAll} disabled={deletingAll}
           className="flex items-center gap-2 rounded-lg bg-destructive text-destructive-foreground px-4 py-2 text-sm font-medium hover:bg-destructive/90 disabled:opacity-50">
