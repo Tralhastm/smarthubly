@@ -10,6 +10,12 @@ interface Props {
 }
 
 // Editor inline de variantes e adicionais. Use embaixo do produto no admin.
+const normalizeVariantCost = (cost: number | null | undefined, sale: number | null | undefined) => {
+  const value = Number(cost || 0);
+  const resale = Number(sale || 0);
+  return value > 0 && value < 100 && resale > 100 ? value * 1000 : value;
+};
+
 const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
   const [open, setOpen] = useState(false);
   const { data: variants = [] } = useProductVariants(productId);
@@ -38,7 +44,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       tenant_id: tenantId,
       name: vName.trim(),
       price_delta: parseFloat(vDelta) || 0,
-      cost_price: vCost.trim() ? Number(vCost.replace(',', '.')) : null,
+      cost_price: vCost.trim() ? normalizeVariantCost(Number(vCost.replace(',', '.')), Number(vSale.replace(',', '.'))) : null,
       suggested_price: vSale.trim() ? Number(vSale.replace(',', '.')) : null,
       sort_order: variants.length,
     });
@@ -49,7 +55,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
   const startVariantEdit = (variant: typeof variants[number]) => {
     setEditingVariantId(variant.id);
     setEditingVariantPrice(String(Number(variant.suggested_price ?? (basePrice + variant.price_delta)).toFixed(2)));
-    setVCost(variant.cost_price == null ? '' : String(Number(variant.cost_price).toFixed(2)));
+    setVCost(variant.cost_price == null ? '' : String(normalizeVariantCost(variant.cost_price, variant.suggested_price ?? (basePrice + variant.price_delta)).toFixed(2)));
   };
 
   const saveVariantPrice = async (variant: typeof variants[number]) => {
@@ -59,7 +65,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       ...variant,
       price_delta: price - basePrice,
       suggested_price: price,
-      cost_price: vCost.trim() ? Number(vCost.replace(',', '.')) : null,
+      cost_price: vCost.trim() ? normalizeVariantCost(Number(vCost.replace(',', '.')), price) : null,
       needs_price_review: false,
     });
     setEditingVariantId(null);
@@ -111,7 +117,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
                     </>
                   ) : (
                     <>
-                      <span className="text-primary text-[11px]">Revenda: R${Number(v.suggested_price ?? (basePrice + v.price_delta)).toFixed(2)}{v.cost_price != null && <span className="text-muted-foreground"> · Custo: R${Number(v.cost_price).toFixed(2)}</span>}</span>
+                      <span className="text-primary text-[11px]">Revenda: R${Number(v.suggested_price ?? (basePrice + v.price_delta)).toFixed(2)}{v.cost_price != null && <span className="text-muted-foreground"> · Custo: R${normalizeVariantCost(v.cost_price, v.suggested_price ?? (basePrice + v.price_delta)).toFixed(2)}</span>}</span>
                       {v.needs_price_review && <span className="text-[10px] text-amber-500 font-bold" title={`Custo: R$${Number(v.cost_price || 0).toFixed(2)} · sugestão: R$${Number(v.suggested_price || (basePrice + v.price_delta)).toFixed(2)}`}>⚠ revisar</span>}
                       <button onClick={() => startVariantEdit(v)} className="text-muted-foreground hover:text-primary p-0.5" title="Editar preço"><Pencil className="h-3 w-3" /></button>
                     </>
