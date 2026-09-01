@@ -22,6 +22,8 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
 
   const [vName, setVName] = useState('');
   const [vDelta, setVDelta] = useState('');
+  const [vCost, setVCost] = useState('');
+  const [vSale, setVSale] = useState('');
   const [aName, setAName] = useState('');
   const [aPrice, setAPrice] = useState('');
   const [aRequired, setARequired] = useState(false);
@@ -36,15 +38,18 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       tenant_id: tenantId,
       name: vName.trim(),
       price_delta: parseFloat(vDelta) || 0,
+      cost_price: vCost.trim() ? Number(vCost.replace(',', '.')) : null,
+      suggested_price: vSale.trim() ? Number(vSale.replace(',', '.')) : null,
       sort_order: variants.length,
     });
-    setVName(''); setVDelta('');
+    setVName(''); setVDelta(''); setVCost(''); setVSale('');
     toast.success('Variante adicionada');
   };
 
   const startVariantEdit = (variant: typeof variants[number]) => {
     setEditingVariantId(variant.id);
     setEditingVariantPrice(String(Number(variant.suggested_price ?? (basePrice + variant.price_delta)).toFixed(2)));
+    setVCost(variant.cost_price == null ? '' : String(Number(variant.cost_price).toFixed(2)));
   };
 
   const saveVariantPrice = async (variant: typeof variants[number]) => {
@@ -54,6 +59,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       ...variant,
       price_delta: price - basePrice,
       suggested_price: price,
+      cost_price: vCost.trim() ? Number(vCost.replace(',', '.')) : null,
       needs_price_review: false,
     });
     setEditingVariantId(null);
@@ -100,12 +106,12 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
                   <span className="flex-1 text-foreground truncate">{v.name}</span>
                   {editingVariantId === v.id ? (
                     <>
-                      <input value={editingVariantPrice} onChange={e => setEditingVariantPrice(e.target.value)} type="number" step="0.01" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" />
+                      <input value={vCost} onChange={e => setVCost(e.target.value)} type="number" step="0.01" placeholder="custo" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" /><input value={editingVariantPrice} onChange={e => setEditingVariantPrice(e.target.value)} type="number" step="0.01" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" />
                       <button onClick={() => saveVariantPrice(v)} className="text-emerald-500 p-0.5" title="Salvar preço"><Check className="h-3 w-3" /></button>
                     </>
                   ) : (
                     <>
-                      <span className="text-primary text-[11px]">Preço: R${Number(v.suggested_price ?? (basePrice + v.price_delta)).toFixed(2)}</span>
+                      <span className="text-primary text-[11px]">Revenda: R${Number(v.suggested_price ?? (basePrice + v.price_delta)).toFixed(2)}{v.cost_price != null && <span className="text-muted-foreground"> · Custo: R${Number(v.cost_price).toFixed(2)}</span>}</span>
                       {v.needs_price_review && <span className="text-[10px] text-amber-500 font-bold" title={`Custo: R$${Number(v.cost_price || 0).toFixed(2)} · sugestão: R$${Number(v.suggested_price || (basePrice + v.price_delta)).toFixed(2)}`}>⚠ revisar</span>}
                       <button onClick={() => startVariantEdit(v)} className="text-muted-foreground hover:text-primary p-0.5" title="Editar preço"><Pencil className="h-3 w-3" /></button>
                     </>
@@ -129,11 +135,13 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
               <input
                 value={vDelta}
                 onChange={e => setVDelta(e.target.value)}
-                placeholder="+R$"
+                placeholder="diferença"
                 type="number"
                 step="0.01"
-                className="w-16 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground"
+                className="w-20 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground"
               />
+              <input value={vCost} onChange={e => setVCost(e.target.value)} placeholder="custo opcional" type="number" step="0.01" className="w-24 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground" />
+              <input value={vSale} onChange={e => setVSale(e.target.value)} placeholder="revenda opcional" type="number" step="0.01" className="w-24 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground" />
               <button
                 onClick={addVariant}
                 className="rounded-md gradient-primary text-primary-foreground px-2 py-1 text-xs flex items-center gap-1"
