@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { useProductVariants, useProductAddons, useSaveVariant, useDeleteVariant, useSaveAddon, useDeleteAddon } from '@/hooks/useProductExtras';
-import { Plus, Trash2, X, Check, Layers, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, X, Check, Pencil, Layers, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Props {
   productId: string;
   tenantId: string;
+  basePrice?: number;
 }
 
 // Editor inline de variantes e adicionais. Use embaixo do produto no admin.
-const ProductExtrasEditor = ({ productId, tenantId }: Props) => {
+const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
   const [open, setOpen] = useState(false);
-  const { data: variants = [] } = useProductVariants(open ? productId : undefined);
+  const { data: variants = [] } = useProductVariants(productId);
+  const variantsToReview = variants.filter(v => v.needs_price_review);
   const { data: addons = [] } = useProductAddons(open ? productId : undefined);
   const saveVariant = useSaveVariant();
   const deleteVariant = useDeleteVariant(productId);
@@ -24,6 +26,8 @@ const ProductExtrasEditor = ({ productId, tenantId }: Props) => {
   const [aPrice, setAPrice] = useState('');
   const [aRequired, setARequired] = useState(false);
   const [aMax, setAMax] = useState('1');
+  const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
+  const [editingVariantPrice, setEditingVariantPrice] = useState('');
 
   const addVariant = async () => {
     if (!vName.trim()) return;
@@ -36,6 +40,24 @@ const ProductExtrasEditor = ({ productId, tenantId }: Props) => {
     });
     setVName(''); setVDelta('');
     toast.success('Variante adicionada');
+  };
+
+  const startVariantEdit = (variant: typeof variants[number]) => {
+    setEditingVariantId(variant.id);
+    setEditingVariantPrice(String(Number(variant.suggested_price ?? (basePrice + variant.price_delta)).toFixed(2)));
+  };
+
+  const saveVariantPrice = async (variant: typeof variants[number]) => {
+    const price = Number(editingVariantPrice.replace(',', '.'));
+    if (!Number.isFinite(price) || price < 0) return;
+    await saveVariant.mutateAsync({
+      ...variant,
+      price_delta: price - basePrice,
+      suggested_price: price,
+      needs_price_review: false,
+    });
+    setEditingVariantId(null);
+    toast.success('Preço da variação atualizado');
   };
 
   const addAddon = async () => {
@@ -59,9 +81,10 @@ const ProductExtrasEditor = ({ productId, tenantId }: Props) => {
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between gap-2 text-xs text-muted-foreground hover:text-foreground py-1"
       >
-        <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5">
           <Layers className="h-3.5 w-3.5" />
           Variantes ({variants.length}) & Adicionais ({addons.length})
+          {variantsToReview.length > 0 && <span className="text-amber-500 font-bold">⚠ {variantsToReview.length} revisar</span>}
         </span>
         {open ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
       </button>
@@ -75,7 +98,18 @@ const ProductExtrasEditor = ({ productId, tenantId }: Props) => {
               {variants.map(v => (
                 <div key={v.id} className="flex items-center gap-1.5 text-xs">
                   <span className="flex-1 text-foreground truncate">{v.name}</span>
-                  <span className="text-primary text-[11px]">{v.price_delta > 0 ? '+' : ''}R${v.price_delta.toFixed(2)}</span>
+                  {editingVariantId === v.id ? (
+                    <>
+                      <input value={editingVariantPrice} onChange={e => setEditingVariantPrice(e.target.value)} type="number" step="0.01" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" />
+                      <button onClick={() => saveVariantPrice(v)} className="text-emerald-500 p-0.5" title="Salvar preço"><Check className="h-3 w-3" /></button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-primary text-[11px]">Preço: R${Number(v.suggested_price ?? (basePrice + v.price_delta)).toFixed(2)}</span>
+                      {v.needs_price_review && <span className="text-[10px] text-amber-500 font-bold" title={`Custo: R$${Number(v.cost_price || 0).toFixed(2)} · sugestão: R$${Number(v.suggested_price || (basePrice + v.price_delta)).toFixed(2)}`}>⚠ revisar</span>}
+                      <button onClick={() => startVariantEdit(v)} className="text-muted-foreground hover:text-primary p-0.5" title="Editar preço"><Pencil className="h-3 w-3" /></button>
+                    </>
+                  )}
                   <button
                     onClick={() => deleteVariant.mutate(v.id)}
                     className="text-muted-foreground hover:text-destructive p-0.5"

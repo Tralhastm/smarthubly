@@ -14,7 +14,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
-type ParsedProduct = { name: string; price: number; category: string; description: string };
+type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number };
+type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; variants?: ParsedVariant[]; needs_price_review?: boolean };
 
 const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenantId: string; isDropshipping?: boolean; isAffiliate?: boolean }) => {
   const { data: products = [], isLoading, refetch } = useProducts(tenantId);
@@ -460,6 +461,29 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const saveImportedVariants = async (productId: string, product: ParsedProduct, baseSalePrice: number, baseCost: number, isCost: boolean, shipping: number, margin: number) => {
+    for (const variant of product.variants || []) {
+      const variantCost = Number(variant.cost_price || (isCost ? variant.price : 0)) || 0;
+      const variantSale = isCost ? (variantCost + shipping) * (1 + margin / 100) : Number(variant.resale_price || variant.price) || 0;
+      if (!variant.name || variantSale <= 0) continue;
+      const { data: existingVariant } = await supabase.from('product_variants' as any)
+        .select('id').eq('product_id', productId).ilike('name', variant.name.trim()).maybeSingle();
+      const payload = {
+        product_id: productId,
+        tenant_id: tenantId,
+        name: variant.name.trim(),
+        price_delta: variantSale - baseSalePrice,
+        cost_price: variantCost || null,
+        suggested_price: variantSale,
+        needs_price_review: variantCost > 0 && baseCost > 0 && variantCost > baseCost,
+        price_source: variantCost > 0 ? 'catálogo do fornecedor' : null,
+        in_stock: true,
+      };
+      if (existingVariant?.id) await supabase.from('product_variants' as any).update(payload).eq('id', existingVariant.id);
+      else await supabase.from('product_variants' as any).insert(payload);
+    }
+  };
+
   const handleImportConfirm = async () => {
     setImportStep('importing');
     setImportTotal(parsedProducts.length);
@@ -487,8 +511,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         const margin = parseFloat(importProfitMargin) || 0;
         
         // Se for custo, calcula a revenda automaticamente com base na margem e frete
-        const original_price = isCost ? p.price : 0;
-        const calculatedPrice = isCost ? (p.price + shipping) * (1 + (margin / 100)) : p.price;
+        const importedCost = isCost ? Number(p.cost_price || p.price) : 0;
+        const original_price = importedCost;
+        const calculatedPrice = isCost ? (importedCost + shipping) * (1 + (margin / 100)) : Number(p.resale_price || p.price);
         const price = calculatedPrice;
         
         // Verificação de duplicata no Banco de Dados em tempo real
@@ -508,19 +533,20 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           
           // Se for custo, atualizamos o custo original se for menor (melhor preço)
           const currentCost = existing.original_price || 0;
-          if (isCost && (currentCost === 0 || original_price < currentCost)) {
+          if (isCost && (currentCost === 0 || importedCost < currentCost)) {
             updateData.original_price = original_price;
             updateData.supplier_id = currentSupplierId;
             
             // Alerta de margem (apenas log/console por enquanto conforme pedido)
             const currentResale = parseFloat(existing.price?.toString() || '0');
-            const newMargin = currentResale > 0 ? ((currentResale - original_price) / original_price) * 100 : 0;
+            const newMargin = currentResale > 0 ? ((currentResale - importedCost) / importedCost) * 100 : 0;
             if (newMargin < margin) {
               console.log(`[Import] Margem baixa para ${p.name}: ${newMargin.toFixed(1)}%`);
             }
           }
 
           await supabase.from('products').update(updateData).eq('id', existing.id);
+          await saveImportedVariants(existing.id, p, Number(existing.price) || price, Number(updateData.original_price || existing.original_price) || importedCost, isCost, shipping, margin);
           insertedIds.push(existing.id);
         } else {
           // Produto novo: Insere
@@ -550,12 +576,15 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             .limit(1)
             .single();
 
-          if (inserted) insertedIds.push(inserted.id);
+          if (inserted) {
+            await saveImportedVariants(inserted.id, p, price, importedCost, isCost, shipping, margin);
+            insertedIds.push(inserted.id);
+          }
         }
 
         // Registra sempre na tabela de comparação multi-fornecedor
-        if (currentSupplierId && Number.isFinite(p.price) && p.price > 0) {
-          await recordSupplierPrice(currentSupplierId, p.name, p.price, importPriceType);
+        if (currentSupplierId && Number.isFinite(importedCost || p.price) && (importedCost || p.price) > 0) {
+          await recordSupplierPrice(currentSupplierId, p.name, importedCost || p.price, importPriceType);
         }
       } catch (err) {
         console.error('Failed to process', p.name, err);
@@ -1007,6 +1036,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" /> {parsedProducts.length} produtos encontrados
             </h3>
+            {parsedProducts.some(p => p.needs_price_review || (p.variants || []).some(v => Number(v.cost_price || 0) > Number(p.cost_price || 0))) && (
+              <p className="text-xs rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-600 px-3 py-2">⚠ Há variações com custo diferente. O menor custo será a base; revise os preços sinalizados depois da importação.</p>
+            )}
             <div className="max-h-60 overflow-y-auto space-y-2 border rounded-lg p-2">
               {parsedProducts.map((p, i) => (
                 <div key={i} className="flex items-center justify-between rounded-md bg-secondary px-3 py-2 text-sm">
@@ -1014,7 +1046,11 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
                     <span className="font-medium text-foreground">{p.name}</span>
                     <span className="text-muted-foreground ml-2">· {p.category}</span>
                   </div>
-                  <span className="text-primary font-medium">R${p.price.toFixed(2)}</span>
+                    <div className="text-right">
+                      <span className="text-primary font-medium">R${p.price.toFixed(2)}</span>
+                      {(p.variants || []).length > 0 && <div className="text-[10px] text-muted-foreground">{(p.variants || []).map(v => v.name).join(', ')}</div>}
+                      {(p.needs_price_review || (p.variants || []).some(v => Number(v.cost_price || 0) > Number(p.cost_price || 0))) && <div className="text-[10px] text-amber-600 font-bold">⚠ revisar variações</div>}
+                    </div>
                 </div>
               ))}
             </div>
@@ -1581,7 +1617,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
       </div>
 
       {/* Editor de variantes e adicionais */}
-      {!isAffiliate && <ProductExtrasEditor productId={product.id} tenantId={tenantId} />}
+      {!isAffiliate && <ProductExtrasEditor productId={product.id} tenantId={tenantId} basePrice={Number(product.price) || 0} />}
     </div>
   );
 };

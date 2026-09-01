@@ -45,7 +45,7 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
 
   const variantDelta = selectedVariant?.price_delta || 0;
   const addonsTotal = cartAddons.reduce((s, a) => s + a.price * a.quantity, 0);
-  const unitTotal = product.price + variantDelta + addonsTotal;
+  const unitTotal = (selectedVariant?.suggested_price ?? (product.price + variantDelta)) + addonsTotal;
 
   const handleAdd = () => {
     if (missingRequired.length > 0) return;
@@ -105,11 +105,10 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
                       <span>{v.name}</span>
                       {!v.in_stock && <span className="text-[10px] text-muted-foreground">(esgotado)</span>}
                     </span>
-                    {v.price_delta !== 0 && (
-                      <span className="text-xs font-medium text-primary">
-                        {v.price_delta > 0 ? '+' : ''}R${v.price_delta.toFixed(2)}
-                      </span>
-                    )}
+                    <span className="text-xs font-medium text-primary">
+                      R${(Number(v.suggested_price ?? (product.price + v.price_delta)) || 0).toFixed(2)}
+                      {v.price_delta !== 0 && <span className="ml-1 opacity-80">({v.price_delta > 0 ? '+' : ''}R${v.price_delta.toFixed(2)})</span>}
+                    </span>
                   </button>
                 ))}
               </div>

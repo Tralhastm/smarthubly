@@ -490,6 +490,7 @@ interface CatalogItem {
   available?: boolean;
   disponivel?: boolean;
   unit?: string;
+  variants?: Array<{ name?: string; price?: number; cost_price?: number; resale_price?: number; available?: boolean }>;
 }
 
 function json(body: unknown, status = 200) {
@@ -609,15 +610,15 @@ Deno.serve(async (req) => {
 Regras obrigatórias:
 - Reconheça tanto produtos em uma única linha (ex.: "Galaxy A07 128GB - CUSTO: R$ 750 - REVENDA: R$ 849") quanto produtos em bloco, com o nome em uma linha e os valores nas linhas seguintes (ex.: "Galaxy A07 128GB", depois "Custo: R$ 750", depois "Venda sugerida: R$ 849").
 - Títulos de seção ou marca isolados, como SAMSUNG, MOTOROLA, REALME, XIAOMI REDMI, REDMI NOTE e POCO, não são produtos; use-os como category quando apropriado.
-- Retorne TODOS os itens identificados, sem juntar variantes diferentes. Preserve capacidade, RAM, 4G/5G, NFC, Pro, Max e outras características do nome.
-- Para cada item, retorne { name, price, cost_price, resale_price, category, available }. Use price como o preço de venda/resale quando existir; se só houver custo, use o custo. Os campos cost_price e resale_price devem ser números, ou 0 quando ausentes.
+- Retorne TODOS os itens identificados e agrupe somente opções do mesmo modelo. Preserve capacidade, RAM, 4G/5G, NFC, Pro, Max, edição e outras características técnicas do nome. Quando cor, capacidade ou outra opção tiver custo diferente, retorne "variants": [{ name, price, cost_price, resale_price, available }], uma opção por variação, usando o menor custo/preço como base. Nunca invente diferenças.
+- Para cada item, retorne { name, price, cost_price, resale_price, category, available, variants }. Use price como o preço de venda/resale quando existir; se só houver custo, use o custo. Os campos cost_price e resale_price devem ser números, ou 0 quando ausentes.
 - Aceite valores como "R$ 1.099", "R$ 1.099,90", "1099,90", "1.099.90" e tabelas/colunas. Não confunda pontos de milhar com casas decimais.
 - Se um produto tiver custo e venda em linhas diferentes, associe ambos ao nome imediatamente anterior até começar outro produto ou seção.
 - Normalize somente espaços e caracteres estranhos; não remova informações técnicas relevantes do nome.
 - NÃO invente itens nem preços. Se a imagem ou trecho não estiver legível, extraia apenas o que conseguir e inclua warnings.
 - available: true por padrão, a menos que esteja marcado como esgotado, indisponível ou fora de estoque.
 
-Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "cost_price": 0, "resale_price": 0, "category": "...", "available": true }], "warnings": [] }`;
+Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "cost_price": 0, "resale_price": 0, "category": "...", "available": true, "variants": [] }], "warnings": [] }`;
 
     let items: CatalogItem[] = [];
     let warnings: string[] = [];
@@ -668,7 +669,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           unit_price: price,
           available: it.available ?? it.disponivel ?? true,
           price_types: priceType === 'both' ? ['cost', 'resale'] : [priceType],
-          metadata: { profit_margin: profitMargin, shipping_fee: shippingFee, resale_price: Number.isFinite(resale) && resale > 0 ? resale : null, category: it.category ?? it.categoria ?? null }
+          metadata: { profit_margin: profitMargin, shipping_fee: shippingFee, resale_price: Number.isFinite(resale) && resale > 0 ? resale : null, category: it.category ?? it.categoria ?? null, variants: Array.isArray(it.variants) ? it.variants : [] }
         });
       }
       return json({ total: items.length, skipped, warnings, items: items.slice(0, 100) });
@@ -678,7 +679,9 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
     // só se o catálogo não trouxer o item; traz preço novo sempre que o item aparece.
     for (const it of items) {
       const name = String(it.name || it.product_name || "").trim().toLowerCase();
-      const price = Number(it.price ?? it.unit_price ?? it.preco ?? NaN);
+      const cost = Number(it.cost_price ?? it.cost ?? it.custo ?? NaN);
+      const resale = Number(it.resale_price ?? it.resale ?? it.venda_sugerida ?? it.price ?? it.unit_price ?? it.preco ?? NaN);
+      const price = Number.isFinite(cost) && cost > 0 ? cost : resale;
       if (!name || !Number.isFinite(price) || price <= 0) {
         skipped++;
         continue;
@@ -690,7 +693,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           unit_price: price,
           available: it.available ?? it.disponivel ?? true,
           price_types: priceType === 'both' ? ['cost', 'resale'] : [priceType],
-          metadata: { profit_margin: profitMargin, shipping_fee: shippingFee, resale_price: Number.isFinite(resale) && resale > 0 ? resale : null, category: it.category ?? it.categoria ?? null }
+          metadata: { profit_margin: profitMargin, shipping_fee: shippingFee, resale_price: Number.isFinite(resale) && resale > 0 ? resale : null, category: it.category ?? it.categoria ?? null, variants: Array.isArray(it.variants) ? it.variants : [] }
         },
         { onConflict: "supplier_id,product_name" },
       );

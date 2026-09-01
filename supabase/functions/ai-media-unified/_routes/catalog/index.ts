@@ -21,6 +21,9 @@ interface CatalogItem {
   description?: string;
   available?: boolean;
   disponivel?: boolean;
+  cost_price?: number;
+  resale_price?: number;
+  variants?: Array<{ name?: string; price?: number; cost_price?: number; resale_price?: number; available?: boolean }>;
   variations?: any;
 }
 
@@ -126,14 +129,16 @@ export async function catalog(req: Request, body?: any): Promise<Response> {
       text = String(content);
     }
 
-    const SYSTEM = `Você é um extrator inteligente de catálogos de fornecedores brasileiros. Extraia produtos, preços e variações (cor, memória).`;
+    const SYSTEM = `Você é um extrator inteligente de catálogos de fornecedores brasileiros. Extraia produtos, custos, preços de venda e variações sem inventar dados.`;
 
     const USER = `Extraia desta ${kind === "image" ? "imagem" : "lista"} TODOS os produtos com preços.
 Regras:
-1. JSON: { \"items\": [{ \"name\", \"price\", \"category\", \"description\", \"available\", \"variations\" }] }
-2. \"name\": Limpo, ex: \"iPhone 15 Pro Max\"
-3. \"price\": Numérico (R$)
-4. \"variations\": { \"storage\": \"256GB\", \"color\": \"Blue\" }`;
+1. Retorne JSON: { \"items\": [{ \"name\", \"price\", \"cost_price\", \"resale_price\", \"category\", \"description\", \"available\", \"variants\" }] }.
+2. \"name\" é o modelo sem a cor. Não junte modelos diferentes; preserve memória, RAM, 4G/5G, NFC, Pro, Max e edições especiais.
+3. Se cores, capacidades ou outras opções do mesmo modelo tiverem preços diferentes, use como \"price\" o menor preço explícito e retorne cada opção em \"variants\": [{ \"name\": \"Preto\", \"price\": 1350, \"cost_price\": 1350, \"resale_price\": 0 }].
+4. Se todas as opções tiverem o mesmo preço, também pode retornar as opções, mas não crie diferença de preço. Nunca invente cor ou preço.
+5. Informe cost_price quando o catálogo der custo e resale_price quando der venda sugerida; use 0 quando ausente. Para cada variante, faça o mesmo.
+6. \"variations\" antigo pode ser mantido como complemento, mas \"variants\" deve conter as opções que têm preço próprio.`;
 
     let items: CatalogItem[] = [];
     let warnings: string[] = [];
@@ -171,7 +176,11 @@ Regras:
     const results = [];
     for (const it of items) {
       const name = String(it.name || it.product_name || "").trim().toLowerCase();
-      const newPrice = Number(it.price ?? it.unit_price ?? it.preco ?? NaN);
+      const variants = Array.isArray(it.variants) ? it.variants : [];
+      const variantPrices = variants.map((v: any) => Number(v.price ?? v.cost_price ?? v.resale_price)).filter((v: number) => Number.isFinite(v) && v > 0);
+      const cost = Number(it.cost_price ?? NaN);
+      const resale = Number(it.resale_price ?? NaN);
+      const newPrice = priceTypes.includes('cost') ? (Number.isFinite(cost) && cost > 0 ? cost : Math.min(...variantPrices, Number(it.price ?? it.unit_price ?? it.preco ?? Infinity))) : (Number.isFinite(resale) && resale > 0 ? resale : Number(it.price ?? it.unit_price ?? it.preco ?? Math.min(...variantPrices)));
       if (!name || !Number.isFinite(newPrice) || newPrice <= 0) {
         skipped++;
         continue;
@@ -194,7 +203,7 @@ Regras:
           unit_price: newPrice,
           available: it.available ?? it.disponivel ?? true,
           description: it.description || null,
-          variations: it.variations || null,
+          variations: variants.length ? variants : (it.variations || null),
           price_types: priceTypes
         },
         { onConflict: "supplier_id,product_name" }
@@ -207,7 +216,7 @@ Regras:
       }
     }
 
-    return json({ total: items.length, skipped, warnings, alerts: results.slice(0, 20), items: items.slice(0, 10) });
+    return json({ total: items.length, skipped, warnings, alerts: results.slice(0, 20), items: items.slice(0, 100), products: items.slice(0, 100) });
 
   } catch (e) {
     console.error("[catalog] error", e);
