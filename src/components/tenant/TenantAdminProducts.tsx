@@ -27,6 +27,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const createFeeReq = useCreateFeeRequest();
   const [editing, setEditing] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState('');
   const [nodesById, setNodesById] = useState<Record<string, { name: string }>>({});
 
   useEffect(() => {
@@ -769,11 +770,21 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
   const productsWithoutImage = products.filter(p => !p.image || p.image === '').length;
   const productsWithAiImage = products.filter(p => p.image && p.image.includes('?ai=1')).length;
+  const normalizedCatalogSearch = catalogSearch.trim().toLowerCase();
+  const visibleProducts = normalizedCatalogSearch
+    ? products.filter(p => [p.name, p.category, (p as any).subcategory, (p as any).supplier_name]
+        .filter(Boolean).join(' ').toLowerCase().includes(normalizedCatalogSearch))
+    : products;
   const productsWithGoogleImage = products.filter(p => p.image && p.image.includes('?src=google')).length;
 
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">
+        <div className="relative min-w-[240px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input value={catalogSearch} onChange={e => setCatalogSearch(e.target.value)} placeholder="Localizar produto no catálogo..." aria-label="Buscar produto no catálogo"
+            className="w-full rounded-lg border border-border bg-card py-2 pl-9 pr-3 text-sm text-foreground outline-none transition-all focus:border-primary/50 focus:ring-2 focus:ring-primary/30" />
+        </div>
         <button onClick={() => setShowAdd(!showAdd)} className="flex items-center gap-2 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90">
           <Plus className="h-4 w-4" /> Novo Produto
         </button>
@@ -1230,7 +1241,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         </div>
       )}
 
-      {products.map(p => (
+      {visibleProducts.map(p => (
         <EditableProduct key={p.id} product={p} isEditing={editing === p.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate}
           suppliers={suppliers.filter(s => s.active)} tenantId={tenantId}
           feeRequests={feeRequests.filter(r => r.product_id === p.id)}
@@ -1242,11 +1253,13 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           }}
           onEdit={() => setEditing(p.id)} onSave={(prod) => { updateMutation.mutate(prod); setEditing(null); }}
           onCancel={() => setEditing(null)} onDelete={() => deleteMutation.mutate(p.id)} />
-      ))}
+            ))}
+      {products.length > 0 && visibleProducts.length === 0 && (
+        <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Nenhum produto encontrado para “{catalogSearch}”.</p>
+      )}
     </div>
   );
 };
-
 const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, suppliers, tenantId, feeRequests, onRequestFee, onEdit, onSave, onCancel, onDelete }: {
   product: Product; isEditing: boolean; isDropshipping?: boolean; isAffiliate?: boolean;
   suppliers: { id: string; name: string }[];
