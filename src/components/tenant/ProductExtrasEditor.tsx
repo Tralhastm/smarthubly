@@ -114,7 +114,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
                   <span className="flex-1 text-foreground truncate">{v.name}</span>
                   {editingVariantId === v.id ? (
                     <>
-                      <input value={vCost} onChange={e => setVCost(e.target.value)} type="text" inputMode="decimal" placeholder="custo" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" /><input value={editingVariantPrice} onChange={e => setEditingVariantPrice(e.target.value)} type="number" step="0.01" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" />
+                      <input value={vCost} onChange={e => setVCost(e.target.value)} type="text" inputMode="decimal" placeholder="custo" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" /><input value={editingVariantPrice} onChange={e => setEditingVariantPrice(e.target.value)} type="text" inputMode="decimal" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" />
                       <button onClick={() => saveVariantPrice(v)} className="text-emerald-500 p-0.5" title="Salvar preço"><Check className="h-3 w-3" /></button>
                     </>
                   ) : (
