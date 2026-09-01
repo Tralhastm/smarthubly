@@ -10,6 +10,8 @@ interface Props {
 }
 
 // Editor inline de variantes e adicionais. Use embaixo do produto no admin.
+const parseMoney = (value: string | number) => { const text = String(value ?? '').trim().replace(/R\$\s?/gi, ''); if (!text) return 0; const normalized = text.includes(',') ? text.replace(/\./g, '').replace(',', '.') : text; const parsed = Number(normalized); return Number.isFinite(parsed) ? parsed : 0; };
+
 const normalizeVariantCost = (cost: number | null | undefined, sale: number | null | undefined) => {
   const value = Number(cost || 0);
   const resale = Number(sale || 0);
@@ -44,8 +46,8 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       tenant_id: tenantId,
       name: vName.trim(),
       price_delta: parseFloat(vDelta) || 0,
-      cost_price: vCost.trim() ? normalizeVariantCost(Number(vCost.replace(',', '.')), Number(vSale.replace(',', '.'))) : null,
-      suggested_price: vSale.trim() ? Number(vSale.replace(',', '.')) : null,
+      cost_price: vCost.trim() ? normalizeVariantCost(parseMoney(vCost), parseMoney(vSale)) : null,
+      suggested_price: vSale.trim() ? parseMoney(vSale) : null,
       sort_order: variants.length,
     });
     setVName(''); setVDelta(''); setVCost(''); setVSale('');
@@ -59,13 +61,13 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
   };
 
   const saveVariantPrice = async (variant: typeof variants[number]) => {
-    const price = Number(editingVariantPrice.replace(',', '.'));
+    const price = parseMoney(editingVariantPrice);
     if (!Number.isFinite(price) || price < 0) return;
     await saveVariant.mutateAsync({
       ...variant,
       price_delta: price - basePrice,
       suggested_price: price,
-      cost_price: vCost.trim() ? normalizeVariantCost(Number(vCost.replace(',', '.')), price) : null,
+      cost_price: vCost.trim() ? normalizeVariantCost(parseMoney(vCost), price) : null,
       needs_price_review: false,
     });
     setEditingVariantId(null);
@@ -112,7 +114,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
                   <span className="flex-1 text-foreground truncate">{v.name}</span>
                   {editingVariantId === v.id ? (
                     <>
-                      <input value={vCost} onChange={e => setVCost(e.target.value)} type="number" step="0.01" placeholder="custo" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" /><input value={editingVariantPrice} onChange={e => setEditingVariantPrice(e.target.value)} type="number" step="0.01" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" />
+                      <input value={vCost} onChange={e => setVCost(e.target.value)} type="text" inputMode="decimal" placeholder="custo" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" /><input value={editingVariantPrice} onChange={e => setEditingVariantPrice(e.target.value)} type="number" step="0.01" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" />
                       <button onClick={() => saveVariantPrice(v)} className="text-emerald-500 p-0.5" title="Salvar preço"><Check className="h-3 w-3" /></button>
                     </>
                   ) : (
