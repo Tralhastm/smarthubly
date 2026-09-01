@@ -79,8 +79,9 @@ const SupplierPanel = () => {
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [priceText, setPriceText] = useState('');
+  const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
-  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[] } | null>(null);
   const [tenant, setTenant] = useState<any>(null);
   const [isActive, setIsActive] = useState<boolean>(true);
   const [togglingActive, setTogglingActive] = useState(false);
@@ -582,30 +583,36 @@ const SupplierPanel = () => {
     const updated: string[] = [];
     const notFound: string[] = [];
     const invalid: string[] = [];
+    const warnings: string[] = [];
     try {
       for (const entry of entries) {
         const product = entry.aliases.map(alias => byName.get(normalizeProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
         if (!product) { notFound.push(entry.name); continue; }
         const patch: Record<string, number> = {};
-        if (entry.cost != null) patch.original_price = entry.cost;
-        if (entry.resale != null) patch.price = entry.resale;
-        if (Object.keys(patch).length === 0) { invalid.push(entry.name); continue; }
+        if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) patch.original_price = entry.cost;
+        if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) patch.price = entry.resale;
+        if (Object.keys(patch).length === 0) {
+          const expected = priceUpdateMode === 'cost' ? 'CUSTO' : priceUpdateMode === 'resale' ? 'REVENDA' : 'CUSTO ou REVENDA';
+          invalid.push(`${entry.name} (não contém ${expected})`);
+          continue;
+        }
         const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
         if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
-        if (entry.cost != null) {
+        if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) {
           const { error: priceError } = await (supabase as any).from('supplier_product_prices').upsert({
             supplier_id: supplier.id,
             product_name: product.name.trim().toLowerCase(),
             unit_price: entry.cost,
             available: true,
           }, { onConflict: 'supplier_id,product_name' });
-          if (priceError) { invalid.push(`${entry.name} (comparação: ${priceError.message})`); continue; }
+          // A tabela de comparação é auxiliar: não deve fazer a atualização do produto parecer falha.
+          if (priceError) warnings.push(`${entry.name} (comparação não atualizada: ${priceError.message})`);
         }
         updated.push(entry.name);
         Object.assign(product, patch);
       }
       setProducts([...products]);
-      setImportResult({ updated, notFound, invalid });
+      setImportResult({ updated, notFound, invalid, warnings });
       if (updated.length) toast.success(`${updated.length} produto(s) atualizado(s)`);
       if (!updated.length) toast.error('Nenhum produto foi atualizado');
     } finally {
@@ -958,7 +965,16 @@ const SupplierPanel = () => {
           <div className="space-y-4">
             <div className="rounded-lg border border-border bg-card p-4 space-y-2">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground"><Upload className="h-5 w-5 text-primary" /> Importar preços</h2>
-              <p className="text-xs text-muted-foreground">Cole o texto abaixo ou escolha um arquivo .txt. Só serão atualizados produtos vinculados a este fornecedor, por nome exato.</p>
+              <p className="text-xs text-muted-foreground">Cole o texto abaixo ou escolha um arquivo .txt. Só serão atualizados produtos já vinculados a este fornecedor, por nome exato.</p>
+              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
+                <label className="block text-xs font-semibold text-foreground">O que deseja atualizar?</label>
+                <select value={priceUpdateMode} onChange={e => { setPriceUpdateMode(e.target.value as 'cost' | 'resale' | 'both'); setImportResult(null); }} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
+                  <option value="cost">Somente preço de custo</option>
+                  <option value="resale">Somente preço de revenda</option>
+                  <option value="both">Preço de custo e revenda</option>
+                </select>
+                <p className="text-[11px] text-muted-foreground">Produtos não vinculados ao fornecedor serão ignorados. No modo “somente custo”, o preço de revenda permanece inalterado.</p>
+              </div>
               <div className="rounded-md bg-secondary/60 p-3 text-xs text-muted-foreground font-mono">samsung a9 8.7 64/4gb - CUSTO: R$ 990,00 - TABLET - REVENDA: R$ 1.199,00</div>
               <textarea value={priceText} onChange={e => { setPriceText(e.target.value); setImportResult(null); }} rows={8} placeholder="Uma linha por produto..." className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground" />
               <div className="flex flex-wrap gap-2">
@@ -986,6 +1002,7 @@ const SupplierPanel = () => {
                 {importResult.updated.length > 0 && <p className="text-xs text-green-400">Atualizados: {importResult.updated.join(', ')}</p>}
                 {importResult.notFound.length > 0 && <p className="text-xs text-yellow-400">Não encontrados: {importResult.notFound.join(', ')}</p>}
                 {importResult.invalid.length > 0 && <p className="text-xs text-red-400">Com erro: {importResult.invalid.join(', ')}</p>}
+                {importResult.warnings.length > 0 && <p className="text-xs text-orange-300">Avisos auxiliares: {importResult.warnings.join(', ')}</p>}
               </div>
             )}
           </div>
