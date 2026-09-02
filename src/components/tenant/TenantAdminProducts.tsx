@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct, type Product } from '@/hooks/useProducts';
+import { useProductVariants } from '@/hooks/useProductExtras';
 import { useSuppliers } from '@/hooks/useSuppliers';
 import { useFeeRequests, useCreateFeeRequest } from '@/hooks/useFeeRequests';
 import ImageUploadField from '@/components/shared/ImageUploadField';
@@ -1276,6 +1277,14 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
   const [activeSubTab, setActiveSubTab] = useState<'info' | 'suppliers'>('info');
   const supplierName = suppliers.find(s => s.id === product.supplier_id)?.name;
   const pendingReq = feeRequests.find(r => r.status === 'pending');
+  const { data: variants = [] } = useProductVariants(product.id);
+  const variantPrices = variants
+    .map(variant => ({
+      ...variant,
+      salePrice: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta))) || 0,
+      costPrice: Number(variant.cost_price) || 0,
+    }))
+    .filter(variant => Math.abs(variant.salePrice - Number(product.price)) > 0.005);
 
   // Preços de outros fornecedores para este produto
   const [otherPrices, setOtherPrices] = useState<{ supplier_id: string; supplier_name: string; unit_price: number; price_types: string[]; description?: string; variations?: any }[]>([]);
@@ -1599,6 +1608,18 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
             {supplierName && <span className="text-primary"> · {supplierName}</span>}
             {(product as any).auto_categorize === false && <span className="text-muted-foreground"> · 🚫 IA off</span>}
           </p>
+          {variantPrices.length > 0 && (
+            <div className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-primary/80">Preço por cor</p>
+              {variantPrices.map(variant => (
+                <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
+                  <span className="font-medium text-foreground">{variant.name}</span>
+                  {variant.costPrice > 0 && <span>Custo: R${variant.costPrice.toFixed(2)}</span>}
+                  <span className="text-primary">Revenda: R${variant.salePrice.toFixed(2)}</span>
+                </p>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex gap-1">
           <button onClick={onEdit} className="rounded-md p-2 text-muted-foreground hover:text-primary hover:bg-primary/10"><Edit className="h-4 w-4" /></button>
