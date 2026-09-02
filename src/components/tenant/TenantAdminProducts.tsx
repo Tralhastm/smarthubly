@@ -1284,7 +1284,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
       salePrice: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta))) || 0,
       costPrice: Number(variant.cost_price) || 0,
     }))
-    .filter(variant => Math.abs(variant.salePrice - Number(product.price)) > 0.005);
+    .filter(variant => variant.costPrice > 0);
 
   // Preços de outros fornecedores para este produto
   const [otherPrices, setOtherPrices] = useState<{ supplier_id: string; supplier_name: string; unit_price: number; price_types: string[]; description?: string; variations?: any }[]>([]);
@@ -1614,7 +1614,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
               {variantPrices.map(variant => (
                 <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
                   <span className="font-medium text-foreground">{variant.name}</span>
-                  {variant.costPrice > 0 && <span>Custo: R${variant.costPrice.toFixed(2)}</span>}
+                  <span>Custo: R${variant.costPrice.toFixed(2)}</span>
                   <span className="text-primary">Revenda: R${variant.salePrice.toFixed(2)}</span>
                 </p>
               ))}
