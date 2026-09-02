@@ -64,7 +64,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const [paymentMethod, setPaymentMethod] = useState('pix');
   const [changeFor, setChangeFor] = useState('');
   // Pagamento online (MercadoPago ou PagBank) — flag derivada da view pública (não expõe o token).
-  const hasOnlinePayment = !isWhatsAppMode && !!((tenant as any).has_online_payment ?? (tenant as any).mercadopago_token ?? (tenant as any).pagbank_token);
+  const isInfinitePay = (tenant as any)?.payment_provider === 'infinitepay' && (tenant as any)?.infinitepay_enabled !== false;
+  const hasOnlinePayment = !isWhatsAppMode && !!((tenant as any).has_online_payment ?? (tenant as any).mercadopago_token ?? (tenant as any).pagbank_token ?? ((tenant as any).infinitepay_handle && (tenant as any).infinitepay_enabled));
 
   
   const [name, setName] = useState(() => {
@@ -725,11 +726,14 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       const needsFragmentation = supplierIdsInCart.length > 1;
       const autoSupplierId = supplierIdsInCart[0] || null;
 
+      const infinitePayTap = isInfinitePay && !payOnline && paymentMethod === 'credit_card';
       const initialStatus = simulateApproved
         ? 'received'
-        : payOnline
-          ? PENDING_PAYMENT_STATUS
-          : ((tenant as any).dropshipping_review_mode ? 'pending_review' : 'received');
+        : infinitePayTap
+          ? 'payment_due_delivery'
+          : payOnline
+            ? PENDING_PAYMENT_STATUS
+            : ((tenant as any).dropshipping_review_mode ? 'pending_review' : 'received');
 
       const orderResult = await addOrderMutation.mutateAsync({
         order: {
@@ -738,7 +742,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           platform_fee: platformFee,
           delivery_type: deliveryType,
           delivery_fee: deliveryType === 'delivery' ? (effectiveDeliveryFee + shippingFee) : 0,
-          payment_method: payOnline ? 'mercadopago' : paymentMethod,
+          payment_method: infinitePayTap ? 'infinitepay_tap' : payOnline ? (isInfinitePay ? 'infinitepay_pix' : 'mercadopago') : paymentMethod,
           customer_name: name,
           customer_phone: phone.replace(/\D/g, ''),
           customer_email: email.trim() || null,
@@ -756,7 +760,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           metadata: { 
             needs_fragmentation: needsFragmentation,
             supplier_ids: supplierIdsInCart,
-            fragmentation_map: Object.fromEntries(fragments.entries())
+            fragmentation_map: Object.fromEntries(fragments.entries()),
+            payment_provider: isInfinitePay ? 'infinitepay' : ((tenant as any).payment_provider || 'mercadopago'),
+            payment_flow: infinitePayTap ? 'delivery_tap' : (payOnline ? 'online' : 'delivery')
           }
         } as any,
         items: items.map(i => ({
