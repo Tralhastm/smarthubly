@@ -510,6 +510,11 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
   const [whatsappShowPix, setWhatsappShowPix] = useState(false);
   const [pixKey, setPixKey] = useState('');
   const [pixKeyType, setPixKeyType] = useState('');
+  const [paymentProvider, setPaymentProvider] = useState<'mercadopago' | 'pagbank' | 'infinitepay'>('mercadopago');
+  const [infinitePayHandle, setInfinitePayHandle] = useState('');
+  const [infinitePayDocument, setInfinitePayDocument] = useState('');
+  const [infinitePayEnabled, setInfinitePayEnabled] = useState(false);
+  const [infinitePayFees, setInfinitePayFees] = useState<Record<string, { percent: string; fixed: string }>>(() => Object.fromEntries(Array.from({ length: 12 }, (_, i) => [String(i + 1), { percent: '', fixed: '' }])));
   const [llmEnabled, setLlmEnabled] = useState(false);
   const [llmKey, setLlmKey] = useState('');
   const [llmSecret, setLlmSecret] = useState('');
@@ -531,7 +536,7 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    supabase.from('tenants').select('splash_bg_color, brand_primary_color, brand_bg_color, is_dropshipping, auto_dropshipping_enabled, dropshipping_review_mode, store_mode, pickup_enabled, pix_key, pix_key_type, lalamove_enabled, lalamove_api_key, lalamove_api_secret, lalamove_market, lalamove_sandbox, uber_direct_enabled, uber_direct_customer_id, uber_direct_client_id, uber_direct_client_secret, uber_direct_sandbox, catalog_layout, product_splash_enabled, whatsapp_show_pix, dropshipping_submode, whatsapp_consultora_phone, whatsapp_default_address_source, whatsapp_store_address, whatsapp_store_cep, show_description, show_title, description').eq('id', tenantId).single().then(({ data }) => {
+    supabase.from('tenants').select('splash_bg_color, brand_primary_color, brand_bg_color, is_dropshipping, auto_dropshipping_enabled, dropshipping_review_mode, store_mode, pickup_enabled, pix_key, pix_key_type, lalamove_enabled, lalamove_api_key, lalamove_api_secret, lalamove_market, lalamove_sandbox, uber_direct_enabled, uber_direct_customer_id, uber_direct_client_id, uber_direct_client_secret, uber_direct_sandbox, catalog_layout, product_splash_enabled, whatsapp_show_pix, dropshipping_submode, whatsapp_consultora_phone, whatsapp_default_address_source, whatsapp_store_address, whatsapp_store_cep, show_description, show_title, description, payment_provider, infinitepay_handle, infinitepay_document, infinitepay_enabled, infinitepay_installment_fees').eq('id', tenantId).single().then(({ data }) => {
       if (data) {
         setSplashColor((data as any).splash_bg_color || '#0F172A');
         setPrimaryColor((data as any).brand_primary_color || '#3B82F6');
@@ -544,6 +549,11 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
         setWhatsappShowPix((data as any).whatsapp_show_pix ?? false);
         setPixKey((data as any).pix_key || '');
         setPixKeyType((data as any).pix_key_type || '');
+        setPaymentProvider(((data as any).payment_provider as any) || 'mercadopago');
+        setInfinitePayHandle((data as any).infinitepay_handle || '');
+        setInfinitePayDocument((data as any).infinitepay_document || '');
+        setInfinitePayEnabled((data as any).infinitepay_enabled ?? false);
+        setInfinitePayFees((prev) => ({ ...prev, ...Object.fromEntries(Object.entries((data as any).infinitepay_installment_fees || {}).map(([k, v]: any) => [k, { percent: String(v?.percent ?? ''), fixed: String(v?.fixed ?? '') }])) }));
         setLlmEnabled((data as any).lalamove_enabled ?? false);
         setLlmKey((data as any).lalamove_api_key || '');
         setLlmSecret((data as any).lalamove_api_secret || '');
@@ -583,6 +593,11 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
       pix_key: pixKey.trim(),
       whatsapp_show_pix: whatsappShowPix,
       pix_key_type: pixKeyType,
+      payment_provider: paymentProvider,
+      infinitepay_handle: infinitePayHandle.trim() || null,
+      infinitepay_document: infinitePayDocument.replace(/\D/g, '') || null,
+      infinitepay_enabled: infinitePayEnabled,
+      infinitepay_installment_fees: Object.fromEntries(Object.entries(infinitePayFees).map(([k, v]) => [k, { percent: Number(v.percent.replace(',', '.')) || 0, fixed: Number(v.fixed.replace(',', '.')) || 0 }])) ,
       lalamove_enabled: llmEnabled,
       lalamove_api_key: llmKey.trim(),
       lalamove_api_secret: llmSecret.trim(),
@@ -721,6 +736,20 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
             className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground disabled:opacity-50 resize-y" />
           <p className="text-[10px] text-muted-foreground text-right mt-1">{description.length}/300</p>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <h3 className="font-heading text-sm text-foreground flex items-center gap-2">💳 Provedor de pagamento</h3>
+        <select value={paymentProvider} onChange={e => setPaymentProvider(e.target.value as any)} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground">
+          <option value="mercadopago">Mercado Pago</option><option value="pagbank">PagBank</option><option value="infinitepay">InfinitePay</option>
+        </select>
+        {paymentProvider === 'infinitepay' && <>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={infinitePayEnabled} onChange={e => setInfinitePayEnabled(e.target.checked)} /> Ativar InfinitePay nesta loja</label>
+          <input value={infinitePayHandle} onChange={e => setInfinitePayHandle(e.target.value)} placeholder="Handle InfinitePay" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+          <input value={infinitePayDocument} onChange={e => setInfinitePayDocument(e.target.value)} placeholder="CPF/CNPJ do recebedor" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+          <p className="text-xs text-muted-foreground">Cartão via InfinitePay Tap fica para pagamento na entrega. Pix online exige confirmação automática.</p>
+          <div className="grid grid-cols-3 gap-2">{Array.from({ length: 12 }, (_, i) => { const k = String(i + 1); const row = infinitePayFees[k] || { percent: '', fixed: '' }; return <div key={k} className="rounded border border-border p-2"><b className="text-xs">{k}x</b><input value={row.percent} onChange={e => setInfinitePayFees({ ...infinitePayFees, [k]: { ...row, percent: e.target.value } })} placeholder="%" className="mt-1 w-full rounded border bg-secondary px-1 py-1 text-xs" /><input value={row.fixed} onChange={e => setInfinitePayFees({ ...infinitePayFees, [k]: { ...row, fixed: e.target.value } })} placeholder="R$ fixo" className="mt-1 w-full rounded border bg-secondary px-1 py-1 text-xs" /></div>; })}</div>
+        </>}
       </div>
 
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
