@@ -1487,6 +1487,8 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
           category: form.category,
           network: (form as any).affiliate_network || null,
           currentDescription: form.description,
+          rules: DEFAULT_BULK_DESCRIPTION_RULES,
+          researchWeb: true,
         });
       if (error) throw error;
       if (data?.error) { toast.error(data.error); return; }

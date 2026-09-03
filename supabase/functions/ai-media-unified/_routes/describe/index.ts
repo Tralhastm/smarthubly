@@ -12,15 +12,15 @@ const corsHeaders = {
 interface ApiKeyEntry { id: string; api_key: string; }
 interface AiWorker { id: string; base_url: string; is_exhausted: boolean; }
 
-const MAX_DESCRIPTION_CHARS = 2600;
+const MAX_DESCRIPTION_CHARS = 3600;
+const GUARANTEE_TEXT = "Garantia de 30 dias contra defeitos de funcionamento. Não cobre quedas, quebras, mau uso, danos físicos, contato inadequado com líquidos ou alterações no aparelho.";
 
 const SYSTEM_PROMPT =
-  "Você é um redator técnico de e-commerce. Escreva uma descrição completa e natural em português brasileiro, no estilo de uma ficha comercial profissional de smartphone. " +
-  "Quando solicitado, pesquise na internet real antes de escrever e use somente especificações confirmadas em fontes confiáveis; nunca invente memória, câmera, tela, bateria, processador ou conectividade. " +
-  "Organize exatamente assim: dois parágrafos comerciais, separados por uma linha em branco; depois uma linha em branco e uma especificação técnica por linha, sem marcadores, bullets, hífens ou título de seção; depois uma linha em branco e o parágrafo de garantia. " +
-  "Inclua os principais dados confirmados, como tela, resolução, armazenamento, RAM, processador, câmeras, vídeo, bateria, conectividade, SIM, USB, Bluetooth, sistema e áudio, quando existirem. " +
-  "Não inclua links, fontes, preço, custo, margem, nota fiscal, emojis, markdown ou promessas absolutas. Respeite as regras personalizadas do lojista. " +
-  "Preserve obrigatoriamente as quebras de linha e as linhas em branco do formato final. Retorne somente o texto final, sem reticências, sem cortar frases e sem escrever informações que não foram confirmadas.";
+  "Você escreve descrições de produtos para uma loja profissional. Use português brasileiro simples, natural e objetivo, sem exageros, metáforas, frases de propaganda vazias ou palavras como centro de performance, vida inteira de arquivos e nova era. " +
+  "Quando solicitado, pesquise na internet real e use somente especificações confirmadas; nunca invente memória, câmera, tela, bateria, processador ou conectividade. " +
+  "Siga sem exceção este formato: primeiro parágrafo com 2 ou 3 frases sobre o produto e o benefício principal; uma linha em branco; segundo parágrafo com 2 ou 3 frases sobre recursos e uso; uma linha em branco; especificações técnicas, uma por linha, sem bullets, hífens, numeração ou título; uma linha em branco; garantia. " +
+  "Use no máximo 15 especificações realmente confirmadas e não repita informações. Não inclua links, fontes, preço, custo, margem, nota fiscal, emojis, markdown ou promessas absolutas. " +
+  "Preserve as quebras de linha. Retorne somente o texto final, sem reticências, sem cortar frases e sem escrever informações não confirmadas.";
 
 function respond(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -53,30 +53,30 @@ async function getAllWorkers(supabase: any) {
 }
 
 function clean(s: string): string {
-  let d = (s || "").trim().replace(/^["'`]+|["'`]+$/g, "").trim();
-  const wasTruncated = /\.{2,}\s*$/.test(d);
+  let d = (s || "").trim().replace(/^```(?:text|markdown)?\s*|\s*```$/gi, "").trim();
+  const hasEllipsis = /\.{2,}/.test(d);
   d = d
     .replace(/\r\n?/g, "\n")
     .split("\n")
-    .map(line => line.replace(/[ \t]+/g, " ").trim())
+    .map(line => line.replace(/^[ \t]*[-*•]\s+/, "").replace(/^[ \t]*\d+[.)]\s+/, "").replace(/[ \t]+/g, " ").trim())
     .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
     .replace(/^Especificações\s*\n/i, "")
-    .replace(/\.{2,}\s*$/g, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  // Nunca salva a última frase quando o provedor terminou com reticências.
-  if (wasTruncated) {
-    const lastCompleteSentence = d.lastIndexOf(".");
-    d = lastCompleteSentence >= 0 ? d.slice(0, lastCompleteSentence + 1).trim() : "";
-  }
+  if (hasEllipsis || !d) return "";
+  const guaranteeStart = /Garantia de 30 dias contra defeitos de funcionamento\./i;
+  const guaranteeIndex = d.search(guaranteeStart);
+  d = guaranteeIndex >= 0 ? `${d.slice(0, guaranteeIndex).trim()}\n\n${GUARANTEE_TEXT}` : `${d}\n\n${GUARANTEE_TEXT}`;
 
-  // Nunca salva uma resposta que terminou no meio da última frase.
   if (d.length > MAX_DESCRIPTION_CHARS) {
-    const complete = d.slice(0, MAX_DESCRIPTION_CHARS + 1).match(/^.*[.!?](?=\s|$)/s);
-    d = complete?.[0]?.trim() || d.slice(0, MAX_DESCRIPTION_CHARS).trim();
+    const guaranteePos = d.lastIndexOf(`\n\n${GUARANTEE_TEXT}`);
+    const body = guaranteePos >= 0 ? d.slice(0, guaranteePos).trim() : d;
+    const maxBodyChars = MAX_DESCRIPTION_CHARS - GUARANTEE_TEXT.length - 2;
+    const complete = body.slice(0, maxBodyChars + 1).match(/^.*[.!?](?=\s|$)/s);
+    if (!complete?.[0]) return "";
+    d = `${complete[0].trim()}\n\n${GUARANTEE_TEXT}`;
   }
-  if (d && !/[.!?]$/.test(d)) d += ".";
   return d;
 }
 
@@ -97,7 +97,7 @@ async function tryGoogle(prompt: string, keys: ApiKeyEntry[], supabase: any, res
               { role: "user", parts: [{ text: prompt }] },
             ],
             ...(researchWeb ? { tools: [{ google_search: {} }] } : {}),
-            generationConfig: { temperature: 0.35, maxOutputTokens: 1400 },
+            generationConfig: { temperature: 0.2, maxOutputTokens: 1800 },
           }),
         }
       );
@@ -125,8 +125,8 @@ async function tryLovable(prompt: string): Promise<string | null> {
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }],
-        temperature: 0.35,
-        max_tokens: 1400,
+        temperature: 0.2,
+        max_tokens: 1800,
       }),
     });
     if (!r.ok) return null;
@@ -146,8 +146,8 @@ async function tryOpenRouter(prompt: string): Promise<string | null> {
       body: JSON.stringify({
         model: "google/gemini-2.0-flash-exp:free",
         messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }],
-        temperature: 0.35,
-        max_tokens: 1400,
+        temperature: 0.2,
+        max_tokens: 1800,
       }),
     });
     if (!r.ok) return null;
@@ -228,7 +228,7 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
       currentDescription ? `Descrição atual (refazer melhor): ${currentDescription}` : "",
       researchWeb ? `Pesquise no Google informações atuais e confiáveis sobre "${name}" antes de escrever. Use apenas especificações confirmadas; não inclua links ou fontes no texto.` : "",
       rules ? `Regras personalizadas do lojista (obrigatórias): ${String(rules).slice(0, 2200)}` : "",
-      `Pesquise na internet real antes de escrever. Entregue exatamente dois parágrafos comerciais separados por uma linha em branco; depois, uma linha em branco e uma especificação confirmada por linha, sem título ou marcadores; depois, uma linha em branco e a garantia completa conforme as regras. O texto pode ter até ${MAX_DESCRIPTION_CHARS} caracteres. Não use reticências e não termine no meio de uma frase.`,
+      `Pesquise na internet real antes de escrever. Entregue exatamente dois parágrafos curtos, naturais e específicos, separados por uma linha em branco; depois uma linha em branco e no máximo 15 especificações confirmadas, uma por linha, sem título ou marcadores; depois uma linha em branco e exatamente este aviso: ${GUARANTEE_TEXT} O texto pode ter até ${MAX_DESCRIPTION_CHARS} caracteres. Não use reticências e não termine no meio de uma frase.`,
     ].filter(Boolean).join("\n");
 
     const supabase = getSupabaseAdmin();
