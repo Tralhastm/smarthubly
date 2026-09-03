@@ -753,7 +753,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           platform_fee: platformFee,
           delivery_type: deliveryType,
           delivery_fee: deliveryType === 'delivery' ? (effectiveDeliveryFee + shippingFee) : 0,
-          payment_method: infinitePayTap ? 'infinitepay_tap' : payOnline ? (isInfinitePay ? 'infinitepay_pix' : 'mercadopago') : paymentMethod,
+          payment_method: infinitePayTap ? 'infinitepay_tap' : payOnline ? (isInfinitePay ? 'infinitepay_pix' : isAsaasActive ? 'asaas_online' : 'mercadopago') : paymentMethod,
           customer_name: name,
           customer_phone: phone.replace(/\D/g, ''),
           customer_email: email.trim() || null,
@@ -773,7 +773,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             needs_fragmentation: needsFragmentation,
             supplier_ids: supplierIdsInCart,
             fragmentation_map: Object.fromEntries(fragments.entries()),
-            payment_provider: isInfinitePay ? 'infinitepay' : ((tenant as any).payment_provider || 'mercadopago'),
+            payment_provider: isInfinitePay ? 'infinitepay' : isAsaasActive ? 'asaas' : ((tenant as any).payment_provider || 'mercadopago'),
             payment_flow: infinitePayTap ? 'delivery_tap' : (payOnline ? 'online' : 'delivery')
           }
         } as any,
@@ -865,7 +865,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           to_status: initialStatus,
           actor: 'customer',
           actor_id: name,
-          description: `Pedido criado por ${name} via ${payOnline ? 'Mercado Pago' : viaWhatsApp ? 'WhatsApp' : 'site'}${appliedCoupon ? ` (cupom ${appliedCoupon.code})` : ''}`,
+          description: `Pedido criado por ${name} via ${payOnline ? (isAsaasActive ? 'Asaas' : 'Mercado Pago') : viaWhatsApp ? 'WhatsApp' : 'site'}${appliedCoupon ? ` (cupom ${appliedCoupon.code})` : ''}`,
           metadata: { items_count: items.length, total: finalTotal, coupon: appliedCoupon?.code, discount: discountAmount },
         });
         if (autoSupplierId) {
@@ -1145,7 +1145,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     {hasOnlinePayment && (
                       <div className="rounded-lg border-2 border-primary/40 bg-primary/10 p-3 text-xs text-foreground mb-3">
                         ✅ <strong>Pagamento online disponível.</strong><br/>
-                        Para pagar agora com Pix instantâneo ou Cartão (aprovação automática), use o <strong>botão verde "Pagar agora (Mercado Pago)"</strong> mais abaixo. Você não precisa preencher nada aqui.
+                        Para pagar agora com Pix instantâneo ou Cartão (aprovação automática), use o <strong>botão verde "Pagar agora"</strong> mais abaixo. Você não precisa preencher nada aqui.
                       </div>
                     )}
                     <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2 mb-2 text-[11px] text-yellow-700 dark:text-yellow-400">
@@ -1169,7 +1169,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     </div>
                     {paymentMethod === 'pix' && waNumber ? (
                       <p className="text-xs text-muted-foreground mt-1">
-                        💚 Pix manual (chave da loja). Após pagar, envie o comprovante pelo WhatsApp da loja para confirmarmos. Para Pix com aprovação automática, use <strong>Pagar agora (Mercado Pago)</strong>.
+                        💚 Pix manual (chave da loja). Após pagar, envie o comprovante pelo WhatsApp da loja para confirmarmos. Para Pix com aprovação automática ou cartão, use <strong>Pagar agora</strong>.
                       </p>
                     ) : (
                       <p className="text-xs text-muted-foreground mt-1">
@@ -1248,7 +1248,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
                         className="w-full py-4 rounded-lg font-bold text-base text-primary-foreground gradient-primary hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ring-2 ring-primary/40">
                         {creatingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
-                        {creatingPayment ? 'Gerando pagamento...' : `💳 Pagar R$${finalTotal.toFixed(2)} agora (Mercado Pago)`}
+                        {creatingPayment ? 'Gerando pagamento...' : `💳 Pagar R$${finalTotal.toFixed(2)} agora (${isAsaasActive ? 'Asaas' : 'Mercado Pago'})`}
                       </button>
                       {!!(tenant as any).demo_payment_enabled && (
                         <button onClick={() => submitOrder(false, true, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
