@@ -12,14 +12,15 @@ const corsHeaders = {
 interface ApiKeyEntry { id: string; api_key: string; }
 interface AiWorker { id: string; base_url: string; is_exhausted: boolean; }
 
-const MAX_DESCRIPTION_CHARS = 520;
+const MAX_DESCRIPTION_CHARS = 2600;
 
 const SYSTEM_PROMPT =
-  "Você escreve descrições comerciais específicas para produtos de e-commerce em português brasileiro. " +
-  "Escreva exatamente 2 ou 3 frases curtas, com no máximo 520 caracteres no total, começando por um benefício real do produto. " +
-  "Use somente especificações confirmadas na pesquisa ou presentes no nome; nunca invente memória, câmera, tela, bateria, processador ou conectividade. " +
-  "Não mencione nota fiscal, preço, custo ou margem. Não use emojis, markdown, listas, promessas absolutas ou reticências. " +
-  "Termine sempre uma frase completa, com ponto final, e retorne somente o texto final.";
+  "Você é um redator técnico de e-commerce. Escreva uma descrição completa e natural em português brasileiro, no estilo de uma ficha comercial profissional de smartphone. " +
+  "Quando solicitado, pesquise na internet real antes de escrever e use somente especificações confirmadas em fontes confiáveis; nunca invente memória, câmera, tela, bateria, processador ou conectividade. " +
+  "Organize exatamente assim: 2 ou 3 parágrafos comerciais separados por linha em branco; depois uma linha com 'Especificações'; depois uma especificação por linha, sem marcadores; depois uma linha em branco e a garantia. " +
+  "Inclua os principais dados confirmados, como tela, resolução, armazenamento, RAM, processador, câmeras, vídeo, bateria, conectividade, SIM, USB, Bluetooth, sistema e áudio, quando existirem. " +
+  "Não inclua links, fontes, preço, custo, margem, nota fiscal, emojis, markdown ou promessas absolutas. Respeite as regras personalizadas do lojista. " +
+  "Retorne somente o texto final, sem reticências, sem cortar frases e sem escrever informações que não foram confirmadas.";
 
 function respond(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -53,7 +54,14 @@ async function getAllWorkers(supabase: any) {
 
 function clean(s: string): string {
   let d = (s || "").trim().replace(/^["'`]+|["'`]+$/g, "").trim();
+  const wasTruncated = /\.{2,}\s*$/.test(d);
   d = d.replace(/\s+/g, " ").replace(/\.{2,}\s*$/g, "").trim();
+
+  // Nunca salva a última frase quando o provedor terminou com reticências.
+  if (wasTruncated) {
+    const lastCompleteSentence = d.lastIndexOf(".");
+    d = lastCompleteSentence >= 0 ? d.slice(0, lastCompleteSentence + 1).trim() : "";
+  }
 
   // Nunca salva uma resposta que terminou no meio da última frase.
   if (d.length > MAX_DESCRIPTION_CHARS) {
@@ -81,7 +89,7 @@ async function tryGoogle(prompt: string, keys: ApiKeyEntry[], supabase: any, res
               { role: "user", parts: [{ text: prompt }] },
             ],
             ...(researchWeb ? { tools: [{ google_search: {} }] } : {}),
-            generationConfig: { temperature: 0.35, maxOutputTokens: 700 },
+            generationConfig: { temperature: 0.35, maxOutputTokens: 1400 },
           }),
         }
       );
@@ -110,7 +118,7 @@ async function tryLovable(prompt: string): Promise<string | null> {
         model: "google/gemini-2.5-flash",
         messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }],
         temperature: 0.35,
-        max_tokens: 700,
+        max_tokens: 1400,
       }),
     });
     if (!r.ok) return null;
@@ -131,7 +139,7 @@ async function tryOpenRouter(prompt: string): Promise<string | null> {
         model: "google/gemini-2.0-flash-exp:free",
         messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }],
         temperature: 0.35,
-        max_tokens: 700,
+        max_tokens: 1400,
       }),
     });
     if (!r.ok) return null;
@@ -211,8 +219,8 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
       network ? `Loja: ${network}` : "",
       currentDescription ? `Descrição atual (refazer melhor): ${currentDescription}` : "",
       researchWeb ? `Pesquise no Google informações atuais e confiáveis sobre "${name}" antes de escrever. Use apenas especificações confirmadas; não inclua links ou fontes no texto.` : "",
-      rules ? `Regras personalizadas do lojista (obrigatórias, sem ultrapassar o limite): ${String(rules).slice(0, 1800)}` : "",
-      `Escreva somente 2 ou 3 frases completas, com no máximo ${MAX_DESCRIPTION_CHARS} caracteres. Não use reticências e não termine no meio de uma frase.`,
+      rules ? `Regras personalizadas do lojista (obrigatórias): ${String(rules).slice(0, 2200)}` : "",
+      `Pesquise na internet real antes de escrever. Entregue 2 ou 3 parágrafos comerciais, seguidos exatamente de:\nEspecificações\n(uma especificação confirmada por linha)\n\n(garantia completa conforme as regras). O texto pode ter até ${MAX_DESCRIPTION_CHARS} caracteres. Não use reticências e não termine no meio de uma frase.`,
     ].filter(Boolean).join("\n");
 
     const supabase = getSupabaseAdmin();
