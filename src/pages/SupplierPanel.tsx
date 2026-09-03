@@ -8,7 +8,6 @@ import { printOrder } from '@/lib/order-print';
 import { isPrinterPaired } from '@/lib/printer-bluetooth';
 import { isSimulationMode } from '@/lib/printer-simulator';
 import SupplierChatPanel from '@/components/tenant/SupplierChatPanel';
-import ProductColorPricing from '@/components/tenant/ProductColorPricing';
 import { useSupplierChats } from '@/hooks/useSupplierChat';
 import { playShortBeep, unlockAudio } from '@/lib/order-alert-sound';
 import SupplierDeliveriesPanel from '@/components/tenant/SupplierDeliveriesPanel';
@@ -33,16 +32,10 @@ type OrderWithItems = {
   order_items: { id: string; product_name: string; product_price: number; quantity: number }[];
 };
 
-type ProductVariant = {
-  id: string; product_id: string; tenant_id: string; name: string; price_delta: number;
-  cost_price: number | null; suggested_price: number | null; needs_price_review: boolean;
-  price_source: string | null; in_stock: boolean; sort_order: number;
-};
-
 type Product = {
   id: string; name: string; price: number; original_price?: number | null; in_stock: boolean; category: string; supplier_id: string | null;
   subcategory?: string | null; subcategory_ids?: string[] | null;
-  stock_quantity: number | null; variants?: ProductVariant[];
+  stock_quantity: number | null;
 };
 
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
@@ -188,21 +181,10 @@ const SupplierPanel = () => {
 
   const fetchProducts = useCallback(async () => {
     if (!supplier) return;
-    // Produtos e variantes são carregados juntos para que o card reflita a última lista diária.
-    const { data } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity')
+    // Only fetch products assigned to this supplier
+    const { data } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id')
       .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
-    const baseProducts = (data as Product[]) || [];
-    const productIds = baseProducts.map(p => p.id);
-    if (productIds.length === 0) { setProducts([]); return; }
-    const { data: variantRows } = await (supabase as any).from('product_variants').select('*')
-      .in('product_id', productIds).order('sort_order');
-    const variantsByProduct = new Map<string, ProductVariant[]>();
-    ((variantRows as ProductVariant[]) || []).forEach(v => {
-      const list = variantsByProduct.get(v.product_id) || [];
-      list.push(v);
-      variantsByProduct.set(v.product_id, list);
-    });
-    setProducts(baseProducts.map(p => ({ ...p, variants: variantsByProduct.get(p.id) || [] })));
+    setProducts((data as Product[]) || []);
   }, [supplier]);
 
   const fetchOrdersRef = useRef<() => Promise<void>>(async () => {});
@@ -683,49 +665,22 @@ const SupplierPanel = () => {
         }
         updated.push(entry.name);
         if (entry.colors.length > 0) {
-          const { data: existingVariants, error: variantsReadError } = await (supabase as any).from('product_variants').select('*').eq('product_id', product.id).limit(100);
+          const { data: existingVariants, error: variantsReadError } = await (supabase as any).from('product_variants').select('id, name').eq('product_id', product.id).limit(100);
           if (variantsReadError) {
             warnings.push(`${entry.name} (cores não atualizadas: ${variantsReadError.message})`);
           } else {
-            const incomingNames = new Set(entry.colors.map(color => normalizeProductName(color)));
-            const existingByName = new Map<string, any>();
-            ((existingVariants || []) as any[]).forEach(variant => {
-              existingByName.set(normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, '')), variant);
-            });
-
-            // A lista diária é a fonte de verdade: atualiza, cria e remove cores do modelo.
-            for (const [sortOrder, color] of entry.colors.entries()) {
-              const key = normalizeProductName(color);
-              const previous = existingByName.get(key);
-              const variantPatch: Record<string, any> = {
-                name: color,
-                price_delta: entry.resale != null ? entry.resale - Number(product.price || 0) : Number(previous?.price_delta || 0),
-                cost_price: entry.cost ?? previous?.cost_price ?? patch.original_price ?? null,
-                suggested_price: entry.resale ?? previous?.suggested_price ?? Number(product.price || 0),
-                needs_price_review: false,
-                price_source: 'lista_diaria',
-                in_stock: true,
-                sort_order: sortOrder,
-              };
-              const result = previous
-                ? await (supabase as any).from('product_variants').update(variantPatch).eq('id', previous.id)
-                : await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, ...variantPatch });
-              if (result.error) warnings.push(`${entry.name} (cor ${color} não atualizada: ${result.error.message})`);
-            }
-
-            // Remove do catálogo as cores que não aparecem mais na lista do dia.
-            for (const variant of (existingVariants || []) as any[]) {
-              const key = normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, ''));
-              if (!incomingNames.has(key)) {
-                const { error: removeError } = await (supabase as any).from('product_variants').delete().eq('id', variant.id);
-                if (removeError) warnings.push(`${entry.name} (cor antiga ${variant.name} não removida: ${removeError.message})`);
-              }
+            const existingNames = new Set((existingVariants || []).map((variant: any) => normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, ''))));
+            for (const color of entry.colors) {
+              if (existingNames.has(normalizeProductName(color))) continue;
+              const { error: variantError } = await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, name: color, price_delta: 0, in_stock: true });
+              if (variantError) warnings.push(`${entry.name} (cor ${color} não atualizada: ${variantError.message})`);
+              else existingNames.add(normalizeProductName(color));
             }
           }
         }
         Object.assign(product, patch);
       }
-      await fetchProducts();
+      setProducts([...products]);
       setImportResult({ updated, notFound, invalid, warnings });
       if (updated.length) toast.success(`${updated.length} produto(s) atualizado(s)`);
       if (!updated.length) toast.error('Nenhum produto foi atualizado');
@@ -1013,24 +968,13 @@ const SupplierPanel = () => {
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <span className="text-sm font-medium text-foreground">{p.name}</span>
-                    {(() => {
-                      const resale = Number(p.price || 0);
-                      const cost = Number(p.original_price || 0);
-                      const margin = resale - cost;
-                      const marginPct = cost > 0 ? (margin / cost) * 100 : 0;
-                      return (
-                        <span className="text-xs text-muted-foreground ml-2">
-                          {p.category} · R${resale.toFixed(2)}{cost > 0 && <> (custo: R${cost.toFixed(2)}) Margem: {marginPct.toFixed(0)}% (R${margin.toFixed(2)})</>}
-                        </span>
-                      );
-                    })()}
+                    <span className="text-xs text-muted-foreground ml-2">{p.category} · R${p.price.toFixed(2)}</span>
                   </div>
                   <button onClick={() => toggleStock(p)} className={`shrink-0 flex items-center gap-1 text-xs rounded-full px-3 py-1 font-medium ${p.in_stock ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                     {p.in_stock ? <PackageCheck className="h-3 w-3" /> : <PackageX className="h-3 w-3" />}
                     {p.in_stock ? 'Em estoque' : 'Sem estoque'}
                   </button>
                 </div>
-                <ProductColorPricing product={p} variants={p.variants || []} compact />
                 {p.stock_quantity != null ? (
                   <div className="flex items-center gap-2 text-sm flex-wrap">
                     <span className="text-muted-foreground">Qtd:</span>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct, type Product } from '@/hooks/useProducts';
 import { useProductVariants } from '@/hooks/useProductExtras';
 import { useSuppliers } from '@/hooks/useSuppliers';
@@ -15,11 +16,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
-type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number };
+type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
 type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; variants?: ParsedVariant[]; needs_price_review?: boolean };
 
 const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenantId: string; isDropshipping?: boolean; isAffiliate?: boolean }) => {
   const { data: products = [], isLoading, refetch } = useProducts(tenantId);
+  const queryClient = useQueryClient();
   const { data: suppliers = [] } = useSuppliers(tenantId);
   const { data: feeRequests = [] } = useFeeRequests(tenantId);
   const addMutation = useAddProduct();
@@ -464,25 +466,58 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   };
 
   const saveImportedVariants = async (productId: string, product: ParsedProduct, baseSalePrice: number, baseCost: number, isCost: boolean, shipping: number, margin: number) => {
-    for (const variant of product.variants || []) {
+    // Se a lista trouxe cores, ela passa a ser a fonte de verdade para este modelo.
+    // Quando não trouxe variantes, preservamos as existentes para não apagar dados manualmente cadastrados.
+    if (!Array.isArray(product.variants) || product.variants.length === 0) return;
+
+    const { data: existingVariants, error: variantsError } = await supabase.from('product_variants' as any)
+      .select('*').eq('product_id', productId).limit(100);
+    if (variantsError) throw variantsError;
+
+    const existingByName = new Map<string, any>();
+    ((existingVariants || []) as any[]).forEach(existing => {
+      existingByName.set(existing.name.trim().toLocaleLowerCase('pt-BR'), existing);
+    });
+    const incomingNames = new Set<string>();
+
+    for (const [sortOrder, variant] of product.variants.entries()) {
+      const name = variant.name?.trim();
+      if (!name) continue;
+      const key = name.toLocaleLowerCase('pt-BR');
+      incomingNames.add(key);
+
       const variantCost = Number(variant.cost_price || (isCost ? variant.price : 0)) || 0;
-      const variantSale = isCost ? (variantCost + shipping) * (1 + margin / 100) : Number(variant.resale_price || variant.price) || 0;
-      if (!variant.name || variantSale <= 0) continue;
-      const { data: existingVariant } = await supabase.from('product_variants' as any)
-        .select('id').eq('product_id', productId).ilike('name', variant.name.trim()).maybeSingle();
+      const explicitSale = Number(variant.resale_price || (!isCost ? variant.price : 0)) || 0;
+      const calculatedSale = variantCost > 0 ? (variantCost + shipping) * (1 + margin / 100) : 0;
+      const variantSale = explicitSale > 0 ? explicitSale : calculatedSale > 0 ? calculatedSale : baseSalePrice;
+      if (variantSale <= 0) continue;
+
       const payload = {
         product_id: productId,
         tenant_id: tenantId,
-        name: variant.name.trim(),
+        name,
         price_delta: variantSale - baseSalePrice,
-        cost_price: variantCost || null,
+        cost_price: variantCost > 0 ? variantCost : null,
         suggested_price: variantSale,
         needs_price_review: variantCost > 0 && baseCost > 0 && variantCost > baseCost,
-        price_source: variantCost > 0 ? 'catálogo do fornecedor' : null,
-        in_stock: true,
+        price_source: variantCost > 0 ? 'lista_diaria' : 'lista_diaria_sem_custo',
+        in_stock: variant.available !== false,
+        sort_order: sortOrder,
       };
-      if (existingVariant?.id) await supabase.from('product_variants' as any).update(payload).eq('id', existingVariant.id);
-      else await supabase.from('product_variants' as any).insert(payload);
+      const existing = existingByName.get(key);
+      const result = existing
+        ? await supabase.from('product_variants' as any).update(payload).eq('id', existing.id)
+        : await supabase.from('product_variants' as any).insert(payload);
+      if (result.error) throw result.error;
+    }
+
+    // Retira automaticamente cores que deixaram de existir na lista diária.
+    for (const existing of (existingVariants || []) as any[]) {
+      const key = existing.name.trim().toLocaleLowerCase('pt-BR');
+      if (!incomingNames.has(key)) {
+        const { error } = await supabase.from('product_variants' as any).delete().eq('id', existing.id);
+        if (error) throw error;
+      }
     }
   };
 
@@ -593,6 +628,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       }
       setImportProgress(i + 1);
     }
+
+    await queryClient.invalidateQueries({ queryKey: ['product-variants'] });
+    await refetch();
 
     const msg = importCancelled
       ? `Importação interrompida — ${insertedIds.length} produtos já importados.`
@@ -1278,13 +1316,11 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
   const supplierName = suppliers.find(s => s.id === product.supplier_id)?.name;
   const pendingReq = feeRequests.find(r => r.status === 'pending');
   const { data: variants = [] } = useProductVariants(product.id);
-  const variantPrices = variants
-    .map(variant => ({
-      ...variant,
-      salePrice: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta))) || 0,
-      costPrice: Number(variant.cost_price) || 0,
-    }))
-    .filter(variant => variant.costPrice > 0);
+  const variantPrices = variants.map(variant => ({
+    ...variant,
+    salePrice: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta))) || 0,
+    costPrice: Number(variant.cost_price ?? (product as any).original_price) || 0,
+  }));
 
   // Preços de outros fornecedores para este produto
   const [otherPrices, setOtherPrices] = useState<{ supplier_id: string; supplier_name: string; unit_price: number; price_types: string[]; description?: string; variations?: any }[]>([]);
@@ -1614,7 +1650,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
               {variantPrices.map(variant => (
                 <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
                   <span className="font-medium text-foreground">{variant.name}</span>
-                  <span>Custo: R${variant.costPrice.toFixed(2)}</span>
+                  <span>Custo: {variant.costPrice > 0 ? `R$${variant.costPrice.toFixed(2)}` : '—'}</span>
                   <span className="text-primary">Revenda: R${variant.salePrice.toFixed(2)}</span>
                 </p>
               ))}

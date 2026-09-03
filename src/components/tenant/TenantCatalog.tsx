@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useInfiniteProducts, type Product } from '@/hooks/useProducts';
-import { type ProductVariant } from '@/hooks/useProductExtras';
 import { useCart } from '@/contexts/CartContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Search, ShoppingCart, Package, Loader2, Calendar, ChevronDown, ChevronUp, ChevronLeft } from 'lucide-react';
@@ -9,7 +8,6 @@ import ProductOptionsPicker from './ProductOptionsPicker';
 import MediaCarousel from '@/components/shared/MediaCarousel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getItemCTA } from '@/lib/niche-labels';
-import ProductColorPricing from './ProductColorPricing';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
 
@@ -21,7 +19,7 @@ const isAiGeneratedImage = (url: string) => {
 // ============================================================
 // GRID — card grande com imagem grande (padrão atual)
 // ============================================================
-const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, hasExtras, variants, onOpenPicker, onOpenDetails }: any) => {
+const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, hasExtras, onOpenPicker, onOpenDetails }: any) => {
   const isService = (product as any).item_type === 'service';
   const cta = getItemCTA(product as any, niche);
   const Icon = isService ? Calendar : ShoppingCart;
@@ -57,7 +55,6 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
             {expanded ? <>Ver menos <ChevronUp className="h-3 w-3" /></> : <>Ver mais <ChevronDown className="h-3 w-3" /></>}
           </button>
         )}
-        <ProductColorPricing product={product} variants={variants} />
         <div className="flex items-center justify-between mt-4">
           <span className="text-xl font-bold text-primary">R${product.price.toFixed(2)}</span>
           {(product as any).stock_quantity != null && (product as any).stock_quantity <= 5 && product.in_stock && (
@@ -85,7 +82,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
 // ============================================================
 // LIST — linha horizontal (estilo iFood/Anota AI), foto à esquerda
 // ============================================================
-const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtras, variants, onOpenPicker, onOpenDetails }: any) => {
+const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtras, onOpenPicker, onOpenDetails }: any) => {
   const cta = getItemCTA(product as any, niche);
   return (
     <div className="group flex gap-3 rounded-lg border border-border bg-card p-3 hover:border-primary/30 transition-colors animate-fade-in">
@@ -109,7 +106,6 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
         {product.description && (
           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{product.description}</p>
         )}
-        <ProductColorPricing product={product} variants={variants} compact />
         <div className="flex items-end justify-between mt-auto pt-2">
           <span className="text-lg font-bold text-primary">R${product.price.toFixed(2)}</span>
           <div className="flex items-center gap-1.5">
@@ -134,7 +130,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
 // ============================================================
 // COMPACT — sem foto grande, foco no nome+preço (estilo cardápio impresso)
 // ============================================================
-const CompactRow = ({ product, addToCart, niche, hasExtras, variants, onOpenPicker, onOpenDetails }: any) => {
+const CompactRow = ({ product, addToCart, niche, hasExtras, onOpenPicker, onOpenDetails }: any) => {
   const cta = getItemCTA(product as any, niche);
   return (
     <div className="group flex items-start justify-between gap-3 py-3 border-b border-border last:border-0 animate-fade-in" onClick={() => onOpenDetails && onOpenDetails(product)} style={onOpenDetails ? { cursor: 'pointer' } : undefined}>
@@ -147,7 +143,6 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, variants, onOpenPick
         {product.description && (
           <p className="text-xs text-muted-foreground line-clamp-2 pr-2">{product.description}</p>
         )}
-        <ProductColorPricing product={product} variants={variants} compact />
         <div className="flex items-center gap-2 mt-1.5">
           {!product.in_stock ? (
             <span className="text-[10px] text-destructive">Esgotado</span>
@@ -166,7 +161,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, variants, onOpenPick
 // ============================================================
 // MAGAZINE — bento grid: 1 destaque grande + cards menores
 // ============================================================
-const MagazineCard = ({ product, addToCart, niche, hasExtras, variants, onOpenPicker, onOpenDetails, large }: any) => {
+const MagazineCard = ({ product, addToCart, niche, hasExtras, onOpenPicker, onOpenDetails, large }: any) => {
   const cta = getItemCTA(product as any, niche);
   return (
     <div className={`group relative overflow-hidden rounded-xl border border-border bg-card hover:border-primary/40 transition-all animate-fade-in ${large ? 'md:col-span-2 md:row-span-2' : ''}`}>
@@ -182,7 +177,6 @@ const MagazineCard = ({ product, addToCart, niche, hasExtras, variants, onOpenPi
       <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/85 via-black/50 to-transparent">
         <span className="text-[10px] font-medium text-white/70 uppercase tracking-wider">{product.category}</span>
         <h3 className={`font-heading text-white ${large ? 'text-xl' : 'text-base'} leading-tight`}>{product.name}</h3>
-        {variants?.length > 0 && <p className="mt-1 text-[10px] text-white/80">Preço por cor: {variants.length} opção(ões)</p>}
         <div className="flex items-center justify-between mt-2">
           <span className={`font-bold text-white ${large ? 'text-2xl' : 'text-lg'}`}>R${product.price.toFixed(2)}</span>
           <button onClick={(e) => {
@@ -244,7 +238,6 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const sentinelRef = useRef<HTMLDivElement>(null);
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
   const [extrasIds, setExtrasIds] = useState<Set<string>>(new Set());
-  const [variantMap, setVariantMap] = useState<Map<string, ProductVariant[]>>(new Map());
     const [detail, setDetail] = useState<Product | null>(null);
   const allProducts = useMemo(() => data?.pages.flatMap(p => p.data) ?? [], [data]);
   const openDetails = splashEnabled ? setDetail : null;
@@ -262,21 +255,14 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     let cancelled = false;
     (async () => {
       const [v, a] = await Promise.all([
-        supabase.from('product_variants' as any).select('*').eq('tenant_id', tenantId).order('sort_order'),
+        supabase.from('product_variants' as any).select('product_id').eq('tenant_id', tenantId),
         supabase.from('product_addons' as any).select('product_id').eq('tenant_id', tenantId),
       ]);
       if (cancelled) return;
       const ids = new Set<string>();
-      const variantsByProduct = new Map<string, ProductVariant[]>();
-      ((v.data as any[]) || []).forEach(r => {
-        ids.add(r.product_id);
-        const list = variantsByProduct.get(r.product_id) || [];
-        list.push(r as ProductVariant);
-        variantsByProduct.set(r.product_id, list);
-      });
+      ((v.data as any[]) || []).forEach(r => ids.add(r.product_id));
       ((a.data as any[]) || []).forEach(r => ids.add(r.product_id));
       setExtrasIds(ids);
-      setVariantMap(variantsByProduct);
     })();
     return () => { cancelled = true; };
   }, [tenantId, allProducts.length]);
@@ -454,7 +440,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filtered.map((product, i) => (
             <GridCard key={product.id} product={product} index={i} tenantId={tenantId} addToCart={addToCart}
-              isDropshipping={isDropshipping} niche={niche} hasExtras={extrasIds.has(product.id)} variants={variantMap.get(product.id) || []} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
+              isDropshipping={isDropshipping} niche={niche} hasExtras={extrasIds.has(product.id)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
           ))}
         </div>
       )}
@@ -469,7 +455,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {items.map(product => (
                   <ListRow key={product.id} product={product} tenantId={tenantId} addToCart={addToCart}
-                    isDropshipping={isDropshipping} niche={niche} hasExtras={extrasIds.has(product.id)} variants={variantMap.get(product.id) || []} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
+                    isDropshipping={isDropshipping} niche={niche} hasExtras={extrasIds.has(product.id)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
                 ))}
               </div>
             </section>
@@ -487,7 +473,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
               <div>
                 {items.map(product => (
                   <CompactRow key={product.id} product={product} addToCart={addToCart} niche={niche}
-                    hasExtras={extrasIds.has(product.id)} variants={variantMap.get(product.id) || []} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
+                    hasExtras={extrasIds.has(product.id)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
                 ))}
               </div>
             </section>
@@ -499,7 +485,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 auto-rows-[140px] md:auto-rows-[180px]">
           {filtered.map((product, i) => (
             <MagazineCard key={product.id} product={product} addToCart={addToCart} niche={niche}
-              hasExtras={extrasIds.has(product.id)} variants={variantMap.get(product.id) || []} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} large={i % 7 === 0} />
+              hasExtras={extrasIds.has(product.id)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} large={i % 7 === 0} />
           ))}
         </div>
       )}
@@ -578,7 +564,6 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                   <span className="rounded-full bg-yellow-400/15 px-3 py-1 text-xs font-medium text-yellow-500">Restam {(detail as any).stock_quantity}</span>
                 ) : null}
               </div>
-              <ProductColorPricing product={detail} variants={variantMap.get(detail.id) || []} />
               <div className="h-4" />
               <button type="button" onClick={() => setDetail(null)}
                 className="mb-2 flex w-full items-center justify-center rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground transition hover:bg-secondary">
