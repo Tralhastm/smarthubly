@@ -21,8 +21,7 @@ Deno.serve(async (req) => {
   try {
     const expectedToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN");
     const receivedToken = req.headers.get("asaas-access-token") || req.headers.get("x-asaas-access-token");
-    if (expectedToken && receivedToken !== expectedToken) return json({ error: "unauthorized" }, 401);
-    if (!expectedToken) console.warn("ASAAS_WEBHOOK_TOKEN is not configured; webhook authentication is disabled");
+    if (!expectedToken) console.warn("ASAAS_WEBHOOK_TOKEN is not configured; tenant webhook tokens will be checked after resolving the order");
 
     const body = await req.json();
     const event = String(body?.event || body?.type || "");
@@ -37,7 +36,8 @@ Deno.serve(async (req) => {
     );
 
     const eventId = String(body?.id || `${event}:${paymentId}`);
-    const { data: registered, error: registerError } = await supabase.rpc("register_webhook_event", {
+    const { data: order, error: orderError } = await supabase
+rpc("register_webhook_event", {
       _provider: "asaas",
       _event_id: eventId,
       _event_type: event,
@@ -56,6 +56,11 @@ Deno.serve(async (req) => {
       order = byPayment.data;
     }
     if (!order) return json({ received: true, ignored: true, reason: "order_not_found" });
+
+    const { data: tenantConfig } = await supabase.from("tenants").select("asaas_webhook_token").eq("id", order.tenant_id).maybeSingle();
+    const configuredToken = expectedToken || tenantConfig?.asaas_webhook_token;
+    if (configuredToken && receivedToken !== configuredToken) return json({ error: "unauthorized" }, 401);
+    if (!configuredToken) console.warn("No Asaas webhook token configured globally or for tenant", order.tenant_id);
 
     const isApproved = approvedEvents.has(event) || String(payment?.status || "").toUpperCase() === "RECEIVED";
     const isCancelled = cancelledEvents.has(event);
