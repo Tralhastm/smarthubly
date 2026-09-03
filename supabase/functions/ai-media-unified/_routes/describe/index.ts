@@ -17,10 +17,10 @@ const MAX_DESCRIPTION_CHARS = 2600;
 const SYSTEM_PROMPT =
   "Você é um redator técnico de e-commerce. Escreva uma descrição completa e natural em português brasileiro, no estilo de uma ficha comercial profissional de smartphone. " +
   "Quando solicitado, pesquise na internet real antes de escrever e use somente especificações confirmadas em fontes confiáveis; nunca invente memória, câmera, tela, bateria, processador ou conectividade. " +
-  "Organize exatamente assim: 2 ou 3 parágrafos comerciais separados por linha em branco; depois uma linha com 'Especificações'; depois uma especificação por linha, sem marcadores; depois uma linha em branco e a garantia. " +
+  "Organize exatamente assim: dois parágrafos comerciais, separados por uma linha em branco; depois uma linha em branco e uma especificação técnica por linha, sem marcadores, bullets, hífens ou título de seção; depois uma linha em branco e o parágrafo de garantia. " +
   "Inclua os principais dados confirmados, como tela, resolução, armazenamento, RAM, processador, câmeras, vídeo, bateria, conectividade, SIM, USB, Bluetooth, sistema e áudio, quando existirem. " +
   "Não inclua links, fontes, preço, custo, margem, nota fiscal, emojis, markdown ou promessas absolutas. Respeite as regras personalizadas do lojista. " +
-  "Retorne somente o texto final, sem reticências, sem cortar frases e sem escrever informações que não foram confirmadas.";
+  "Preserve obrigatoriamente as quebras de linha e as linhas em branco do formato final. Retorne somente o texto final, sem reticências, sem cortar frases e sem escrever informações que não foram confirmadas.";
 
 function respond(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -55,7 +55,15 @@ async function getAllWorkers(supabase: any) {
 function clean(s: string): string {
   let d = (s || "").trim().replace(/^["'`]+|["'`]+$/g, "").trim();
   const wasTruncated = /\.{2,}\s*$/.test(d);
-  d = d.replace(/\s+/g, " ").replace(/\.{2,}\s*$/g, "").trim();
+  d = d
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map(line => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^Especificações\s*\n/i, "")
+    .replace(/\.{2,}\s*$/g, "")
+    .trim();
 
   // Nunca salva a última frase quando o provedor terminou com reticências.
   if (wasTruncated) {
@@ -65,7 +73,7 @@ function clean(s: string): string {
 
   // Nunca salva uma resposta que terminou no meio da última frase.
   if (d.length > MAX_DESCRIPTION_CHARS) {
-    const complete = d.slice(0, MAX_DESCRIPTION_CHARS + 1).match(/^.*[.!?](?=\s|$)/);
+    const complete = d.slice(0, MAX_DESCRIPTION_CHARS + 1).match(/^.*[.!?](?=\s|$)/s);
     d = complete?.[0]?.trim() || d.slice(0, MAX_DESCRIPTION_CHARS).trim();
   }
   if (d && !/[.!?]$/.test(d)) d += ".";
@@ -220,7 +228,7 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
       currentDescription ? `Descrição atual (refazer melhor): ${currentDescription}` : "",
       researchWeb ? `Pesquise no Google informações atuais e confiáveis sobre "${name}" antes de escrever. Use apenas especificações confirmadas; não inclua links ou fontes no texto.` : "",
       rules ? `Regras personalizadas do lojista (obrigatórias): ${String(rules).slice(0, 2200)}` : "",
-      `Pesquise na internet real antes de escrever. Entregue 2 ou 3 parágrafos comerciais, seguidos exatamente de:\nEspecificações\n(uma especificação confirmada por linha)\n\n(garantia completa conforme as regras). O texto pode ter até ${MAX_DESCRIPTION_CHARS} caracteres. Não use reticências e não termine no meio de uma frase.`,
+      `Pesquise na internet real antes de escrever. Entregue exatamente dois parágrafos comerciais separados por uma linha em branco; depois, uma linha em branco e uma especificação confirmada por linha, sem título ou marcadores; depois, uma linha em branco e a garantia completa conforme as regras. O texto pode ter até ${MAX_DESCRIPTION_CHARS} caracteres. Não use reticências e não termine no meio de uma frase.`,
     ].filter(Boolean).join("\n");
 
     const supabase = getSupabaseAdmin();

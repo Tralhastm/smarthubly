@@ -19,6 +19,18 @@ import { unifiedInvoke } from "@/lib/unifiedInvoke";
 type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
 type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; variants?: ParsedVariant[]; needs_price_review?: boolean };
 
+const DEFAULT_BULK_DESCRIPTION_RULES = `Siga obrigatoriamente este formato editorial, sem alterar a ordem e sem usar marcadores, bullets ou títulos técnicos:
+
+1. Escreva um primeiro parágrafo comercial, com 2 a 3 frases, apresentando o produto e seu principal benefício.
+
+2. Escreva um segundo parágrafo, com 2 a 3 frases, explicando desempenho, recursos, autonomia, conectividade e diferenciais relevantes. Separe os dois parágrafos com uma linha em branco.
+
+3. Depois de uma linha em branco, liste as especificações técnicas reais, colocando UMA especificação por linha, sem bullets, sem hífens e sem juntar várias especificações na mesma linha.
+
+4. Depois de uma linha em branco, finalize exatamente com um parágrafo de garantia: Garantia de 30 dias contra defeitos de funcionamento. Não cobre quedas, quebras, mau uso, danos físicos, contato inadequado com líquidos ou alterações no aparelho.
+
+Use somente especificações confirmadas por pesquisa ou fornecidas no cadastro. Não invente informações, não mencione nota fiscal e não inclua seções extras. Preserve as quebras de linha no texto final.`;
+
 const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenantId: string; isDropshipping?: boolean; isAffiliate?: boolean }) => {
   const { data: products = [], isLoading, refetch } = useProducts(tenantId);
   const queryClient = useQueryClient();
@@ -54,7 +66,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const [showBulkDescriptions, setShowBulkDescriptions] = useState(false);
   const [bulkDescriptionRunning, setBulkDescriptionRunning] = useState(false);
   const [bulkDescriptionProgress, setBulkDescriptionProgress] = useState({ done: 0, total: 0, failed: 0 });
-  const [bulkDescriptionRules, setBulkDescriptionRules] = useState('Começar com um papo de vendedor específico para este produto, sem frases genéricas. Destacar as principais especificações reais do celular. Não mencionar nota fiscal. Finalizar de forma profissional informando garantia de 30 dias, sem cobertura para mau uso, quedas, líquidos, riscos, tela quebrada ou danos causados pelo cliente.');
+  const [bulkDescriptionRules, setBulkDescriptionRules] = useState(DEFAULT_BULK_DESCRIPTION_RULES);
   const [bulkDescriptionOverwrite, setBulkDescriptionOverwrite] = useState(false);
   const bulkDescriptionCancelled = useRef(false);
 
@@ -973,7 +985,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-base font-semibold text-foreground flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Gerador de descrições em massa</h3>
-                <p className="text-xs text-muted-foreground mt-1">A IA pesquisa especificações públicas do produto e salva uma descrição por vez no catálogo administrativo.</p>
+                <p className="text-xs text-muted-foreground mt-1">A IA pesquisa especificações públicas e salva cada descrição no padrão editorial definido abaixo.</p>
               </div>
               {!bulkDescriptionRunning && <button onClick={() => setShowBulkDescriptions(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>}
             </div>
@@ -982,7 +994,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               <textarea value={bulkDescriptionRules} onChange={e => setBulkDescriptionRules(e.target.value)} rows={7} disabled={bulkDescriptionRunning}
                 placeholder="Ex.: Começar com uma abordagem comercial específica; destacar especificações; informar garantia e exclusões..."
                 className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground resize-y disabled:opacity-60" />
-              <p className="text-[11px] text-muted-foreground mt-1">A regra será aplicada a todos os produtos selecionados. A IA não deve inventar especificações nem mencionar nota fiscal.</p>
+              <p className="text-[11px] text-muted-foreground mt-1">O padrão exige dois parágrafos, especificações uma por linha e garantia ao final. A IA não deve inventar especificações nem mencionar nota fiscal.</p>
             </div>
             <label className="flex items-start gap-2 text-sm text-foreground">
               <input type="checkbox" checked={bulkDescriptionOverwrite} onChange={e => setBulkDescriptionOverwrite(e.target.checked)} disabled={bulkDescriptionRunning} className="accent-primary mt-0.5" />
