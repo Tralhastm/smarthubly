@@ -204,6 +204,14 @@ const TenantOrderStatus = () => {
             <span className="font-bold">{cfg.label}</span>
           </div>
           <p className="text-muted-foreground text-sm">{cfg.description}</p>
+          {order.status === 'pending_payment' && (
+            <Link
+              to={`/loja/${slug}/pagar/${order.id}`}
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground transition hover:opacity-90"
+            >
+              <CreditCard className="h-4 w-4" /> Realizar pagamento agora
+            </Link>
+          )}
           <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 mt-1">
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Código do pedido</p>
             <p className="text-2xl font-mono font-bold text-primary tracking-widest mt-0.5">#{order.id.slice(0, 8).toUpperCase()}</p>
