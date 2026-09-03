@@ -36,14 +36,13 @@ Deno.serve(async (req) => {
     );
 
     const eventId = String(body?.id || `${event}:${paymentId}`);
-    const { data: order, error: orderError } = await supabase
-rpc("register_webhook_event", {
+    const { data: registered, error: registerError } = await supabase.rpc("register_webhook_event", {
       _provider: "asaas",
       _event_id: eventId,
       _event_type: event,
       _payload: body,
     });
-    if (registerError) console.error("webhook idempotency registration failed", registerError);
+    if (registerError) throw registerError;
     if (registered === false) return json({ received: true, duplicate: true });
 
     let order: any = null;
