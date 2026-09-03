@@ -17,6 +17,29 @@ const isAiGeneratedImage = (url: string) => {
   return url.includes('ai=1') || (url.includes('/product-images/') && url.endsWith('.png'));
 };
 
+/** Normaliza descrições antigas no catálogo sem alterar o texto salvo no banco. */
+const formatDescriptionForDisplay = (value: unknown) => {
+  let text = String(value || '').replace(/\r\n?/g, '\n').trim();
+  const wasTruncated = /\.{2,}\s*$/.test(text);
+  text = text.replace(/\.{2,}\s*$/, '').trim();
+  if (wasTruncated) {
+    const lastCompleteSentence = text.lastIndexOf('.');
+    text = lastCompleteSentence >= 0 ? text.slice(0, lastCompleteSentence + 1).trim() : '';
+  }
+  text = text.split('\n').map(line => line.replace(/[ \t]+/g, ' ').trim()).filter(Boolean).join('\n').trim();
+
+  // Descrições antigas chegaram como um único bloco; quebra após cada 2 frases.
+  if (!text.includes('\n') && text.length > 260) {
+    const sentences = text.match(/[^.!?]+[.!?]+(?=\s|$)/g);
+    if (sentences && sentences.length >= 4) {
+      const paragraphs: string[] = [];
+      for (let i = 0; i < sentences.length; i += 2) paragraphs.push(sentences.slice(i, i + 2).join(' ').trim());
+      text = paragraphs.join('\n\n');
+    }
+  }
+  return text;
+};
+
 // ============================================================
 // GRID — card grande com imagem grande (padrão atual)
 // ============================================================
@@ -25,7 +48,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
   const cta = getItemCTA(product as any, niche);
   const Icon = isService ? Calendar : ShoppingCart;
   const [expanded, setExpanded] = useState(false);
-  const desc = product.description || '';
+  const desc = formatDescriptionForDisplay(product.description);
   const isLongDesc = desc.length > 90;
   return (
     <div className="animate-fade-in" style={{ animationDelay: `${Math.min(index, 8) * 50}ms` }}>
@@ -85,6 +108,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
 // ============================================================
 const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtras, displayPrice, onOpenPicker, onOpenDetails }: any) => {
   const cta = getItemCTA(product as any, niche);
+  const desc = formatDescriptionForDisplay(product.description);
   return (
     <div className="group flex gap-3 rounded-lg border border-border bg-card p-3 hover:border-primary/30 transition-colors animate-fade-in">
       <div className="w-24 h-24 sm:w-28 sm:h-28 shrink-0 cursor-pointer overflow-hidden rounded-md bg-secondary flex items-center justify-center relative" onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
@@ -104,8 +128,8 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
             <span className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-medium text-destructive-foreground shrink-0">Esgotado</span>
           )}
         </div>
-        {product.description && (
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{product.description}</p>
+        {desc && (
+          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 whitespace-pre-line">{desc}</p>
         )}
         <div className="flex items-end justify-between mt-auto pt-2">
           <span className="text-lg font-bold text-primary">R${displayPrice.toFixed(2)}</span>
@@ -133,6 +157,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
 // ============================================================
 const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, onOpenPicker, onOpenDetails }: any) => {
   const cta = getItemCTA(product as any, niche);
+  const desc = formatDescriptionForDisplay(product.description);
   return (
     <div className="group flex items-start justify-between gap-3 py-3 border-b border-border last:border-0 animate-fade-in" onClick={() => onOpenDetails && onOpenDetails(product)} style={onOpenDetails ? { cursor: 'pointer' } : undefined}>
       <div className="flex-1 min-w-0">
@@ -141,8 +166,8 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, onOpen
           <div className="flex-1 border-b border-dashed border-border/60 self-end mb-1.5" />
           <span className="text-base font-bold text-primary shrink-0">R${displayPrice.toFixed(2)}</span>
         </div>
-        {product.description && (
-          <p className="text-xs text-muted-foreground line-clamp-2 pr-2">{product.description}</p>
+        {desc && (
+          <p className="text-xs text-muted-foreground line-clamp-2 pr-2 whitespace-pre-line">{desc}</p>
         )}
         <div className="flex items-center gap-2 mt-1.5">
           {!product.in_stock ? (
@@ -567,7 +592,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                 <h2 className="font-heading text-2xl mt-1">{detail.name}</h2>
               </div>
               {detail.description && (
-                <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line">{detail.description}</p>
+                <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line">{formatDescriptionForDisplay(detail.description)}</p>
               )}
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 {(detail as any).original_price != null && (detail as any).original_price > getDisplayPrice(detail) && (
