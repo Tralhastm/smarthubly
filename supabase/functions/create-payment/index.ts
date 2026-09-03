@@ -71,7 +71,8 @@ serve(async (req) => {
       }
       const customerBody: any = { name: String(order.customer_name || "Cliente").slice(0, 100), cpfCnpj: customerDocument, externalReference: order_id };
       if (order.customer_email) customerBody.email = String(order.customer_email).slice(0, 100);
-      if (order.customer_phone) customerBody.mobilePhone = String(order.customer_phone).replace(/\\D/g, "").slice(0, 11);
+      // O telefone é opcional no cliente Asaas; omitimos valores malformados vindos de pedidos antigos.
+      // Isso evita rejeição de números com código do país ou formatação inconsistente.
       // Reutiliza cliente existente para permitir novas tentativas com o mesmo CPF/CNPJ.
       let customerData: any = null;
       const existingCustomerRes = await fetch(`${asaasBase}/v3/customers?cpfCnpj=${encodeURIComponent(customerDocument)}&limit=1`, { headers: { access_token: String(asaasToken), Accept: "application/json" } });

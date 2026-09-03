@@ -25,6 +25,15 @@ const TenantPaymentGateway = () => {
   const [asaasPixImage, setAsaasPixImage] = useState<string | null>(null);
   const [paymentProvider, setPaymentProvider] = useState<string>('mercadopago');
 
+  // Define o provedor antes mesmo da resposta do backend, para que mensagens de validação
+  // (por exemplo, CPF/CNPJ ausente no Asaas) nunca exibam instruções do Mercado Pago.
+  useEffect(() => {
+    if (!tenant) return;
+    const configuredProvider = (tenant as any).payment_provider;
+    const asaasEnabled = (tenant as any).asaas_enabled === true;
+    setPaymentProvider(configuredProvider === 'asaas' && asaasEnabled ? 'asaas' : configuredProvider || 'mercadopago');
+  }, [tenant]);
+
   // 1) Cria a preferência (ou recupera o init_point se já existe)
   useEffect(() => {
     if (!orderId || !tenant?.id) return;
