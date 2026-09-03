@@ -510,7 +510,7 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
   const [whatsappShowPix, setWhatsappShowPix] = useState(false);
   const [pixKey, setPixKey] = useState('');
   const [pixKeyType, setPixKeyType] = useState('');
-  const [paymentProvider, setPaymentProvider] = useState<'mercadopago' | 'pagbank' | 'infinitepay'>('mercadopago');
+  const [paymentProvider, setPaymentProvider] = useState<'mercadopago' | 'pagbank' | 'infinitepay' | 'asaas'>('mercadopago');
   const [infinitePayHandle, setInfinitePayHandle] = useState('');
   const [infinitePayDocument, setInfinitePayDocument] = useState('');
   const [infinitePayEnabled, setInfinitePayEnabled] = useState(false);
@@ -741,7 +741,7 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <h3 className="font-heading text-sm text-foreground flex items-center gap-2">💳 Provedor de pagamento</h3>
         <select value={paymentProvider} onChange={e => setPaymentProvider(e.target.value as any)} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground">
-          <option value="mercadopago">Mercado Pago</option><option value="pagbank">PagBank</option><option value="infinitepay">InfinitePay</option>
+          <option value="mercadopago">Mercado Pago</option><option value="asaas">Asaas</option><option value="pagbank">PagBank</option><option value="infinitepay">InfinitePay</option>
         </select>
         {paymentProvider === 'infinitepay' && <>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={infinitePayEnabled} onChange={e => setInfinitePayEnabled(e.target.checked)} /> Ativar InfinitePay nesta loja</label>
