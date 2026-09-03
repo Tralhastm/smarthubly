@@ -13,10 +13,11 @@ interface ApiKeyEntry { id: string; api_key: string; }
 interface AiWorker { id: string; base_url: string; is_exhausted: boolean; }
 
 const SYSTEM_PROMPT =
-  "Você escreve descrições curtas e vendedoras para produtos de e-commerce em português brasileiro. " +
-  "Regras: 1-2 frases (máx 280 caracteres), tom informal e direto, destaque 1-2 benefícios reais, " +
-  "evite clichês como 'incrível', 'imperdível', 'único'. NÃO use emojis. NÃO invente especificações técnicas " +
-  "(memória, voltagem, dimensões etc) que não estejam no nome do produto. Retorne SOMENTE o texto da descrição, sem aspas, sem markdown.";
+  "Você escreve descrições comerciais bonitas e específicas para produtos de e-commerce em português brasileiro. " +
+  "Comece com uma abordagem de vendedor ligada ao produto, nunca com frases genéricas. " +
+  "Use especificações reais encontradas na pesquisa ou informadas no nome; nunca invente memória, câmera, tela, bateria, processador ou conectividade. " +
+  "Não mencione nota fiscal, preço, custo ou margem. Não use emojis, markdown, listas ou promessas absolutas. " +
+  "Finalize com a garantia de forma profissional e respeite integralmente as regras personalizadas do lojista. Retorne somente o texto final.";
 
 function respond(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -50,11 +51,11 @@ async function getAllWorkers(supabase: any) {
 
 function clean(s: string): string {
   let d = (s || "").trim().replace(/^["'`]+|["'`]+$/g, "").trim();
-  if (d.length > 320) d = d.slice(0, 317) + "...";
+  if (d.length > 900) d = d.slice(0, 897) + "...";
   return d;
 }
 
-async function tryGoogle(prompt: string, keys: ApiKeyEntry[], supabase: any): Promise<string | null> {
+async function tryGoogle(prompt: string, keys: ApiKeyEntry[], supabase: any, researchWeb = false): Promise<string | null> {
   const allKeys = keys.length > 0 ? keys
     : Deno.env.get("GOOGLE_AI_API_KEY") ? [{ id: "__env__", api_key: Deno.env.get("GOOGLE_AI_API_KEY")! }] : [];
   for (const keyEntry of allKeys) {
@@ -64,12 +65,14 @@ async function tryGoogle(prompt: string, keys: ApiKeyEntry[], supabase: any): Pr
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+              body: JSON.stringify({
             contents: [
               { role: "user", parts: [{ text: SYSTEM_PROMPT }] },
               { role: "model", parts: [{ text: "Ok." }] },
               { role: "user", parts: [{ text: prompt }] },
             ],
+            ...(researchWeb ? { tools: [{ google_search: {} }] } : {}),
+            generationConfig: { temperature: 0.55, maxOutputTokens: 900 },
           }),
         }
       );
@@ -186,7 +189,7 @@ export async function describe_route(req: Request, body?: unknown): Promise<Resp
     const parsed: any = body ?? (ct.includes("application/json") ? await req.json() : {});
 if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
-    const { name, category, network, currentDescription } = await req.json();
+    const { name, category, network, currentDescription, rules, researchWeb } = parsed;
     if (!name || typeof name !== "string") return respond({ error: "name é obrigatório" }, 400);
 
     const userPrompt = [
@@ -194,14 +197,15 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
       category ? `Categoria: ${category}` : "",
       network ? `Loja: ${network}` : "",
       currentDescription ? `Descrição atual (refazer melhor): ${currentDescription}` : "",
-      "",
-      "Escreva uma descrição curta e vendedora seguindo as regras.",
+      researchWeb ? `Pesquise no Google informações atuais e confiáveis sobre o modelo "${name}" antes de escrever. Use apenas especificações confirmadas; não inclua links ou fontes no texto.` : "",
+      rules ? `Regras personalizadas do lojista (obrigatórias): ${String(rules).slice(0, 3000)}` : "",
+      "Escreva uma descrição comercial específica, com as principais especificações confirmadas, e finalize com a garantia conforme as regras.",
     ].filter(Boolean).join("\n");
 
     const supabase = getSupabaseAdmin();
     const [keys, workers] = await Promise.all([getGoogleKeys(supabase), getAllWorkers(supabase)]);
 
-    let d = await tryGoogle(userPrompt, keys, supabase);
+    let d = await tryGoogle(userPrompt, keys, supabase, researchWeb === true);
     if (d) return respond({ description: d, provider: "google" });
 
     console.log("desc: Google falhou, tentando Lovable...");

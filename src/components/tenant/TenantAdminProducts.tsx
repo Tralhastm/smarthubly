@@ -51,6 +51,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const [affiliateImportUrl, setAffiliateImportUrl] = useState('');
   const [importingUrl, setImportingUrl] = useState(false);
   const [refreshingPrices, setRefreshingPrices] = useState(false);
+  const [showBulkDescriptions, setShowBulkDescriptions] = useState(false);
+  const [bulkDescriptionRunning, setBulkDescriptionRunning] = useState(false);
+  const [bulkDescriptionProgress, setBulkDescriptionProgress] = useState({ done: 0, total: 0, failed: 0 });
+  const [bulkDescriptionRules, setBulkDescriptionRules] = useState('Começar com um papo de vendedor específico para este produto, sem frases genéricas. Destacar as principais especificações reais do celular. Não mencionar nota fiscal. Finalizar de forma profissional informando garantia de 30 dias, sem cobertura para mau uso, quedas, líquidos, riscos, tela quebrada ou danos causados pelo cliente.');
+  const [bulkDescriptionOverwrite, setBulkDescriptionOverwrite] = useState(false);
+  const bulkDescriptionCancelled = useRef(false);
 
   const escapeHtml = (value: unknown) => String(value ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -132,6 +138,54 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     } finally {
       setRefreshingPrices(false);
     }
+  };
+
+  const handleBulkDescriptionGeneration = async () => {
+    if (bulkDescriptionRunning) return;
+    const targets = products.filter(p => bulkDescriptionOverwrite || !p.description?.trim());
+    if (targets.length === 0) {
+      toast.info(bulkDescriptionOverwrite ? 'Não há produtos para processar.' : 'Todos os produtos já possuem descrição. Ative sobrescrever para gerar novamente.');
+      return;
+    }
+    bulkDescriptionCancelled.current = false;
+    setBulkDescriptionRunning(true);
+    setBulkDescriptionProgress({ done: 0, total: targets.length, failed: 0 });
+    let done = 0;
+    let failed = 0;
+    toast.info(`Gerando descrições de ${targets.length} produto(s) com pesquisa na internet...`);
+    try {
+      for (const product of targets) {
+        if (bulkDescriptionCancelled.current) break;
+        try {
+          const { data, error } = await unifiedInvoke('ai-media-unified', 'describe', {
+            name: product.name,
+            category: product.category,
+            currentDescription: product.description || '',
+            rules: bulkDescriptionRules.trim(),
+            researchWeb: true,
+          });
+          if (error || data?.error || !data?.description) throw new Error(data?.error || error?.message || 'Descrição não gerada');
+          const { error: updateError } = await supabase.from('products').update({ description: data.description }).eq('id', product.id);
+          if (updateError) throw updateError;
+          done++;
+        } catch (e) {
+          failed++;
+          console.warn('Falha ao gerar descrição', product.name, e);
+        }
+        setBulkDescriptionProgress({ done, total: targets.length, failed });
+        await refetch();
+      }
+      toast[failed > 0 ? 'warning' : 'success'](`${done} descrição(ões) gerada(s)${failed > 0 ? `; ${failed} falharam` : ''}.`);
+    } finally {
+      setBulkDescriptionRunning(false);
+      bulkDescriptionCancelled.current = false;
+      setShowBulkDescriptions(false);
+    }
+  };
+
+  const cancelBulkDescriptionGeneration = () => {
+    bulkDescriptionCancelled.current = true;
+    toast.info('A geração será interrompida após o produto atual.');
   };
 
   // TXT import state
@@ -832,6 +886,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           title="Importe catálogos em TXT, PDF ou Imagem. A IA extrairá os produtos e preços automaticamente.">
           <FileText className="h-4 w-4" /> Importar Catálogo (IA)
         </button>
+        <button onClick={() => setShowBulkDescriptions(true)} disabled={!products.length || bulkDescriptionRunning}
+          className="flex items-center gap-2 rounded-lg bg-primary/15 text-primary px-4 py-2 text-sm font-medium hover:bg-primary/25 disabled:opacity-50"
+          title="Pesquisa especificações na internet e gera descrições comerciais para vários produtos">
+          {bulkDescriptionRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+          Gerar descrições em massa
+        </button>
         <button onClick={exportCatalogHtml} disabled={!products.length}
           className="flex items-center gap-2 rounded-lg bg-primary/15 text-primary px-4 py-2 text-sm font-medium hover:bg-primary/25 disabled:opacity-50"
           title="Baixa um HTML visual com todas as imagens e informações dos produtos">
@@ -906,6 +966,47 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         )}
         <input ref={fileInputRef} type="file" accept=".txt,.pdf,.png,.jpg,.jpeg" className="hidden" onChange={handleFileSelect} />
       </div>
+
+      {showBulkDescriptions && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-xl rounded-2xl bg-background p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-foreground flex items-center gap-2"><Sparkles className="h-4 w-4 text-primary" /> Gerador de descrições em massa</h3>
+                <p className="text-xs text-muted-foreground mt-1">A IA pesquisa especificações públicas do produto e salva uma descrição por vez no catálogo administrativo.</p>
+              </div>
+              {!bulkDescriptionRunning && <button onClick={() => setShowBulkDescriptions(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>}
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1">Regras personalizadas</label>
+              <textarea value={bulkDescriptionRules} onChange={e => setBulkDescriptionRules(e.target.value)} rows={7} disabled={bulkDescriptionRunning}
+                placeholder="Ex.: Começar com uma abordagem comercial específica; destacar especificações; informar garantia e exclusões..."
+                className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground resize-y disabled:opacity-60" />
+              <p className="text-[11px] text-muted-foreground mt-1">A regra será aplicada a todos os produtos selecionados. A IA não deve inventar especificações nem mencionar nota fiscal.</p>
+            </div>
+            <label className="flex items-start gap-2 text-sm text-foreground">
+              <input type="checkbox" checked={bulkDescriptionOverwrite} onChange={e => setBulkDescriptionOverwrite(e.target.checked)} disabled={bulkDescriptionRunning} className="accent-primary mt-0.5" />
+              <span><span className="block">Sobrescrever descrições existentes</span><span className="block text-[11px] text-muted-foreground">Desmarcado: gera apenas para produtos sem descrição.</span></span>
+            </label>
+            {bulkDescriptionRunning && (
+              <div className="space-y-2">
+                <Progress value={bulkDescriptionProgress.total ? (bulkDescriptionProgress.done / bulkDescriptionProgress.total) * 100 : 0} className="h-2" />
+                <p className="text-xs text-muted-foreground">{bulkDescriptionProgress.done}/{bulkDescriptionProgress.total} concluídos{bulkDescriptionProgress.failed ? ` · ${bulkDescriptionProgress.failed} falharam` : ''}</p>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              {bulkDescriptionRunning ? (
+                <button onClick={cancelBulkDescriptionGeneration} className="rounded-lg bg-destructive/15 text-destructive px-4 py-2 text-sm font-medium">Interromper</button>
+              ) : (
+                <>
+                  <button onClick={() => setShowBulkDescriptions(false)} className="rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium">Cancelar</button>
+                  <button onClick={handleBulkDescriptionGeneration} className="rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm font-medium"><Sparkles className="inline h-4 w-4 mr-1" />Iniciar geração</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Affiliate URL importer (only in affiliate mode) */}
       {isAffiliate && (
