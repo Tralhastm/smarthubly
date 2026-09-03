@@ -613,6 +613,11 @@ const ProductCard = ({
       )}
     </div>
     <h3 className="font-serif text-sm leading-snug" style={{ color: dark }}>{p.name}</h3>
+    {p.description && (
+      <p className="mt-1 line-clamp-2 text-xs leading-relaxed opacity-65" style={{ color: dark }}>
+        {p.description}
+      </p>
+    )}
     {showPrices && p.price > 0 && (
       <p className="mt-1 text-sm font-bold" style={{ color: gold }}>R$ {p.price.toFixed(2)}</p>
     )}
@@ -621,7 +626,7 @@ const ProductCard = ({
       className="mx-auto mt-3 rounded-sm border px-4 py-2 text-[10px] font-bold uppercase tracking-wider transition hover:opacity-80 disabled:opacity-40"
       style={{ borderColor: `${dark}33`, color: dark }}
     >
-      Ver detalhes
+      {p.description ? 'Ver mais' : 'Ver detalhes'}
     </button>
   </article>
 );
