@@ -656,7 +656,10 @@ const SupplierPanel = () => {
           if (priceError) warnings.push(`${entry.name} (comparação não atualizada: ${priceError.message})`);
         }
         updated.push(entry.name);
-        if (entry.colors.length > 0) {
+        // A lista recebida é a fotografia atual do fornecedor. Portanto,
+        // também sincronizamos quando não há cores: nesse caso, todas as
+        // variações antigas são removidas em vez de permanecerem acumuladas.
+        {
           const { data: existingVariants, error: variantsReadError } = await (supabase as any).from('product_variants').select('id, name').eq('product_id', product.id).limit(100);
           if (variantsReadError) {
             warnings.push(`${entry.name} (cores não atualizadas: ${variantsReadError.message})`);
