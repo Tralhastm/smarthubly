@@ -3,7 +3,7 @@ import { useInfiniteProducts, type Product } from '@/hooks/useProducts';
 import { type ProductVariant } from '@/hooks/useProductExtras';
 import { useCart } from '@/contexts/CartContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Search, ShoppingCart, Package, Loader2, Calendar, ChevronDown, ChevronUp, ChevronLeft } from 'lucide-react';
+import { Search, ShoppingCart, Package, Loader2, Calendar, ChevronDown, ChevronLeft } from 'lucide-react';
 import SupplierChatCustomer from './SupplierChatCustomer';
 import ProductOptionsPicker from './ProductOptionsPicker';
 import MediaCarousel from '@/components/shared/MediaCarousel';
@@ -47,12 +47,11 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
   const isService = (product as any).item_type === 'service';
   const cta = getItemCTA(product as any, niche);
   const Icon = isService ? Calendar : ShoppingCart;
-  const [expanded, setExpanded] = useState(false);
   const desc = formatDescriptionForDisplay(product.description);
   const isLongDesc = desc.length > 90;
   return (
     <div className="animate-fade-in" style={{ animationDelay: `${Math.min(index, 8) * 50}ms` }}>
-      <div className="group relative overflow-hidden rounded-lg border border-border bg-card p-4 hover-glow transition-all duration-300 hover:border-primary/30">
+      <div className="group relative flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card p-4 hover-glow transition-all duration-300 hover:border-primary/30">
         <div className="aspect-square mb-3 cursor-pointer overflow-hidden rounded-md bg-secondary flex items-center justify-center relative" onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
           {Array.isArray(product.media) && product.media.length > 0 ? (
             <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" videoClassName="h-full w-full object-cover" />
@@ -71,20 +70,22 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{product.category}</span>
         <h3 className="font-heading text-lg mt-1 text-foreground">{product.name}</h3>
         {desc && (
-          <p className={`text-sm text-muted-foreground mt-1 whitespace-pre-line ${expanded ? '' : 'line-clamp-2'}`}>{desc}</p>
+          <p className="mt-1 line-clamp-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{desc}</p>
         )}
-        {isLongDesc && (
-          <button type="button" onClick={(e) => { e.stopPropagation(); setExpanded(v => !v); }}
+        {isLongDesc && onOpenDetails && (
+          <button type="button" onClick={(e) => { e.stopPropagation(); onOpenDetails(product); }}
             className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-            {expanded ? <>Ver menos <ChevronUp className="h-3 w-3" /></> : <>Ver mais <ChevronDown className="h-3 w-3" /></>}
+            Ver detalhes <ChevronDown className="h-3 w-3 -rotate-90" />
           </button>
         )}
-        <div className="flex items-center justify-between mt-4">
-          <span className="text-xl font-bold text-primary">R${displayPrice.toFixed(2)}</span>
-          {(product as any).stock_quantity != null && (product as any).stock_quantity <= 5 && product.in_stock && (
-            <span className="text-xs text-yellow-400">Restam {(product as any).stock_quantity}</span>
-          )}
-          <div className="flex items-center gap-2">
+        <div className="mt-auto flex items-center justify-between gap-3 pt-4">
+          <div className="min-w-0">
+            <span className="block text-xl font-bold text-primary">R${displayPrice.toFixed(2)}</span>
+            {(product as any).stock_quantity != null && (product as any).stock_quantity <= 5 && product.in_stock && (
+              <span className="mt-0.5 block text-xs text-yellow-400">Restam {(product as any).stock_quantity}</span>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
             {isDropshipping && product.supplier_id && (
               <SupplierChatCustomer tenantId={tenantId} productId={product.id} supplierId={product.supplier_id} productName={product.name} />
             )}
@@ -129,10 +130,10 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
           )}
         </div>
         {desc && (
-          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 whitespace-pre-line">{desc}</p>
+          <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{desc}</p>
         )}
-        <div className="flex items-end justify-between mt-auto pt-2">
-          <span className="text-lg font-bold text-primary">R${displayPrice.toFixed(2)}</span>
+        <div className="flex items-end justify-between mt-auto gap-3 pt-2">
+          <span className="text-lg font-bold text-primary whitespace-nowrap">R${displayPrice.toFixed(2)}</span>
           <div className="flex items-center gap-1.5">
             {isDropshipping && product.supplier_id && (
               <SupplierChatCustomer tenantId={tenantId} productId={product.id} supplierId={product.supplier_id} productName={product.name} />
@@ -167,7 +168,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, onOpen
           <span className="text-base font-bold text-primary shrink-0">R${displayPrice.toFixed(2)}</span>
         </div>
         {desc && (
-          <p className="text-xs text-muted-foreground line-clamp-2 pr-2 whitespace-pre-line">{desc}</p>
+          <p className="line-clamp-2 whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground">{desc}</p>
         )}
         <div className="flex items-center gap-2 mt-1.5">
           {!product.in_stock ? (
@@ -406,7 +407,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   if (isLoading) {
     return (
       <div className="relative z-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       </div>
@@ -478,7 +479,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
       </div>
 
       {layout === 'grid' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((product, i) => (
             <GridCard key={product.id} product={product} index={i} tenantId={tenantId} addToCart={addToCart}
               isDropshipping={isDropshipping} niche={niche} hasExtras={extrasIds.has(product.id)} displayPrice={getDisplayPrice(product)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />

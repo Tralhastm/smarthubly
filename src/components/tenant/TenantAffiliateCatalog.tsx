@@ -168,7 +168,7 @@ const Card = ({ product, tenantId, tenantSlug, index, onOpen }: {
   return (
     <div className="animate-fade-in" style={{ animationDelay: `${Math.min(index, 8) * 50}ms` }}>
       <div onClick={() => onOpen(product)}
-        className={`group relative overflow-hidden rounded-lg border bg-card p-4 hover-glow transition-all duration-300 cursor-pointer ${coupon ? 'border-primary/40 shadow-lg shadow-primary/5' : 'border-border hover:border-primary/30'}`}>
+        className={`group relative flex h-full flex-col overflow-hidden rounded-lg border bg-card p-4 hover-glow transition-all duration-300 cursor-pointer ${coupon ? 'border-primary/40 shadow-lg shadow-primary/5' : 'border-border hover:border-primary/30'}`}>
         <div className="aspect-square mb-3 overflow-hidden rounded-md bg-secondary flex items-center justify-center relative">
           {product.image ? (
             <img src={product.image} alt={product.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" decoding="async" />
@@ -190,9 +190,9 @@ const Card = ({ product, tenantId, tenantSlug, index, onOpen }: {
           <NetworkBadge net={network} />
         </div>
         <h3 className="font-heading text-base text-foreground line-clamp-2">{product.name}</h3>
-        {product.description && <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{product.description}</p>}
+        {product.description && <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{product.description}</p>}
         {coupon && <CouponBadge coupon={coupon} />}
-        <div className="flex items-end justify-between mt-3 gap-2">
+        <div className="mt-auto flex items-end justify-between gap-3 pt-4">
           <PriceBlock product={product} coupon={coupon} />
           <button onClick={handleBuy} disabled={!url}
             className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium gradient-primary text-primary-foreground transition-all duration-200 hover:opacity-90 disabled:opacity-40">
@@ -338,7 +338,7 @@ const TenantAffiliateCatalog = ({ tenantId, tenantSlug }: { tenantId: string; te
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}
       </div>
     );
@@ -369,7 +369,7 @@ const TenantAffiliateCatalog = ({ tenantId, tenantSlug }: { tenantId: string; te
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((p, i) => <Card key={p.id} product={p} tenantId={tenantId} tenantSlug={tenantSlug} index={i} onOpen={setSelected} />)}
       </div>
       <div ref={sentinelRef} className="h-1" />
