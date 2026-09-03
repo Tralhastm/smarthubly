@@ -17,27 +17,14 @@ const isAiGeneratedImage = (url: string) => {
   return url.includes('ai=1') || (url.includes('/product-images/') && url.endsWith('.png'));
 };
 
-/** Normaliza descrições antigas no catálogo sem alterar o texto salvo no banco. */
+/** Preserva o padrão editorial cadastrado: parágrafos e uma especificação por linha. */
 const formatDescriptionForDisplay = (value: unknown) => {
-  let text = String(value || '').replace(/\r\n?/g, '\n').trim();
-  const wasTruncated = /\.{2,}\s*$/.test(text);
-  text = text.replace(/\.{2,}\s*$/, '').trim();
-  if (wasTruncated) {
-    const lastCompleteSentence = text.lastIndexOf('.');
-    text = lastCompleteSentence >= 0 ? text.slice(0, lastCompleteSentence + 1).trim() : '';
-  }
-  text = text.split('\n').map(line => line.replace(/[ \t]+/g, ' ').trim()).filter(Boolean).join('\n').trim();
-
-  // Descrições antigas chegaram como um único bloco; quebra após cada 2 frases.
-  if (!text.includes('\n') && text.length > 260) {
-    const sentences = text.match(/[^.!?]+[.!?]+(?=\s|$)/g);
-    if (sentences && sentences.length >= 4) {
-      const paragraphs: string[] = [];
-      for (let i = 0; i < sentences.length; i += 2) paragraphs.push(sentences.slice(i, i + 2).join(' ').trim());
-      text = paragraphs.join('\n\n');
-    }
-  }
-  return text;
+  const text = String(value || '').replace(/\r\n?/g, '\n').trim();
+  return text
+    .split('\n')
+    .map(line => line.replace(/[ \t]+/g, ' ').trimEnd())
+    .join('\n')
+    .trim();
 };
 
 // ============================================================
