@@ -27,6 +27,23 @@ interface CatalogItem {
   variations?: any;
 }
 
+/** A mesma chave tolerante usada no catálogo para comparar nomes de produtos. */
+function productMatchKey(value: string | null | undefined): string {
+  const normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  return normalized.split(/\s+/).filter(Boolean).sort().join(' ');
+}
+
+function positiveNumber(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 export async function catalog(req: Request, body?: any): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   
@@ -171,16 +188,52 @@ Regras:
     }
 
     let skipped = 0;
+    const skippedProducts: string[] = [];
+    const matchedProducts: string[] = [];
     const priceTypes = payload.priceType === 'both' ? ['cost', 'resale'] : [payload.priceType || 'resale'];
+
+    // O painel do fornecedor nunca cria produtos: somente o catálogo oficial
+    // da loja é fonte de verdade para os itens que podem ser atualizados.
+    const { data: catalogProducts, error: catalogError } = await admin
+      .from('products')
+      .select('id, name, price')
+      .eq('tenant_id', targetTenantId);
+    if (catalogError) return json({ error: 'catalog_products_query_failed', detail: catalogError.message }, 500);
+    const productsByKey = new Map<string, any>();
+    for (const product of catalogProducts || []) {
+      const key = productMatchKey(product.name);
+      if (key && !productsByKey.has(key)) productsByKey.set(key, product);
+    }
+    const catalogIds = [...productsByKey.values()].map((p: any) => p.id);
+    const { data: existingVariants } = catalogIds.length
+      ? await admin.from('product_variants').select('*').in('product_id', catalogIds)
+      : { data: [] as any[] };
+    const variantsByProduct = new Map<string, any[]>();
+    for (const variant of existingVariants || []) {
+      const list = variantsByProduct.get(variant.product_id) || [];
+      list.push(variant);
+      variantsByProduct.set(variant.product_id, list);
+    }
 
     const results = [];
     for (const it of items) {
-      const name = String(it.name || it.product_name || "").trim().toLowerCase();
+      const sourceName = String(it.name || it.product_name || "").trim();
+      const name = sourceName.toLowerCase();
+      const catalogProduct = productsByKey.get(productMatchKey(sourceName));
+      if (!catalogProduct) {
+        skipped++;
+        if (sourceName) skippedProducts.push(sourceName);
+        continue;
+      }
       const variants = Array.isArray(it.variants) ? it.variants : [];
-      const variantPrices = variants.map((v: any) => Number(v.price ?? v.cost_price ?? v.resale_price)).filter((v: number) => Number.isFinite(v) && v > 0);
-      const cost = Number(it.cost_price ?? NaN);
-      const resale = Number(it.resale_price ?? NaN);
-      const newPrice = priceTypes.includes('cost') ? (Number.isFinite(cost) && cost > 0 ? cost : Math.min(...variantPrices, Number(it.price ?? it.unit_price ?? it.preco ?? Infinity))) : (Number.isFinite(resale) && resale > 0 ? resale : Number(it.price ?? it.unit_price ?? it.preco ?? Math.min(...variantPrices)));
+      const variantPrices = variants.map((v: any) => positiveNumber(v.price ?? v.cost_price ?? v.resale_price)).filter(Boolean);
+      const cost = positiveNumber(it.cost_price);
+      const resale = positiveNumber(it.resale_price);
+      const generic = positiveNumber(it.price ?? it.unit_price ?? it.preco);
+      const fallback = variantPrices.length ? Math.min(...variantPrices) : generic;
+      const effectiveCost = cost || fallback;
+      const effectiveResale = resale || generic || fallback;
+      const newPrice = priceTypes.includes('cost') ? effectiveCost : effectiveResale;
       if (!name || !Number.isFinite(newPrice) || newPrice <= 0) {
         skipped++;
         continue;
@@ -189,34 +242,74 @@ Regras:
       // Busca produto real para ver margem se for custo
       let marginAlert = null;
       if (priceTypes.includes('cost')) {
-        const { data: prod } = await admin.from('products').select('id, price').eq('tenant_id', targetTenantId).ilike('name', name).maybeSingle();
-        if (prod && prod.price > 0) {
-          const margin = ((prod.price - newPrice) / prod.price) * 100;
-          if (margin < 10) marginAlert = `Margem crítica: ${margin.toFixed(0)}% (Venda: R$${prod.price})`;
+        if (catalogProduct.price > 0) {
+          const margin = ((catalogProduct.price - newPrice) / catalogProduct.price) * 100;
+          if (margin < 10) marginAlert = `Margem crítica: ${margin.toFixed(0)}% (Venda: R$${catalogProduct.price})`;
         }
       }
 
       const { error } = await admin.from("supplier_product_prices").upsert(
         {
           supplier_id: targetSupplierId,
-          product_name: name,
+          product_name: String(catalogProduct.name).toLowerCase(),
           unit_price: newPrice,
           available: it.available ?? it.disponivel ?? true,
           description: it.description || null,
           variations: variants.length ? variants : (it.variations || null),
-          price_types: priceTypes
+          price_types: priceTypes,
+          metadata: {
+            cost_price: effectiveCost || null,
+            resale_price: effectiveResale || null,
+            source_name: sourceName,
+          },
         },
         { onConflict: "supplier_id,product_name" }
       );
       
       if (error) {
         skipped++;
-      } else if (marginAlert) {
-        results.push({ name: it.name, alert: marginAlert });
+      } else {
+        matchedProducts.push(String(catalogProduct.name));
+        // Se a linha informa cores, ela substitui exatamente as variações
+        // atuais. Assim, cores que saíram do fornecedor deixam de aparecer.
+        if (variants.length > 0) {
+          const current = variantsByProduct.get(catalogProduct.id) || [];
+          const incomingNames = new Set<string>();
+          for (let i = 0; i < variants.length; i++) {
+            const incoming: any = variants[i];
+            const variantName = String(incoming.name || '').trim();
+            if (!variantName) continue;
+            const variantKey = variantName.toLocaleLowerCase('pt-BR');
+            incomingNames.add(variantKey);
+            const variantCost = positiveNumber(incoming.cost_price) || effectiveCost || positiveNumber(incoming.price);
+            const variantResale = positiveNumber(incoming.resale_price) || effectiveResale || positiveNumber(incoming.price);
+            const selectedVariantPrice = priceTypes.includes('cost') ? variantCost : variantResale;
+            const old = current.find((v: any) => String(v.name).trim().toLocaleLowerCase('pt-BR') === variantKey);
+            const row = {
+              product_id: catalogProduct.id,
+              tenant_id: targetTenantId,
+              name: variantName,
+              price_delta: selectedVariantPrice - Number(catalogProduct.price || 0),
+              cost_price: variantCost || null,
+              suggested_price: variantResale || selectedVariantPrice,
+              needs_price_review: false,
+              price_source: 'supplier_catalog',
+              in_stock: incoming.available ?? incoming.disponivel ?? true,
+              sort_order: i,
+            };
+            if (old) await admin.from('product_variants').update(row).eq('id', old.id);
+            else await admin.from('product_variants').insert(row);
+          }
+          const staleIds = current
+            .filter((v: any) => !incomingNames.has(String(v.name).trim().toLocaleLowerCase('pt-BR')))
+            .map((v: any) => v.id);
+          if (staleIds.length) await admin.from('product_variants').delete().in('id', staleIds);
+        }
+        if (marginAlert) results.push({ name: it.name, alert: marginAlert });
       }
     }
 
-    return json({ total: items.length, skipped, warnings, alerts: results.slice(0, 20), items: items.slice(0, 100), products: items.slice(0, 100) });
+    return json({ total: items.length, updated: matchedProducts.length, skipped, skippedProducts: skippedProducts.slice(0, 100), matchedProducts: matchedProducts.slice(0, 100), warnings, alerts: results.slice(0, 20), items: items.slice(0, 100), products: items.slice(0, 100) });
 
   } catch (e) {
     console.error("[catalog] error", e);

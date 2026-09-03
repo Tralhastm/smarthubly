@@ -625,9 +625,6 @@ const SupplierPanel = () => {
       const keys = [product.name, product.name.replace(/\s*\([^)]*\)\s*$/g, '')];
       keys.forEach(key => byName.set(normalizeSupplierProductName(key).replace(/\bsansung\b/g, 'samsung'), product));
     });
-    const { data: categoryNodes } = await (supabase as any).from('product_categories').select('id, name, parent_id').eq('tenant_id', supplier.tenant_id).limit(200);
-    const normalizedCategory = (value: string) => normalizeProductName(value).replace(/[·•]/g, '').replace(/\s+/g, ' ').trim();
-    const rootCategory = (categoryNodes || []).find((node: any) => !node.parent_id && normalizedCategory(node.name) === 'celulares');
     const updated: string[] = [];
     const notFound: string[] = [];
     const invalid: string[] = [];
@@ -644,21 +641,16 @@ const SupplierPanel = () => {
           invalid.push(`${entry.name} (não contém ${expected})`);
           continue;
         }
-        const category = inferProductCategory(entry.name);
-        if (category) {
-          const brandNode = (categoryNodes || []).find((node: any) => node.parent_id === rootCategory?.id && normalizedCategory(node.name) === normalizedCategory(category));
-          patch.category = rootCategory?.name || 'Celulares';
-          patch.subcategory = brandNode?.name || category;
-          patch.subcategory_ids = rootCategory ? [rootCategory.id, ...(brandNode ? [brandNode.id] : [])] : null;
-        }
         const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
         if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
-        if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) {
+        if (entry.cost != null || entry.resale != null) {
           const { error: priceError } = await (supabase as any).from('supplier_product_prices').upsert({
             supplier_id: supplier.id,
             product_name: product.name.trim().toLowerCase(),
-            unit_price: entry.cost,
+            unit_price: priceUpdateMode === 'resale' ? (entry.resale ?? entry.cost) : (entry.cost ?? entry.resale),
             available: true,
+            price_types: priceUpdateMode === 'both' ? ['cost', 'resale'] : [priceUpdateMode],
+            metadata: { cost_price: entry.cost, resale_price: entry.resale },
           }, { onConflict: 'supplier_id,product_name' });
           // A tabela de comparação é auxiliar: não deve fazer a atualização do produto parecer falha.
           if (priceError) warnings.push(`${entry.name} (comparação não atualizada: ${priceError.message})`);
@@ -669,12 +661,28 @@ const SupplierPanel = () => {
           if (variantsReadError) {
             warnings.push(`${entry.name} (cores não atualizadas: ${variantsReadError.message})`);
           } else {
-            const existingNames = new Set((existingVariants || []).map((variant: any) => normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, ''))));
+            const incomingNames = new Set<string>();
             for (const color of entry.colors) {
-              if (existingNames.has(normalizeProductName(color))) continue;
-              const { error: variantError } = await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, name: color, price_delta: 0, in_stock: true });
+              const normalizedColor = normalizeProductName(color);
+              incomingNames.add(normalizedColor);
+              const old = (existingVariants || []).find((variant: any) => normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, '')) === normalizedColor);
+              const variantPatch: Record<string, any> = { in_stock: true };
+              if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) variantPatch.cost_price = entry.cost;
+              if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) {
+                variantPatch.suggested_price = entry.resale;
+                variantPatch.price_delta = entry.resale - Number(product.price || 0);
+              }
+              const { error: variantError } = old
+                ? await (supabase as any).from('product_variants').update(variantPatch).eq('id', old.id)
+                : await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, name: color, price_delta: priceUpdateMode === 'resale' && entry.resale != null ? entry.resale - Number(product.price || 0) : 0, cost_price: priceUpdateMode !== 'resale' ? entry.cost : null, suggested_price: priceUpdateMode !== 'cost' ? entry.resale : null, in_stock: true, sort_order: entry.colors.indexOf(color) });
               if (variantError) warnings.push(`${entry.name} (cor ${color} não atualizada: ${variantError.message})`);
-              else existingNames.add(normalizeProductName(color));
+            }
+            const staleIds = (existingVariants || [])
+              .filter((variant: any) => !incomingNames.has(normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, ''))))
+              .map((variant: any) => variant.id);
+            if (staleIds.length) {
+              const { error: deleteError } = await (supabase as any).from('product_variants').delete().in('id', staleIds);
+              if (deleteError) warnings.push(`${entry.name} (cores antigas não removidas: ${deleteError.message})`);
             }
           }
         }
