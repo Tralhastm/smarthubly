@@ -57,7 +57,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
         )}
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{product.category}</span>
         <h3 className="font-heading text-lg mt-1 text-foreground">{product.name}</h3>
-        <ExpandableProductDescription value={desc} className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
+        <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
         <div className="mt-auto flex items-center justify-between gap-3 pt-4">
           <div className="min-w-0">
             <span className="block text-xl font-bold text-primary">R${displayPrice.toFixed(2)}</span>
@@ -109,7 +109,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
             <span className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-medium text-destructive-foreground shrink-0">Esgotado</span>
           )}
         </div>
-        <ExpandableProductDescription value={desc} className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
+        <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-end justify-between mt-auto gap-3 pt-2">
           <span className="text-lg font-bold text-primary whitespace-nowrap">R${displayPrice.toFixed(2)}</span>
           <div className="flex items-center gap-1.5">
@@ -145,7 +145,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, onOpen
           <div className="flex-1 border-b border-dashed border-border/60 self-end mb-1.5" />
           <span className="text-base font-bold text-primary shrink-0">R${displayPrice.toFixed(2)}</span>
         </div>
-        <ExpandableProductDescription value={desc} className="whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground" />
+        <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-center gap-2 mt-1.5">
           {!product.in_stock ? (
             <span className="text-[10px] text-destructive">Esgotado</span>

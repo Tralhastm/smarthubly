@@ -7,9 +7,10 @@ const PREVIEW_CHARS = 280;
 type ExpandableProductDescriptionProps = {
   value: unknown;
   className?: string;
+  onOpenDetails?: () => void;
 };
 
-export const ExpandableProductDescription = ({ value, className = '' }: ExpandableProductDescriptionProps) => {
+export const ExpandableProductDescription = ({ value, className = '', onOpenDetails }: ExpandableProductDescriptionProps) => {
   const description = normalizeProductDescription(value);
   const [expanded, setExpanded] = useState(false);
 
@@ -27,12 +28,13 @@ export const ExpandableProductDescription = ({ value, className = '' }: Expandab
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          setExpanded(current => !current);
+          if (onOpenDetails) onOpenDetails();
+          else setExpanded(current => !current);
         }}
         className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
         aria-expanded={expanded}
       >
-        {expanded ? 'Ver menos' : 'Ver mais'}
+        {onOpenDetails ? 'Ver mais' : expanded ? 'Ver menos' : 'Ver mais'}
         <ChevronDown className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </button>
     </div>
