@@ -25,8 +25,25 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
     return v === null ? true : v === "1";
   });
   const [lastAutoTick, setLastAutoTick] = useState<Date | null>(null);
+  const [asaasEnabled, setAsaasEnabled] = useState(false);
+  const [asaasEnvironment, setAsaasEnvironment] = useState<'sandbox' | 'production'>('sandbox');
+  const [asaasSandboxToken, setAsaasSandboxToken] = useState('');
+  const [asaasProductionToken, setAsaasProductionToken] = useState('');
+  const [asaasWebhookToken, setAsaasWebhookToken] = useState('');
+  const [showAsaasTokens, setShowAsaasTokens] = useState(false);
 
   // Número de falhas consecutivas do tick antes de pausar o autoSync (5s * 24 = 2 min)
+
+  useEffect(() => {
+    supabase.from('tenants').select('asaas_enabled,asaas_environment,asaas_sandbox_token,asaas_production_token,asaas_webhook_token').eq('id', tenantId).single().then(({ data }) => {
+      if (!data) return;
+      setAsaasEnabled((data as any).asaas_enabled ?? false);
+      setAsaasEnvironment(((data as any).asaas_environment as any) || 'sandbox');
+      setAsaasSandboxToken((data as any).asaas_sandbox_token || '');
+      setAsaasProductionToken((data as any).asaas_production_token || '');
+      setAsaasWebhookToken((data as any).asaas_webhook_token || '');
+    });
+  }, [tenantId]);
 
   useEffect(() => {
     if (settings) {
@@ -153,6 +170,18 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
     settings?.last_sync_at,
     tenantId,
   ]);
+
+  const saveAsaas = async () => {
+    const { error } = await supabase.from('tenants').update({
+      asaas_enabled: asaasEnabled,
+      asaas_environment: asaasEnvironment,
+      asaas_sandbox_token: asaasSandboxToken.trim() || null,
+      asaas_production_token: asaasProductionToken.trim() || null,
+      asaas_webhook_token: asaasWebhookToken.trim() || null,
+    } as any).eq('id', tenantId);
+    if (error) toast({ title: 'Erro ao salvar Asaas', description: error.message, variant: 'destructive' });
+    else toast({ title: 'Asaas salvo', description: 'As credenciais foram atualizadas com segurança.' });
+  };
 
   const save = async () => {
     try {
@@ -318,6 +347,20 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
             </p>
           )}
         </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary" /><h3 className="font-semibold">Asaas — pagamentos</h3></div>
+        <p className="text-sm text-muted-foreground">Cole os tokens da sua conta Asaas. O token usado pelo sistema muda conforme o ambiente selecionado.</p>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={asaasEnabled} onChange={e => setAsaasEnabled(e.target.checked)} className="h-4 w-4" /> Ativar Asaas nesta loja</label>
+        <div><label className="text-xs font-medium text-muted-foreground">Ambiente</label><select value={asaasEnvironment} onChange={e => setAsaasEnvironment(e.target.value as any)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"><option value="sandbox">Sandbox / homologação</option><option value="production">Produção</option></select></div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="text-xs font-medium text-muted-foreground">Token Sandbox<input type={showAsaasTokens ? 'text' : 'password'} value={asaasSandboxToken} onChange={e => setAsaasSandboxToken(e.target.value)} placeholder="$aact_hmlg_..." className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono" /></label>
+          <label className="text-xs font-medium text-muted-foreground">Token Produção<input type={showAsaasTokens ? 'text' : 'password'} value={asaasProductionToken} onChange={e => setAsaasProductionToken(e.target.value)} placeholder="$aact_..." className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono" /></label>
+        </div>
+        <label className="text-xs font-medium text-muted-foreground">Token de autenticação do webhook<input type={showAsaasTokens ? 'text' : 'password'} value={asaasWebhookToken} onChange={e => setAsaasWebhookToken(e.target.value)} placeholder="Token definido em Configurações → Webhooks no Asaas" className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono" /></label>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setShowAsaasTokens(v => !v)} className="rounded-md border border-border px-3 py-2 text-sm">{showAsaasTokens ? 'Ocultar tokens' : 'Mostrar tokens'}</button><button type="button" onClick={saveAsaas} className="rounded-md gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground">Salvar Asaas</button></div>
+        <p className="text-xs text-muted-foreground">Webhook: <code>{`${import.meta.env.VITE_SUPABASE_URL || ''}/functions/v1/asaas-webhook`}</code></p>
       </div>
 
       {settings?.last_sync_at && (
