@@ -190,7 +190,7 @@ const Card = ({ product, tenantId, tenantSlug, index, onOpen }: {
           <NetworkBadge net={network} />
         </div>
         <h3 className="font-heading text-base text-foreground line-clamp-2">{product.name}</h3>
-        {product.description && <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{product.description}</p>}
+        {product.description && <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{product.description}</p>}
         {coupon && <CouponBadge coupon={coupon} />}
         <div className="mt-auto flex items-end justify-between gap-3 pt-4">
           <PriceBlock product={product} coupon={coupon} />

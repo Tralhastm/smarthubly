@@ -57,7 +57,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{product.category}</span>
         <h3 className="font-heading text-lg mt-1 text-foreground">{product.name}</h3>
         {desc && (
-          <p className="mt-1 line-clamp-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{desc}</p>
+          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{desc}</p>
         )}
         {isLongDesc && onOpenDetails && (
           <button type="button" onClick={(e) => { e.stopPropagation(); onOpenDetails(product); }}
@@ -117,7 +117,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
           )}
         </div>
         {desc && (
-          <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{desc}</p>
+          <p className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{desc}</p>
         )}
         <div className="flex items-end justify-between mt-auto gap-3 pt-2">
           <span className="text-lg font-bold text-primary whitespace-nowrap">R${displayPrice.toFixed(2)}</span>
@@ -155,7 +155,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, onOpen
           <span className="text-base font-bold text-primary shrink-0">R${displayPrice.toFixed(2)}</span>
         </div>
         {desc && (
-          <p className="line-clamp-2 whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground">{desc}</p>
+          <p className="whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground">{desc}</p>
         )}
         <div className="flex items-center gap-2 mt-1.5">
           {!product.in_stock ? (
