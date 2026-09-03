@@ -65,7 +65,11 @@ serve(async (req) => {
     if (asaasActive) {
       const asaasBase = tenant.asaas_environment === "production" ? "https://api.asaas.com" : "https://api-sandbox.asaas.com";
       const asaasHeaders = { access_token: String(asaasToken), "Content-Type": "application/json", Accept: "application/json" };
-      const customerBody: any = { name: String(order.customer_name || "Cliente").slice(0, 100), externalReference: order_id };
+      const customerDocument = String(order.customer_document || '').replace(/\D/g, '');
+      if (customerDocument.length !== 11 && customerDocument.length !== 14) {
+        return new Response(JSON.stringify({ error: "Informe um CPF ou CNPJ válido para pagar pelo Asaas" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const customerBody: any = { name: String(order.customer_name || "Cliente").slice(0, 100), cpfCnpj: customerDocument, externalReference: order_id };
       if (order.customer_email) customerBody.email = String(order.customer_email).slice(0, 100);
       if (order.customer_phone) customerBody.mobilePhone = String(order.customer_phone).replace(/\\D/g, "").slice(0, 11);
       const customerRes = await fetch(`${asaasBase}/v3/customers`, { method: "POST", headers: asaasHeaders, body: JSON.stringify(customerBody) });

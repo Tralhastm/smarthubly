@@ -65,6 +65,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const [changeFor, setChangeFor] = useState('');
   // Pagamento online (MercadoPago ou PagBank) — flag derivada da view pública (não expõe o token).
   const isInfinitePay = (tenant as any)?.payment_provider === 'infinitepay' && (tenant as any)?.infinitepay_enabled !== false;
+  const isAsaasActive = (tenant as any)?.payment_provider === 'asaas' && (tenant as any)?.asaas_enabled === true;
   const hasOnlinePayment = !isWhatsAppMode && !!((tenant as any).has_online_payment ?? (tenant as any).mercadopago_token ?? (tenant as any).pagbank_token ?? ((tenant as any).infinitepay_handle && (tenant as any).infinitepay_enabled));
 
   
@@ -77,14 +78,17 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const [email, setEmail] = useState(() => {
     try { return JSON.parse(localStorage.getItem('lastCustomer:' + tenant.slug) || '{}')?.email || ''; } catch { return ''; }
   });
+  const [documentNumber, setDocumentNumber] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('lastCustomer:' + tenant.slug) || '{}')?.documentNumber || ''; } catch { return ''; }
+  });
   const [address, setAddress] = useState(() => {
     try { return JSON.parse(localStorage.getItem('lastCustomer:' + tenant.slug) || '{}')?.address || ''; } catch { return ''; }
   });
   // Persiste os dados do cliente a cada alteração (lembrar dados do checkout)
   useEffect(() => {
-    if (!name && !phone && !email && !address) return;
-    try { localStorage.setItem('lastCustomer:' + tenant.slug, JSON.stringify({ name, phone, email, address })); } catch { /* ignore */ }
-  }, [name, phone, email, address, tenant.slug]);
+    if (!name && !phone && !email && !documentNumber && !address) return;
+    try { localStorage.setItem('lastCustomer:' + tenant.slug, JSON.stringify({ name, phone, email, documentNumber, address })); } catch { /* ignore */ }
+  }, [name, phone, email, documentNumber, address, tenant.slug]);
   const requireEmail = !!(tenant as any).require_customer_email;
   const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
@@ -610,6 +614,13 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       toast({ title: 'Telefone inválido', description: 'Digite o telefone com DDD. Ex: (31) 99999-9999', variant: 'destructive' });
       return;
     }
+    if (isAsaasActive) {
+      const documentDigits = documentNumber.replace(/\D/g, '');
+      if (documentDigits.length !== 11 && documentDigits.length !== 14) {
+        toast({ title: 'CPF/CNPJ obrigatório', description: 'O Asaas exige um CPF ou CNPJ válido para gerar a cobrança.', variant: 'destructive' });
+        return;
+      }
+    }
     if (requireEmail) {
       const emailTrim = email.trim();
       if (!emailTrim || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
@@ -746,6 +757,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           customer_name: name,
           customer_phone: phone.replace(/\D/g, ''),
           customer_email: email.trim() || null,
+          customer_document: documentNumber.replace(/\D/g, '') || null,
           customer_address: address,
           status: initialStatus,
           distance: distance ?? 0,
@@ -992,6 +1004,11 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     <label className="text-sm font-medium text-foreground">Telefone</label>
                     <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full mt-1 rounded-lg border border-border bg-secondary px-3 py-2 text-foreground text-sm" placeholder="(00) 00000-0000" />
                   </div>
+                  {isAsaasActive && <div>
+                    <label className="text-sm font-medium text-foreground">CPF/CNPJ <span className="text-destructive">*</span></label>
+                    <input value={documentNumber} onChange={e => setDocumentNumber(e.target.value)} className="w-full mt-1 rounded-lg border border-border bg-secondary px-3 py-2 text-foreground text-sm" placeholder="000.000.000-00" inputMode="numeric" />
+                    <p className="mt-1 text-xs text-muted-foreground">Necessário para gerar a cobrança no Asaas.</p>
+                  </div>}
                   <div>
                     <label className="text-sm font-medium text-foreground">
                       E-mail {requireEmail ? <span className="text-destructive">*</span> : <span className="text-muted-foreground text-xs">(opcional — receba atualizações do pedido)</span>}
