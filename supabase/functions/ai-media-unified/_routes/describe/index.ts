@@ -97,7 +97,7 @@ async function tryGoogle(prompt: string, keys: ApiKeyEntry[], supabase: any, res
               { role: "user", parts: [{ text: prompt }] },
             ],
             ...(researchWeb ? { tools: [{ google_search: {} }] } : {}),
-            generationConfig: { temperature: 0.2, maxOutputTokens: 1800 },
+            generationConfig: { temperature: 0.2, maxOutputTokens: 3000 },
           }),
         }
       );
@@ -126,7 +126,7 @@ async function tryLovable(prompt: string): Promise<string | null> {
         model: "google/gemini-2.5-flash",
         messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }],
         temperature: 0.2,
-        max_tokens: 1800,
+        max_tokens: 3000,
       }),
     });
     if (!r.ok) return null;
@@ -147,7 +147,7 @@ async function tryOpenRouter(prompt: string): Promise<string | null> {
         model: "google/gemini-2.0-flash-exp:free",
         messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: prompt }],
         temperature: 0.2,
-        max_tokens: 1800,
+        max_tokens: 3000,
       }),
     });
     if (!r.ok) return null;
