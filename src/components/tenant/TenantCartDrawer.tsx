@@ -590,6 +590,12 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   }, [items, tenant, isDropshipping]);
 
   const submitOrder = async (viaWhatsApp: boolean, payOnline = false, simulateApproved = false, waAlreadySent = false) => {
+    // Alguns autofills/navegadores alteram o input controlado sem disparar o evento React.
+    // Leia o campo no envio para garantir que o CPF/CNPJ seja persistido no pedido.
+    const documentInput = typeof document !== 'undefined'
+      ? document.querySelector<HTMLInputElement>('input[placeholder="000.000.000-00"]')
+      : null;
+    const submittedDocumentNumber = documentNumber || documentInput?.value || '';
     if (deliveryType === 'delivery' && checkingDelivery) {
       toast({ title: 'Aguarde o cálculo do frete', description: 'Estamos validando a disponibilidade de motoboys para calcular o valor correto.', variant: 'destructive' });
       return;
@@ -615,7 +621,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       return;
     }
     if (isAsaasActive) {
-      const documentDigits = documentNumber.replace(/\D/g, '');
+      const documentDigits = submittedDocumentNumber.replace(/\D/g, '');
       if (documentDigits.length !== 11 && documentDigits.length !== 14) {
         toast({ title: 'CPF/CNPJ obrigatório', description: 'O Asaas exige um CPF ou CNPJ válido para gerar a cobrança.', variant: 'destructive' });
         return;
@@ -757,7 +763,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           customer_name: name,
           customer_phone: phone.replace(/\D/g, ''),
           customer_email: email.trim() || null,
-          customer_document: documentNumber.replace(/\D/g, '') || null,
+          customer_document: submittedDocumentNumber.replace(/\D/g, '') || null,
           customer_address: address,
           status: initialStatus,
           distance: distance ?? 0,
