@@ -10,6 +10,7 @@ import MediaCarousel from '@/components/shared/MediaCarousel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getItemCTA } from '@/lib/niche-labels';
 import { normalizeProductDescription } from '@/lib/product-description';
+import { ExpandableProductDescription } from './ExpandableProductDescription';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
 
@@ -36,7 +37,6 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
   const cta = getItemCTA(product as any, niche);
   const Icon = isService ? Calendar : ShoppingCart;
   const desc = formatDescriptionForDisplay(product.description);
-  const isLongDesc = desc.length > 90;
   return (
     <div className="animate-fade-in" style={{ animationDelay: `${Math.min(index, 8) * 50}ms` }}>
       <div className="group relative flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card p-4 hover-glow transition-all duration-300 hover:border-primary/30">
@@ -57,15 +57,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
         )}
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{product.category}</span>
         <h3 className="font-heading text-lg mt-1 text-foreground">{product.name}</h3>
-        {desc && (
-          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{desc}</p>
-        )}
-        {isLongDesc && onOpenDetails && (
-          <button type="button" onClick={(e) => { e.stopPropagation(); onOpenDetails(product); }}
-            className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
-            Ver detalhes <ChevronDown className="h-3 w-3 -rotate-90" />
-          </button>
-        )}
+        <ExpandableProductDescription value={desc} className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
         <div className="mt-auto flex items-center justify-between gap-3 pt-4">
           <div className="min-w-0">
             <span className="block text-xl font-bold text-primary">R${displayPrice.toFixed(2)}</span>
@@ -117,9 +109,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
             <span className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-medium text-destructive-foreground shrink-0">Esgotado</span>
           )}
         </div>
-        {desc && (
-          <p className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{desc}</p>
-        )}
+        <ExpandableProductDescription value={desc} className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-end justify-between mt-auto gap-3 pt-2">
           <span className="text-lg font-bold text-primary whitespace-nowrap">R${displayPrice.toFixed(2)}</span>
           <div className="flex items-center gap-1.5">
@@ -155,9 +145,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, onOpen
           <div className="flex-1 border-b border-dashed border-border/60 self-end mb-1.5" />
           <span className="text-base font-bold text-primary shrink-0">R${displayPrice.toFixed(2)}</span>
         </div>
-        {desc && (
-          <p className="whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground">{desc}</p>
-        )}
+        <ExpandableProductDescription value={desc} className="whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-center gap-2 mt-1.5">
           {!product.in_stock ? (
             <span className="text-[10px] text-destructive">Esgotado</span>
