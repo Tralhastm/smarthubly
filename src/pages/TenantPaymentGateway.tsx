@@ -212,6 +212,7 @@ const TenantPaymentGateway = () => {
             <p className="font-semibold">Pague com Pix pelo Asaas</p>
             {asaasPixImage && <img src={asaasPixImage} alt="QR Code Pix" className="mx-auto h-56 w-56" />}
             <div className="flex gap-2"><input readOnly value={asaasPixCode} className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs font-mono" /><button onClick={() => { navigator.clipboard.writeText(asaasPixCode); toast({ title: 'Pix copiado' }); }} className="rounded-md border border-border px-3"><Copy className="h-4 w-4" /></button></div>
+            {initPoint && <a href={initPoint} target="_blank" rel="noreferrer" className="block w-full rounded-lg gradient-primary py-3 text-center text-sm font-bold text-primary-foreground">Pagar com cartão ou escolher outra forma</a>}
             <p className="text-xs text-muted-foreground">Após pagar, permaneça nesta tela. O pedido será confirmado automaticamente pelo webhook.</p>
           </div>
         ) : (
