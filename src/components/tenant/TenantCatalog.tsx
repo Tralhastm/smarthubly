@@ -9,6 +9,7 @@ import ProductOptionsPicker from './ProductOptionsPicker';
 import MediaCarousel from '@/components/shared/MediaCarousel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getItemCTA } from '@/lib/niche-labels';
+import { normalizeProductDescription } from '@/lib/product-description';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
 
@@ -19,7 +20,7 @@ const isAiGeneratedImage = (url: string) => {
 
 /** Preserva o padrão editorial cadastrado: parágrafos e uma especificação por linha. */
 const formatDescriptionForDisplay = (value: unknown) => {
-  const text = String(value || '').replace(/\r\n?/g, '\n').trim();
+  const text = normalizeProductDescription(value);
   return text
     .split('\n')
     .map(line => line.replace(/[ \t]+/g, ' ').trimEnd())

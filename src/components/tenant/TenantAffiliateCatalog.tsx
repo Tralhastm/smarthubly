@@ -4,6 +4,7 @@ import { Search, ExternalLink, Heart, Package, Loader2, X, Copy, Clock, Check } 
 import { Skeleton } from '@/components/ui/skeleton';
 import { saveProduct, trackAffiliateClick } from '@/lib/affiliate';
 import { toast } from 'sonner';
+import { normalizeProductDescription } from '@/lib/product-description';
 
 const NETWORK_LABELS: Record<string, string> = {
   shopee: 'Shopee', amazon: 'Amazon', mercadolivre: 'Mercado Livre',
@@ -190,7 +191,7 @@ const Card = ({ product, tenantId, tenantSlug, index, onOpen }: {
           <NetworkBadge net={network} />
         </div>
         <h3 className="font-heading text-base text-foreground line-clamp-2">{product.name}</h3>
-        {product.description && <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{product.description}</p>}
+        {product.description && <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">{normalizeProductDescription(product.description)}</p>}
         {coupon && <CouponBadge coupon={coupon} />}
         <div className="mt-auto flex items-end justify-between gap-3 pt-4">
           <PriceBlock product={product} coupon={coupon} />
@@ -274,7 +275,7 @@ const ProductDetailModal = ({ product, tenantId, tenantSlug, onClose }: {
           <h2 className="font-heading text-2xl text-foreground mb-3">{product.name}</h2>
           {product.description && (
             <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed mb-4">
-              {product.description}
+              {normalizeProductDescription(product.description)}
             </p>
           )}
           {coupon && <CouponBadge coupon={coupon} />}
