@@ -31,6 +31,22 @@ const DEFAULT_BULK_DESCRIPTION_RULES = `Siga obrigatoriamente este formato edito
 
 Use somente especificações confirmadas por pesquisa ou fornecidas no cadastro. Não invente informações, não mencione nota fiscal e não inclua seções extras. Preserve as quebras de linha no texto final.`;
 
+const COMPLETE_GUARANTEE = 'Garantia de 30 dias contra defeitos de funcionamento. Não cobre quedas, quebras, mau uso, danos físicos, contato inadequado com líquidos ou alterações no aparelho.';
+
+// Alguns provedores podem devolver a última linha com reticências mesmo quando
+// o restante da descrição está completo. Nunca deixa esse texto truncado chegar
+// ao formulário ou ao banco: recompõe a garantia padronizada do catálogo.
+const normalizeGeneratedDescription = (value: unknown) => {
+  const description = String(value ?? '').replace(/\r\n?/g, '\n').trim();
+  if (!description) return '';
+
+  const guaranteeStart = description.search(/Garantia de 30 dias contra defeitos de funcion(?:amento)?/i);
+  const body = (guaranteeStart >= 0 ? description.slice(0, guaranteeStart) : description)
+    .replace(/\.{2,}\s*$/g, '')
+    .trim();
+  return body ? `${body}\n\n${COMPLETE_GUARANTEE}` : COMPLETE_GUARANTEE;
+};
+
 const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenantId: string; isDropshipping?: boolean; isAffiliate?: boolean }) => {
   const { data: products = [], isLoading, refetch } = useProducts(tenantId);
   const queryClient = useQueryClient();
@@ -177,7 +193,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             researchWeb: true,
           });
           if (error || data?.error || !data?.description) throw new Error(data?.error || error?.message || 'Descrição não gerada');
-          const { error: updateError } = await supabase.from('products').update({ description: data.description }).eq('id', product.id);
+          const description = normalizeGeneratedDescription(data.description);
+          const { error: updateError } = await supabase.from('products').update({ description }).eq('id', product.id);
           if (updateError) throw updateError;
           done++;
         } catch (e) {
@@ -1493,7 +1510,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
       if (error) throw error;
       if (data?.error) { toast.error(data.error); return; }
       if (data?.description) {
-        setForm(f => ({ ...f, description: data.description }));
+        setForm(f => ({ ...f, description: normalizeGeneratedDescription(data.description) }));
         toast.success('Descrição gerada!');
       }
     } catch (e: any) {
