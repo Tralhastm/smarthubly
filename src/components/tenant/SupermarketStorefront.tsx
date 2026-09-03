@@ -593,7 +593,10 @@ const ProductCard = ({
     style={{ border: `1px solid ${dark}14` }}
     onClick={() => onDetails(p)}
   >
-    <div className="relative mb-3 flex aspect-square items-center justify-center overflow-hidden">
+    <div
+      className="relative mb-3 flex aspect-square items-center justify-center overflow-hidden"
+      onClick={() => onDetails(p)}
+    >
       <span
         className="absolute left-0 top-0 flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold"
         style={{ background: gold, color: dark }}
@@ -622,7 +625,8 @@ const ProductCard = ({
       <p className="mt-1 text-sm font-bold" style={{ color: gold }}>R$ {p.price.toFixed(2)}</p>
     )}
     <button
-      onClick={() => onDetails(p)}
+      type="button"
+      onClick={(event) => { event.stopPropagation(); onDetails(p); }}
       className="mx-auto mt-3 rounded-sm border px-4 py-2 text-[10px] font-bold uppercase tracking-wider transition hover:opacity-80 disabled:opacity-40"
       style={{ borderColor: `${dark}33`, color: dark }}
     >
