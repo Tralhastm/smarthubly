@@ -172,12 +172,17 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
   ]);
 
   const saveAsaas = async () => {
+    const sandboxToken = asaasSandboxToken.trim() || null;
+    const productionToken = asaasProductionToken.trim() || null;
+    const selectedToken = asaasEnvironment === 'production' ? productionToken : sandboxToken;
+    const asaasIsReady = asaasEnabled && !!selectedToken;
     const { error } = await supabase.from('tenants').update({
       asaas_enabled: asaasEnabled,
       asaas_environment: asaasEnvironment,
-      asaas_sandbox_token: asaasSandboxToken.trim() || null,
-      asaas_production_token: asaasProductionToken.trim() || null,
+      asaas_sandbox_token: sandboxToken,
+      asaas_production_token: productionToken,
       asaas_webhook_token: asaasWebhookToken.trim() || null,
+      payment_provider: asaasIsReady ? 'asaas' : 'mercadopago',
     } as any).eq('id', tenantId);
     if (error) toast({ title: 'Erro ao salvar Asaas', description: error.message, variant: 'destructive' });
     else toast({ title: 'Asaas salvo', description: 'As credenciais foram atualizadas com segurança.' });

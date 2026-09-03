@@ -21,6 +21,9 @@ const TenantPaymentGateway = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [orderTotal, setOrderTotal] = useState<number | null>(null);
+  const [asaasPixCode, setAsaasPixCode] = useState<string | null>(null);
+  const [asaasPixImage, setAsaasPixImage] = useState<string | null>(null);
+  const [paymentProvider, setPaymentProvider] = useState<string>('mercadopago');
 
   // 1) Cria a preferência (ou recupera o init_point se já existe)
   useEffect(() => {
@@ -34,9 +37,15 @@ const TenantPaymentGateway = () => {
         if (cancelled) return;
         const serverMsg: string | undefined =
           (data as any)?.error || (fnErr as any)?.context?.error || (fnErr as any)?.message;
-        if (fnErr || !data?.init_point) {
+        if (fnErr || (!data?.init_point && !data?.pix_qr_code)) {
           setError(serverMsg || 'Não foi possível abrir o pagamento.');
           setLoading(false);
+          return;
+        }
+        if ((data as any)?.provider === 'asaas' && (data as any)?.pix_qr_code) {
+          setPaymentProvider('asaas');
+          setAsaasPixCode(String((data as any).pix_qr_code));
+          setAsaasPixImage((data as any).pix_qr_image ? `data:image/png;base64,${(data as any).pix_qr_image}` : null);
           return;
         }
         // Força a versão web do Mercado Pago: troca o domínio mobile e força channel=web
@@ -129,7 +138,7 @@ const TenantPaymentGateway = () => {
           {orderTotal != null && (
             <p className="text-3xl font-bold text-primary">R$ {orderTotal.toFixed(2)}</p>
           )}
-          <p className="text-xs text-muted-foreground">Pagamento processado por {((tenant as any)?.payment_provider === 'pagbank') ? 'PagBank' : 'Mercado Pago'}</p>
+          <p className="text-xs text-muted-foreground">Pagamento processado por {paymentProvider === 'asaas' ? 'Asaas' : ((tenant as any)?.payment_provider === 'pagbank') ? 'PagBank' : 'Mercado Pago'}</p>
         </div>
 
         {/* GUIA — passo a passo */}
@@ -197,6 +206,14 @@ const TenantPaymentGateway = () => {
               Tentar novamente
             </button>
           </div>
+        ) : asaasPixCode ? (
+          <div className="rounded-xl border border-primary/30 bg-card p-5 space-y-4 text-center">
+            <QrCode className="mx-auto h-8 w-8 text-primary" />
+            <p className="font-semibold">Pague com Pix pelo Asaas</p>
+            {asaasPixImage && <img src={asaasPixImage} alt="QR Code Pix" className="mx-auto h-56 w-56" />}
+            <div className="flex gap-2"><input readOnly value={asaasPixCode} className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2 text-xs font-mono" /><button onClick={() => { navigator.clipboard.writeText(asaasPixCode); toast({ title: 'Pix copiado' }); }} className="rounded-md border border-border px-3"><Copy className="h-4 w-4" /></button></div>
+            <p className="text-xs text-muted-foreground">Após pagar, permaneça nesta tela. O pedido será confirmado automaticamente pelo webhook.</p>
+          </div>
         ) : (
           <>
             <button
@@ -207,7 +224,7 @@ const TenantPaymentGateway = () => {
               Ir para o pagamento
             </button>
             <p className="text-[11px] text-center text-muted-foreground">
-              Você será levado pro site seguro do Mercado Pago. Após pagar, volte para esta página — vamos confirmar tudo aqui.
+              Você será levado para o ambiente seguro do provedor. Após pagar, volte para esta página — vamos confirmar tudo aqui.
             </p>
           </>
         )}

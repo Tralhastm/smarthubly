@@ -28,7 +28,7 @@ serve(async (req) => {
 
     // Fetch tenant, order and items in parallel
     const [tenantRes, orderRes, itemsRes] = await Promise.all([
-      supabase.from("tenants").select("mercadopago_token, name, slug, payment_provider, pagbank_token, pagbank_env").eq("id", tenant_id).single(),
+      supabase.from("tenants").select("mercadopago_token, name, slug, payment_provider, pagbank_token, pagbank_env, asaas_enabled, asaas_environment, asaas_sandbox_token, asaas_production_token").eq("id", tenant_id).single(),
       supabase.from("orders").select("*").eq("id", order_id).single(),
       supabase.from("order_items").select("*").eq("order_id", order_id),
     ]);
@@ -55,6 +55,34 @@ serve(async (req) => {
     const provider = tenant.payment_provider || "mercadopago";
     const originHeader = req.headers.get("origin") || "https://snuggle-puff-joy.lovable.app";
     const storeUrlEarly = `${originHeader}/loja/${tenant.slug}`;
+
+    // ============ ASAAS PIX ROUTE ============
+    const asaasToken = tenant.asaas_environment === "production" ? tenant.asaas_production_token : tenant.asaas_sandbox_token;
+    const asaasActive = tenant.payment_provider === "asaas" && tenant.asaas_enabled === true && !!asaasToken;
+    if (tenant.payment_provider === "asaas" && !asaasActive) {
+      return new Response(JSON.stringify({ error: "Asaas está selecionado, mas está desabilitado ou sem token no ambiente escolhido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (asaasActive) {
+      const asaasBase = tenant.asaas_environment === "production" ? "https://api.asaas.com" : "https://api-sandbox.asaas.com";
+      const asaasHeaders = { access_token: String(asaasToken), "Content-Type": "application/json", Accept: "application/json" };
+      const customerBody: any = { name: String(order.customer_name || "Cliente").slice(0, 100), externalReference: order_id };
+      if (order.customer_email) customerBody.email = String(order.customer_email).slice(0, 100);
+      if (order.customer_phone) customerBody.mobilePhone = String(order.customer_phone).replace(/\\D/g, "").slice(0, 11);
+      const customerRes = await fetch(`${asaasBase}/v3/customers`, { method: "POST", headers: asaasHeaders, body: JSON.stringify(customerBody) });
+      const customerData = await customerRes.json().catch(() => ({}));
+      if (!customerRes.ok || !customerData?.id) return new Response(JSON.stringify({ error: "Erro ao criar cliente no Asaas", details: customerData }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const paymentBody = { customer: customerData.id, billingType: "PIX", value: Number(order.total), dueDate: new Date().toISOString().slice(0, 10), description: `Pedido ${order_id}`, externalReference: order_id };
+      const paymentRes = await fetch(`${asaasBase}/v3/payments`, { method: "POST", headers: asaasHeaders, body: JSON.stringify(paymentBody) });
+      const paymentData = await paymentRes.json().catch(() => ({}));
+      if (!paymentRes.ok || !paymentData?.id) return new Response(JSON.stringify({ error: "Erro ao criar cobrança Pix no Asaas", details: paymentData }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const qrRes = await fetch(`${asaasBase}/v3/payments/${paymentData.id}/pixQrCode`, { headers: { access_token: String(asaasToken), Accept: "application/json" } });
+      const qrData = await qrRes.json().catch(() => ({}));
+      if (!qrRes.ok) return new Response(JSON.stringify({ error: "Asaas não retornou o QR Code Pix", details: qrData }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      await supabase.from("orders").update({ payment_external_id: paymentData.id, payment_provider: "asaas", payment_flow: "online" }).eq("id", order_id);
+      await supabase.from("payment_transactions").insert({ tenant_id, order_id, provider: "asaas", method: "pix", status: "pending", amount: Number(order.total), external_id: paymentData.id, external_reference: order_id, pix_qr_code: qrData.payload || null, pix_qr_image: qrData.encodedImage || null, raw_request: paymentBody, raw_response: { payment: paymentData, qr: qrData } });
+      return new Response(JSON.stringify({ provider: "asaas", payment_id: paymentData.id, pix_qr_code: qrData.payload || null, pix_qr_image: qrData.encodedImage || null, pix_expiration: qrData.expirationDate || null }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    // ============ /ASAAS PIX ROUTE ============
 
     // ============ PAGBANK ROUTE ============
     if (provider === "pagbank") {
