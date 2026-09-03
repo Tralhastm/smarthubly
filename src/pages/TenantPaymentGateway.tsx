@@ -42,11 +42,15 @@ const TenantPaymentGateway = () => {
           setLoading(false);
           return;
         }
-        if ((data as any)?.provider === 'asaas' && (data as any)?.pix_qr_code) {
+        if ((data as any)?.provider === 'asaas') {
           setPaymentProvider('asaas');
-          setAsaasPixCode(String((data as any).pix_qr_code));
-          setAsaasPixImage((data as any).pix_qr_image ? `data:image/png;base64,${(data as any).pix_qr_image}` : null);
-          return;
+          if ((data as any)?.pix_qr_code) setAsaasPixCode(String((data as any).pix_qr_code));
+          if ((data as any)?.pix_qr_image) setAsaasPixImage(`data:image/png;base64,${(data as any).pix_qr_image}`);
+          if (!(data as any)?.init_point && !(data as any)?.pix_qr_code) {
+            setError('O Asaas não retornou a fatura nem o QR Code Pix.');
+            setLoading(false);
+            return;
+          }
         }
         // Força a versão web do Mercado Pago: troca o domínio mobile e força channel=web
         // Isso evita o redirect automático pro app instalado no Android.

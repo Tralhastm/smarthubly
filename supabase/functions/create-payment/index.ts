@@ -72,9 +72,16 @@ serve(async (req) => {
       const customerBody: any = { name: String(order.customer_name || "Cliente").slice(0, 100), cpfCnpj: customerDocument, externalReference: order_id };
       if (order.customer_email) customerBody.email = String(order.customer_email).slice(0, 100);
       if (order.customer_phone) customerBody.mobilePhone = String(order.customer_phone).replace(/\\D/g, "").slice(0, 11);
-      const customerRes = await fetch(`${asaasBase}/v3/customers`, { method: "POST", headers: asaasHeaders, body: JSON.stringify(customerBody) });
-      const customerData = await customerRes.json().catch(() => ({}));
-      if (!customerRes.ok || !customerData?.id) { console.error("Asaas customer error", JSON.stringify(customerData)); return new Response(JSON.stringify({ error: "Erro ao criar cliente no Asaas", details: customerData }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
+      // Reutiliza cliente existente para permitir novas tentativas com o mesmo CPF/CNPJ.
+      let customerData: any = null;
+      const existingCustomerRes = await fetch(`${asaasBase}/v3/customers?cpfCnpj=${encodeURIComponent(customerDocument)}&limit=1`, { headers: { access_token: String(asaasToken), Accept: "application/json" } });
+      const existingCustomerPayload = await existingCustomerRes.json().catch(() => ({}));
+      customerData = existingCustomerPayload?.data?.[0] || null;
+      if (!customerData?.id) {
+        const customerRes = await fetch(`${asaasBase}/v3/customers`, { method: "POST", headers: asaasHeaders, body: JSON.stringify(customerBody) });
+        customerData = await customerRes.json().catch(() => ({}));
+        if (!customerRes.ok || !customerData?.id) { console.error("Asaas customer error", JSON.stringify(customerData)); return new Response(JSON.stringify({ error: "Erro ao criar cliente no Asaas", details: customerData }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
+      }
       // UNDEFINED abre a fatura hospedada do Asaas com as formas habilitadas na conta (Pix e cartão).
       // Não recebemos nem armazenamos dados sensíveis do cartão no nosso backend.
       const paymentBody = { customer: customerData.id, billingType: "UNDEFINED", value: Number(order.total), dueDate: new Date().toISOString().slice(0, 10), description: `Pedido ${order_id}`, externalReference: order_id };
