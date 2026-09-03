@@ -81,7 +81,7 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
           {/* Variantes */}
           {variants.length > 0 && (
             <div>
-              <h4 className="text-sm font-medium text-foreground mb-2">Escolha uma opção</h4>
+              <h4 className="text-sm font-medium text-foreground mb-2">Cores disponíveis e preços</h4>
               <div className="space-y-1.5">
                 {variants.map(v => (
                   <button
