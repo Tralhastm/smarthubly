@@ -1,336 +1,177 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json",
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+type Json = Record<string, unknown>;
+
+function reply(body: Json, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeaders });
+}
+
+function clean(value: unknown, max = 200) {
+  return String(value ?? "").trim().slice(0, max);
+}
+
+function money(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.round(Math.max(0, number) * 100) / 100 : 0;
+}
+
+async function fetchJson(url: string, init: RequestInit, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const text = await response.text();
+    let data: any = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text.slice(0, 1000) }; }
+    return { response, data };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function errorFromProvider(provider: string, data: any, fallback: string) {
+  const details = Array.isArray(data?.errors) ? data.errors : data?.errors || data?.message || data?.error || null;
+  console.error(`[payment:${provider}] provider error`, JSON.stringify(data));
+  return reply({ provider, code: "PROVIDER_ERROR", error: fallback, details }, 502);
+}
+
+function reconcileItems(items: any[], order: any) {
+  const lines = (items || []).map((item: any) => ({
+    title: clean(item.product_name || "Produto", 120),
+    quantity: Math.max(1, Number(item.quantity) || 1),
+    unit_price: money(item.product_price),
+    currency_id: "BRL",
+  }));
+  if (money(order.delivery_fee) > 0) lines.push({ title: "Taxa de entrega", quantity: 1, unit_price: money(order.delivery_fee), currency_id: "BRL" });
+  if (money(order.platform_fee) > 0) lines.push({ title: "Taxa operacional", quantity: 1, unit_price: money(order.platform_fee), currency_id: "BRL" });
+  const target = money(order.total);
+  const total = lines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
+  const cents = Math.round((target - total) * 100);
+  if (cents !== 0 && lines.length) {
+    const last = lines[lines.length - 1];
+    last.unit_price = Math.max(0.01, Math.round((last.unit_price + cents / 100 / last.quantity) * 100) / 100);
+    last.title = `${last.title} (ajuste)`;
+  }
+  return lines;
+}
+
+async function createAsaas(supabase: any, tenant: any, order: any, tenantId: string, orderId: string, origin: string) {
+  const environment = tenant.asaas_environment === "production" ? "production" : "sandbox";
+  const token = environment === "production" ? tenant.asaas_production_token : tenant.asaas_sandbox_token;
+  if (tenant.asaas_enabled !== true || !token) return reply({ provider: "asaas", code: "ASAAS_NOT_CONFIGURED", error: "Asaas está selecionado, mas não há token ativo no ambiente escolhido." }, 400);
+
+  const document = clean(order.customer_document).replace(/\D/g, "");
+  if (![11, 14].includes(document.length)) return reply({ provider: "asaas", code: "CUSTOMER_DOCUMENT_REQUIRED", error: "Informe um CPF ou CNPJ válido para pagar pelo Asaas." }, 422);
+
+  const base = environment === "production" ? "https://api.asaas.com" : "https://api-sandbox.asaas.com";
+  const headers = { access_token: String(token), Accept: "application/json", "Content-Type": "application/json" };
+  const customerQuery = await fetchJson(`${base}/v3/customers?cpfCnpj=${encodeURIComponent(document)}&limit=1`, { headers: { access_token: String(token), Accept: "application/json" } });
+  let customer = customerQuery.data?.data?.[0];
+  if (!customer?.id) {
+    const customerBody: Json = { name: clean(order.customer_name || "Cliente", 100), cpfCnpj: document, externalReference: orderId };
+    const email = clean(order.customer_email, 120);
+    if (email) customerBody.email = email;
+    const created = await fetchJson(`${base}/v3/customers`, { method: "POST", headers, body: JSON.stringify(customerBody) });
+    if (!created.response.ok || !created.data?.id) return errorFromProvider("asaas", created.data, "Não foi possível criar o cliente no Asaas.");
+    customer = created.data;
   }
 
+  const paymentBody = {
+    customer: customer.id,
+    billingType: "UNDEFINED",
+    value: money(order.total),
+    dueDate: new Date().toISOString().slice(0, 10),
+    description: `Pedido ${orderId}`,
+    externalReference: orderId,
+  };
+  const createdPayment = await fetchJson(`${base}/v3/payments`, { method: "POST", headers, body: JSON.stringify(paymentBody) });
+  if (!createdPayment.response.ok || !createdPayment.data?.id) return errorFromProvider("asaas", createdPayment.data, "Não foi possível criar a cobrança no Asaas.");
+
+  let pix: any = {};
   try {
-    const { order_id, tenant_id } = await req.json();
+    const pixResult = await fetchJson(`${base}/v3/payments/${createdPayment.data.id}/pixQrCode`, { headers: { access_token: String(token), Accept: "application/json" } });
+    if (pixResult.response.ok) pix = pixResult.data || {};
+  } catch (error) { console.warn("Asaas Pix QR unavailable", error); }
 
-    if (!order_id || !tenant_id) {
-      return new Response(JSON.stringify({ error: "order_id e tenant_id são obrigatórios" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+  await supabase.from("orders").update({ payment_external_id: createdPayment.data.id, payment_provider: "asaas", payment_flow: "online" }).eq("id", orderId);
+  await supabase.from("payment_transactions").insert({
+    tenant_id: tenantId, order_id: orderId, provider: "asaas", method: "hosted_invoice", status: "pending", amount: money(order.total),
+    external_id: createdPayment.data.id, external_reference: orderId, checkout_url: createdPayment.data.invoiceUrl || null,
+    pix_qr_code: pix.payload || null, pix_qr_image: pix.encodedImage || null, raw_request: paymentBody,
+    raw_response: { payment: createdPayment.data, pix },
+  });
+  return reply({ provider: "asaas", payment_id: createdPayment.data.id, status: "pending", init_point: createdPayment.data.invoiceUrl || null, pix_qr_code: pix.payload || null, pix_qr_image: pix.encodedImage || null, pix_expiration: pix.expirationDate || null });
+}
 
-    const t0 = Date.now();
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+async function createMercadoPago(supabase: any, tenant: any, order: any, items: any[], tenantId: string, orderId: string, origin: string) {
+  const token = clean(tenant.mercadopago_token, 500);
+  if (!token) return reply({ provider: "mercadopago", code: "PROVIDER_NOT_CONFIGURED", error: "Loja sem integração de pagamento configurada." }, 400);
+  const storeUrl = `${origin}/loja/${clean(tenant.slug)}`;
+  const body = {
+    items: reconcileItems(items, order), external_reference: orderId,
+    notification_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/mercadopago-webhook`,
+    payment_methods: { installments: 12 }, statement_descriptor: clean(tenant.name || "Loja", 22),
+    auto_return: "approved", back_urls: { success: `${storeUrl}/pedido/${orderId}`, failure: storeUrl, pending: `${storeUrl}/pedido/${orderId}` },
+  };
+  const result = await fetchJson("https://api.mercadopago.com/checkout/preferences", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!result.response.ok) return errorFromProvider("mercadopago", result.data, "Não foi possível criar o checkout no Mercado Pago.");
+  const initPoint = token.startsWith("TEST-") ? result.data.sandbox_init_point : result.data.init_point;
+  if (!initPoint) return reply({ provider: "mercadopago", code: "CHECKOUT_URL_MISSING", error: "O Mercado Pago não retornou a URL de checkout." }, 502);
+  await supabase.from("orders").update({ payment_external_id: result.data.id, payment_provider: "mercadopago", payment_flow: "online" }).eq("id", orderId);
+  await supabase.from("payment_transactions").insert({ tenant_id: tenantId, order_id: orderId, provider: "mercadopago", method: "checkout_link", status: "pending", amount: money(order.total), external_id: result.data.id, external_reference: orderId, checkout_url: initPoint, raw_request: body, raw_response: result.data });
+  return reply({ provider: "mercadopago", payment_id: result.data.id, status: "pending", init_point: initPoint });
+}
 
-    // Fetch tenant, order and items in parallel
-    const [tenantRes, orderRes, itemsRes] = await Promise.all([
-      supabase.from("tenants").select("mercadopago_token, name, slug, payment_provider, pagbank_token, pagbank_env, asaas_enabled, asaas_environment, asaas_sandbox_token, asaas_production_token").eq("id", tenant_id).single(),
-      supabase.from("orders").select("*").eq("id", order_id).single(),
-      supabase.from("order_items").select("*").eq("order_id", order_id),
+async function createPagBank(supabase: any, tenant: any, order: any, items: any[], tenantId: string, orderId: string, origin: string) {
+  const token = clean(tenant.pagbank_token, 500);
+  if (!token) return reply({ provider: "pagbank", code: "PROVIDER_NOT_CONFIGURED", error: "Loja sem token PagBank configurado." }, 400);
+  const base = tenant.pagbank_env === "production" ? "https://api.pagseguro.com" : "https://sandbox.api.pagseguro.com";
+  const body = { reference_id: orderId, items: reconcileItems(items, order).map((x: any) => ({ reference_id: x.title.slice(0, 64), name: x.title, quantity: x.quantity, unit_amount: Math.round(x.unit_price * 100) })), payment_methods: [{ type: "PIX" }, { type: "CREDIT_CARD" }, { type: "DEBIT_CARD" }, { type: "BOLETO" }], redirect_url: `${origin}/loja/${clean(tenant.slug)}/pedido/${orderId}`, return_url: `${origin}/loja/${clean(tenant.slug)}/pedido/${orderId}`, notification_urls: [`${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-webhook`] };
+  const result = await fetchJson(`${base}/checkouts`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json", "x-api-version": "4.0" }, body: JSON.stringify(body) });
+  if (!result.response.ok) return errorFromProvider("pagbank", result.data, "Não foi possível criar o checkout no PagBank.");
+  const link = result.data?.links?.find((item: any) => String(item.rel).toUpperCase() === "PAY")?.href || result.data?.links?.[0]?.href;
+  if (!link) return reply({ provider: "pagbank", code: "CHECKOUT_URL_MISSING", error: "O PagBank não retornou a URL de checkout." }, 502);
+  await supabase.from("orders").update({ payment_external_id: result.data.id, payment_provider: "pagbank", payment_flow: "online" }).eq("id", orderId);
+  await supabase.from("payment_transactions").insert({ tenant_id: tenantId, order_id: orderId, provider: "pagbank", method: "checkout_link", status: "pending", amount: money(order.total), external_id: result.data.id, external_reference: orderId, checkout_url: link, raw_request: body, raw_response: result.data });
+  return reply({ provider: "pagbank", payment_id: result.data.id, status: "pending", init_point: link });
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+  if (req.method !== "POST") return reply({ code: "METHOD_NOT_ALLOWED", error: "Método não permitido." }, 405);
+  try {
+    const body = await req.json();
+    const orderId = clean(body?.order_id, 80);
+    const tenantId = clean(body?.tenant_id, 80);
+    if (!orderId || !tenantId) return reply({ code: "INVALID_REQUEST", error: "order_id e tenant_id são obrigatórios." }, 400);
+    const url = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !serviceKey) return reply({ code: "SERVER_MISCONFIGURED", error: "Servidor de pagamentos sem configuração interna." }, 500);
+    const supabase = createClient(url, serviceKey);
+    const [tenantResult, orderResult, itemsResult] = await Promise.all([
+      supabase.from("tenants").select("id,slug,name,payment_provider,mercadopago_token,pagbank_token,pagbank_env,asaas_enabled,asaas_environment,asaas_sandbox_token,asaas_production_token").eq("id", tenantId).maybeSingle(),
+      supabase.from("orders").select("*").eq("id", orderId).eq("tenant_id", tenantId).maybeSingle(),
+      supabase.from("order_items").select("*").eq("order_id", orderId),
     ]);
-    console.log(`DB fetch: ${Date.now() - t0}ms`);
-
-    const tenant: any = tenantRes.data;
-    const order = orderRes.data;
-    const items = itemsRes.data;
-
-    if (tenantRes.error || !tenant) {
-      return new Response(JSON.stringify({ error: "Loja não encontrada" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    if (orderRes.error || !order) {
-      return new Response(JSON.stringify({ error: "Pedido não encontrado" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const provider = tenant.payment_provider || "mercadopago";
-    const originHeader = req.headers.get("origin") || "https://snuggle-puff-joy.lovable.app";
-    const storeUrlEarly = `${originHeader}/loja/${tenant.slug}`;
-
-    // ============ ASAAS PIX ROUTE ============
-    const asaasToken = tenant.asaas_environment === "production" ? tenant.asaas_production_token : tenant.asaas_sandbox_token;
-    const asaasActive = tenant.payment_provider === "asaas" && tenant.asaas_enabled === true && !!asaasToken;
-    if (tenant.payment_provider === "asaas" && !asaasActive) {
-      return new Response(JSON.stringify({ error: "Asaas está selecionado, mas está desabilitado ou sem token no ambiente escolhido" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    if (asaasActive) {
-      const asaasBase = tenant.asaas_environment === "production" ? "https://api.asaas.com" : "https://api-sandbox.asaas.com";
-      const asaasHeaders = { access_token: String(asaasToken), "Content-Type": "application/json", Accept: "application/json" };
-      const customerDocument = String(order.customer_document || '').replace(/\D/g, '');
-      if (customerDocument.length !== 11 && customerDocument.length !== 14) {
-        return new Response(JSON.stringify({ error: "Informe um CPF ou CNPJ válido para pagar pelo Asaas" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-      const customerBody: any = { name: String(order.customer_name || "Cliente").slice(0, 100), cpfCnpj: customerDocument, externalReference: order_id };
-      if (order.customer_email) customerBody.email = String(order.customer_email).slice(0, 100);
-      // O telefone é opcional no cliente Asaas; omitimos valores malformados vindos de pedidos antigos.
-      // Isso evita rejeição de números com código do país ou formatação inconsistente.
-      // Reutiliza cliente existente para permitir novas tentativas com o mesmo CPF/CNPJ.
-      let customerData: any = null;
-      const existingCustomerRes = await fetch(`${asaasBase}/v3/customers?cpfCnpj=${encodeURIComponent(customerDocument)}&limit=1`, { headers: { access_token: String(asaasToken), Accept: "application/json" } });
-      const existingCustomerPayload = await existingCustomerRes.json().catch(() => ({}));
-      customerData = existingCustomerPayload?.data?.[0] || null;
-      if (!customerData?.id) {
-        const customerRes = await fetch(`${asaasBase}/v3/customers`, { method: "POST", headers: asaasHeaders, body: JSON.stringify(customerBody) });
-        customerData = await customerRes.json().catch(() => ({}));
-        if (!customerRes.ok || !customerData?.id) { console.error("Asaas customer error", JSON.stringify(customerData)); return new Response(JSON.stringify({ error: "Erro ao criar cliente no Asaas", details: customerData }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
-      }
-      // UNDEFINED abre a fatura hospedada do Asaas com as formas habilitadas na conta (Pix e cartão).
-      // Não recebemos nem armazenamos dados sensíveis do cartão no nosso backend.
-      const paymentBody = { customer: customerData.id, billingType: "UNDEFINED", value: Number(order.total), dueDate: new Date().toISOString().slice(0, 10), description: `Pedido ${order_id}`, externalReference: order_id };
-      const paymentRes = await fetch(`${asaasBase}/v3/payments`, { method: "POST", headers: asaasHeaders, body: JSON.stringify(paymentBody) });
-      const paymentData = await paymentRes.json().catch(() => ({}));
-      if (!paymentRes.ok || !paymentData?.id) { console.error("Asaas payment error", JSON.stringify(paymentData)); return new Response(JSON.stringify({ error: "Erro ao criar cobrança no Asaas", details: paymentData }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
-      let qrData: any = {};
-      try {
-        const qrRes = await fetch(`${asaasBase}/v3/payments/${paymentData.id}/pixQrCode`, { headers: { access_token: String(asaasToken), Accept: "application/json" } });
-        qrData = await qrRes.json().catch(() => ({}));
-        if (!qrRes.ok) console.warn("Asaas QR Code indisponível; mantendo fatura para cartão", JSON.stringify(qrData));
-      } catch (qrError) { console.warn("Asaas QR Code request failed; maintaining hosted invoice", qrError); }
-      await supabase.from("orders").update({ payment_external_id: paymentData.id, payment_provider: "asaas", payment_flow: "online" }).eq("id", order_id);
-      await supabase.from("payment_transactions").insert({ tenant_id, order_id, provider: "asaas", method: "pix", status: "pending", amount: Number(order.total), external_id: paymentData.id, external_reference: order_id, pix_qr_code: qrData.payload || null, pix_qr_image: qrData.encodedImage || null, raw_request: paymentBody, raw_response: { payment: paymentData, qr: qrData } });
-      return new Response(JSON.stringify({ provider: "asaas", payment_id: paymentData.id, init_point: paymentData.invoiceUrl || null, pix_qr_code: qrData.payload || null, pix_qr_image: qrData.encodedImage || null, pix_expiration: qrData.expirationDate || null }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    // ============ /ASAAS PIX ROUTE ============
-
-    // ============ PAGBANK ROUTE ============
-    if (provider === "pagbank") {
-      const pbToken: string | null = tenant.pagbank_token;
-      const pbEnv: string = tenant.pagbank_env || "sandbox";
-      if (!pbToken) {
-        return new Response(JSON.stringify({ error: "Loja sem token PagBank configurado" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const pbBase = pbEnv === "production" ? "https://api.pagseguro.com" : "https://sandbox.api.pagseguro.com";
-      const webhookUrl = `${supabaseUrl}/functions/v1/pagbank-webhook`;
-
-      const pbItems: any[] = (items || []).map((it: any) => ({
-        reference_id: String(it.id || it.product_id || "item").slice(0, 64),
-        name: String(it.product_name || "Item").slice(0, 100),
-        quantity: Number(it.quantity) || 1,
-        unit_amount: Math.round(Number(it.product_price) * 100),
-      }));
-      const deliveryCents = Math.round(Number(order.delivery_fee || 0) * 100);
-      const feeCents = Math.round(Number((order as any).platform_fee || 0) * 100);
-      if (deliveryCents > 0) pbItems.push({ reference_id: "delivery", name: "Taxa de entrega", quantity: 1, unit_amount: deliveryCents });
-      if (feeCents > 0) pbItems.push({ reference_id: "platform-fee", name: "Taxa operacional", quantity: 1, unit_amount: feeCents });
-      const desiredTotalCents = Math.round(Number(order.total) * 100);
-      const sum = pbItems.reduce((s, it) => s + it.unit_amount * it.quantity, 0);
-      const diff = sum - desiredTotalCents;
-      if (diff !== 0 && pbItems.length > 0) {
-        const last = pbItems[pbItems.length - 1];
-        last.unit_amount = Math.max(1, last.unit_amount - Math.round(diff / last.quantity));
-        last.name = `${last.name} (ajuste)`;
-      }
-
-      const customer: any = {};
-      if (order.customer_name) customer.name = String(order.customer_name).slice(0, 60);
-      if ((order as any).customer_email) customer.email = String((order as any).customer_email).slice(0, 60);
-
-      const checkoutBody: any = {
-        reference_id: order_id,
-        customer: customer.email ? customer : undefined,
-        items: pbItems,
-        payment_methods: [
-          { type: "PIX" },
-          { type: "CREDIT_CARD" },
-          { type: "DEBIT_CARD" },
-          { type: "BOLETO" },
-        ],
-        redirect_url: `${storeUrlEarly}/meus-pedidos`,
-        return_url: `${storeUrlEarly}/meus-pedidos`,
-        notification_urls: [webhookUrl],
-        soft_descriptor: String(tenant.name || "Loja").slice(0, 17),
-      };
-
-      const tPb = Date.now();
-      const ctrl = new AbortController();
-      const tId = setTimeout(() => ctrl.abort(), 12000);
-      const pbRes = await fetch(`${pbBase}/checkouts`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${pbToken}`,
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "x-api-version": "4.0",
-        },
-        body: JSON.stringify(checkoutBody),
-        signal: ctrl.signal,
-      }).finally(() => clearTimeout(tId));
-      console.log(`PagBank API: ${Date.now() - tPb}ms`);
-
-      const pbData = await pbRes.json().catch(() => ({}));
-      if (!pbRes.ok) {
-        console.error("PagBank error:", JSON.stringify(pbData));
-        return new Response(JSON.stringify({ error: "Erro ao criar pagamento no PagBank", details: pbData }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const payLink = (pbData?.links || []).find((l: any) => String(l.rel).toUpperCase() === "PAY")?.href
-        || (pbData?.links || [])[0]?.href;
-      if (!payLink) {
-        return new Response(JSON.stringify({ error: "PagBank não retornou link de pagamento", details: pbData }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      await supabase.from("payment_transactions").insert({
-        tenant_id, order_id, provider: "pagbank", method: "checkout_link",
-        status: "pending", amount: Number(order.total),
-        external_id: pbData?.id || null, external_reference: order_id,
-        checkout_url: payLink, raw_request: checkoutBody, raw_response: pbData,
-      });
-
-      return new Response(JSON.stringify({
-        init_point: payLink, provider: "pagbank", preference_id: pbData?.id || null,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    // ============ /PAGBANK ROUTE ============
-
-    if (!tenant.mercadopago_token) {
-      return new Response(JSON.stringify({ error: "Loja sem integração de pagamento configurada" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // SOURCE OF TRUTH: order.total (DB) — already includes everything (subtotal + delivery + customer-visible fee − coupon discount)
-    // We send line items for the customer to see breakdown, then add a "Desconto" line if needed so the MP sum matches order.total exactly.
-    const mpItems = (items || []).map((item: any) => ({
-      title: item.product_name,
-      quantity: item.quantity,
-      unit_price: Number(item.product_price),
-      currency_id: "BRL",
-    }));
-
-    if (Number(order.delivery_fee) > 0) {
-      mpItems.push({
-        title: "Taxa de entrega",
-        quantity: 1,
-        unit_price: Number(order.delivery_fee),
-        currency_id: "BRL",
-      });
-    }
-
-    if (Number(order.platform_fee) > 0) {
-      mpItems.push({
-        title: "Taxa operacional",
-        quantity: 1,
-        unit_price: Number(order.platform_fee),
-        currency_id: "BRL",
-      });
-    }
-
-    // Reconcile: ensure MP charges exactly order.total
-    const mpSum = mpItems.reduce((s: number, it: any) => s + it.unit_price * it.quantity, 0);
-    const orderTotal = Number(order.total);
-    const diff = Math.round((mpSum - orderTotal) * 100) / 100;
-    if (diff > 0.01) {
-      // MP sum is higher than order total → add a discount line (negative not allowed in items, so reduce platform fee or use a discount entry)
-      // Strategy: subtract diff from the largest line item's unit_price proportionally is complex; simplest = adjust last line.
-      const last = mpItems[mpItems.length - 1];
-      const newUnit = Math.max(0.01, Number((last.unit_price - diff / last.quantity).toFixed(2)));
-      last.unit_price = newUnit;
-      last.title = `${last.title} (com desconto cupom)`;
-    } else if (diff < -0.01) {
-      // MP sum is lower than order total → add an adjustment line
-      mpItems.push({
-        title: "Ajuste",
-        quantity: 1,
-        unit_price: Math.abs(diff),
-        currency_id: "BRL",
-      });
-    }
-
-    const webhookUrl = `${supabaseUrl}/functions/v1/mercadopago-webhook`;
-    const origin = req.headers.get("origin") || "https://snuggle-puff-joy.lovable.app";
-    const storeUrl = `${origin}/loja/${tenant.slug}`;
-
-    const preferenceBody = {
-      items: mpItems,
-      external_reference: order_id,
-      notification_url: webhookUrl,
-      payment_methods: {
-        excluded_payment_methods: [],
-        excluded_payment_types: [],
-        installments: 12,
-      },
-      statement_descriptor: tenant.name.substring(0, 22),
-      auto_return: "approved",
-      back_urls: {
-        success: `${storeUrl}/meus-pedidos`,
-        failure: storeUrl,
-        pending: `${storeUrl}/meus-pedidos`,
-      },
-    };
-
-    // Create preference via Mercado Pago API (with timeout)
-    const tMp = Date.now();
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-    const mpResponse = await fetch("https://api.mercadopago.com/checkout/preferences", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${tenant.mercadopago_token}`,
-      },
-      body: JSON.stringify(preferenceBody),
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeoutId));
-    console.log(`MP API: ${Date.now() - tMp}ms`);
-
-    const mpData = await mpResponse.json();
-
-    if (!mpResponse.ok) {
-      console.error("Mercado Pago error:", JSON.stringify(mpData));
-      return new Response(JSON.stringify({ error: "Erro ao criar pagamento no Mercado Pago", details: mpData }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // TEST- prefix = sandbox token, APP_USR- prefix = production token
-    const isTestToken = tenant.mercadopago_token.startsWith('TEST-');
-    let checkoutUrl: string = isTestToken ? mpData.sandbox_init_point : mpData.init_point;
-
-    // 🌐 Força a VERSÃO WEB do Mercado Pago (evita App Link no Android):
-    // - Remove redirect_from_app
-    // - Marca source/platform/mode = web
-    // - Troca domínios mobile (mpago.la / m.mercadopago) por www.mercadopago.com.br
-    try {
-      const u = new URL(checkoutUrl);
-      u.searchParams.delete("redirect_from_app");
-      u.searchParams.set("source", "web");
-      u.searchParams.set("platform", "web");
-      u.searchParams.set("mode", "web");
-      if (u.hostname === "mpago.la" || u.hostname === "mpago.li" || u.hostname.startsWith("m.mercadopago")) {
-        u.hostname = "www.mercadopago.com.br";
-      }
-      checkoutUrl = u.toString();
-    } catch { /* mantém url original em caso de parse error */ }
-
-    return new Response(JSON.stringify({
-      init_point: checkoutUrl,
-      sandbox_init_point: mpData.sandbox_init_point,
-      preference_id: mpData.id,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("Error:", err);
-    return new Response(JSON.stringify({ error: "Erro interno ao processar pagamento" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    if (tenantResult.error || !tenantResult.data) return reply({ code: "TENANT_NOT_FOUND", error: "Loja não encontrada." }, 404);
+    if (orderResult.error || !orderResult.data) return reply({ code: "ORDER_NOT_FOUND", error: "Pedido não encontrado." }, 404);
+    const tenant = tenantResult.data as any;
+    const order = orderResult.data as any;
+    const provider = clean(tenant.payment_provider || "mercadopago").toLowerCase();
+    const origin = req.headers.get("origin") || "https://smarthubly.pages.dev";
+    console.log(`[payment] order=${orderId} provider=${provider} total=${money(order.total)}`);
+    if (provider === "asaas") return await createAsaas(supabase, tenant, order, tenantId, orderId, origin);
+    if (provider === "pagbank") return await createPagBank(supabase, tenant, order, itemsResult.data || [], tenantId, orderId, origin);
+    return await createMercadoPago(supabase, tenant, order, itemsResult.data || [], tenantId, orderId, origin);
+  } catch (error) {
+    console.error("[payment] unexpected error", error);
+    return reply({ code: "INTERNAL_ERROR", error: "Erro interno ao processar o pagamento." }, 500);
   }
 });

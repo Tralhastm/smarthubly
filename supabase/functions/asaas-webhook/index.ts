@@ -1,112 +1,88 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
+const headers = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, asaas-access-token",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, asaas-access-token, x-asaas-access-token",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json",
 };
 
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: { ...corsHeaders, "Content-Type": "application/json" },
-});
+function json(body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers });
+}
 
-const approvedEvents = new Set(["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]);
-const cancelledEvents = new Set(["PAYMENT_OVERDUE", "PAYMENT_DELETED", "PAYMENT_REFUNDED", "PAYMENT_RESTORED"]);
+const APPROVED = new Set(["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]);
+const CANCELLED = new Set(["PAYMENT_DELETED", "PAYMENT_REFUNDED", "PAYMENT_OVERDUE"]);
+const TERMINAL = new Set(["delivered", "cancelled"]);
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+function extract(body: any) {
+  const payment = body?.payment || body?.data?.payment || body?.data || {};
+  return {
+    event: String(body?.event || body?.type || "").toUpperCase(),
+    eventId: String(body?.id || ""),
+    paymentId: String(payment?.id || body?.paymentId || ""),
+    reference: String(payment?.externalReference || payment?.external_reference || ""),
+    paymentStatus: String(payment?.status || "").toUpperCase(),
+    payment,
+  };
+}
+
+Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
+  if (request.method !== "POST") return json({ received: false, code: "METHOD_NOT_ALLOWED" }, 405);
 
   try {
-    const expectedToken = Deno.env.get("ASAAS_WEBHOOK_TOKEN");
-    const receivedToken = req.headers.get("asaas-access-token") || req.headers.get("x-asaas-access-token");
-    if (!expectedToken) console.warn("ASAAS_WEBHOOK_TOKEN is not configured; tenant webhook tokens will be checked after resolving the order");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceKey) return json({ received: false, code: "SERVER_MISCONFIGURED" }, 500);
+    const body = await request.json();
+    const parsed = extract(body);
+    if (!parsed.event || !parsed.paymentId) return json({ received: true, ignored: true, reason: "incomplete_event" });
 
-    const body = await req.json();
-    const event = String(body?.event || body?.type || "");
-    const payment = body?.payment || body?.data?.payment || body?.data || {};
-    const paymentId = String(payment?.id || body?.paymentId || "");
-    const externalReference = String(payment?.externalReference || payment?.external_reference || "");
-    if (!event || !paymentId) return json({ received: true, ignored: true });
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    const eventId = String(body?.id || `${event}:${paymentId}`);
-    const { data: registered, error: registerError } = await supabase.rpc("register_webhook_event", {
-      _provider: "asaas",
-      _event_id: eventId,
-      _event_type: event,
-      _payload: body,
-    });
-    if (registerError) throw registerError;
-    if (registered === false) return json({ received: true, duplicate: true });
-
+    const db = createClient(supabaseUrl, serviceKey);
     let order: any = null;
-    if (externalReference) {
-      const byId = await supabase.from("orders").select("id,status,tenant_id,total,payment_method,customer_name,customer_phone,payment_external_id").eq("id", externalReference).maybeSingle();
-      order = byId.data;
+    if (parsed.reference) {
+      const byReference = await db.from("orders").select("id,tenant_id,status,total,payment_method,customer_name,payment_external_id").eq("id", parsed.reference).maybeSingle();
+      order = byReference.data || null;
     }
     if (!order) {
-      const byPayment = await supabase.from("orders").select("id,status,tenant_id,total,payment_method,customer_name,customer_phone,payment_external_id").eq("payment_external_id", paymentId).maybeSingle();
-      order = byPayment.data;
+      const byPayment = await db.from("orders").select("id,tenant_id,status,total,payment_method,customer_name,payment_external_id").eq("payment_external_id", parsed.paymentId).maybeSingle();
+      order = byPayment.data || null;
     }
     if (!order) return json({ received: true, ignored: true, reason: "order_not_found" });
 
-    const { data: tenantConfig } = await supabase.from("tenants").select("asaas_webhook_token").eq("id", order.tenant_id).maybeSingle();
-    const configuredToken = expectedToken || tenantConfig?.asaas_webhook_token;
-    if (configuredToken && receivedToken !== configuredToken) return json({ error: "unauthorized" }, 401);
-    if (!configuredToken) console.warn("No Asaas webhook token configured globally or for tenant", order.tenant_id);
+    const tenantResult = await db.from("tenants").select("id,asaas_webhook_token").eq("id", order.tenant_id).maybeSingle();
+    if (tenantResult.error) return json({ received: false, code: "TENANT_LOOKUP_FAILED" }, 500);
+    const expected = String(tenantResult.data?.asaas_webhook_token || Deno.env.get("ASAAS_WEBHOOK_TOKEN") || "");
+    const received = request.headers.get("asaas-access-token") || request.headers.get("x-asaas-access-token") || "";
+    if (!expected || received !== expected) return json({ received: false, code: "UNAUTHORIZED" }, 401);
 
-    const isApproved = approvedEvents.has(event) || String(payment?.status || "").toUpperCase() === "RECEIVED";
-    const isCancelled = cancelledEvents.has(event);
-    const nextStatus = isApproved ? "received" : isCancelled ? "cancelled" : order.status;
-    const becameApproved = isApproved && order.status === "pending_payment";
+    const eventId = parsed.eventId || `${parsed.event}:${parsed.paymentId}`;
+    const registered = await db.rpc("register_webhook_event", { _provider: "asaas", _event_id: eventId, _event_type: parsed.event, _payload: body });
+    if (registered.error) return json({ received: false, code: "IDEMPOTENCY_REGISTRATION_FAILED" }, 500);
+    if (registered.data === false) return json({ received: true, duplicate: true, order_id: order.id });
 
-    const { error: updateError } = await supabase.from("orders").update({
-      status: nextStatus,
-      payment_provider: "asaas",
-      payment_external_id: paymentId,
-      payment_confirmed_at: isApproved ? new Date().toISOString() : null,
-      metadata: {
-        ...(body?.metadata || {}),
-        asaas_event: event,
-        asaas_payment_status: payment?.status || null,
-        asaas_payment_id: paymentId,
-      },
-    }).eq("id", order.id);
-    if (updateError) throw updateError;
+    const approved = APPROVED.has(parsed.event) || parsed.paymentStatus === "RECEIVED";
+    const cancelled = CANCELLED.has(parsed.event) || ["DELETED", "REFUNDED", "OVERDUE"].includes(parsed.paymentStatus);
+    const previousStatus = String(order.status || "");
+    const nextStatus = approved ? (TERMINAL.has(previousStatus) ? previousStatus : "received") : cancelled && !TERMINAL.has(previousStatus) ? "cancelled" : previousStatus;
+    const update: Record<string, unknown> = { payment_provider: "asaas", payment_external_id: parsed.paymentId };
+    if (nextStatus !== previousStatus) update.status = nextStatus;
+    if (approved) update.payment_confirmed_at = new Date().toISOString();
+    const metadata = { asaas_event: parsed.event, asaas_payment_status: parsed.paymentStatus || null, asaas_payment_id: parsed.paymentId, asaas_event_id: eventId };
+    update.metadata = metadata;
+    const updated = await db.from("orders").update(update).eq("id", order.id);
+    if (updated.error) return json({ received: false, code: "ORDER_UPDATE_FAILED" }, 500);
 
-    await supabase.from("payment_transactions").update({
-      status: isApproved ? "paid" : isCancelled ? "cancelled" : "pending",
-      external_id: paymentId,
-      raw_webhook: body,
-    }).eq("provider", "asaas").eq("order_id", order.id);
+    const transactionStatus = approved ? "paid" : cancelled ? "cancelled" : "pending";
+    await db.from("payment_transactions").update({ status: transactionStatus, external_id: parsed.paymentId, raw_webhook: body }).eq("provider", "asaas").eq("order_id", order.id);
 
-    if (becameApproved) {
-      await supabase.from("order_events").insert({
-        order_id: order.id,
-        tenant_id: order.tenant_id,
-        event_type: "payment_approved",
-        from_status: order.status,
-        to_status: nextStatus,
-        actor: "asaas",
-        description: "Pagamento aprovado via Asaas",
-        metadata: { asaas_event: event, payment_id: paymentId },
-      });
-      try {
-        await supabase.functions.invoke("notify-new-order", {
-          body: { orderId: order.id, tenantId: order.tenant_id, customerName: order.customer_name, total: order.total, payload: { kind: "payment_approved" } },
-        });
-      } catch (error) { console.error("payment approval notification failed", error); }
+    if (approved && previousStatus === "pending_payment") {
+      await db.from("order_events").insert({ order_id: order.id, tenant_id: order.tenant_id, event_type: "payment_approved", from_status: previousStatus, to_status: nextStatus, actor: "asaas", description: "Pagamento aprovado via Asaas", metadata: { payment_id: parsed.paymentId, event: parsed.event } });
     }
-
-    return json({ received: true, order_id: order.id, status: nextStatus });
+    return json({ received: true, order_id: order.id, status: nextStatus, duplicate: false });
   } catch (error) {
-    console.error("Asaas webhook error", error);
-    return json({ error: "internal_error" }, 500);
+    console.error("[asaas-webhook] unexpected error", error);
+    return json({ received: false, code: "INTERNAL_ERROR" }, 500);
   }
 });
