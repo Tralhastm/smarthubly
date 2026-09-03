@@ -166,9 +166,9 @@ const TenantPaymentGateway = () => {
                 <p className="text-foreground font-medium flex items-center gap-1.5">
                   <Mail className="h-3.5 w-3.5 text-amber-400" /> Coloque seu e-mail
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  <strong className="text-amber-400">⚠️ Importante:</strong> mesmo no Pix, o Mercado Pago pede um e-mail.
-                  Sem e-mail a chave Pix / QR Code não aparece. Pode ser qualquer e-mail seu.
+                  <p className="text-xs text-muted-foreground">
+                  <strong className="text-amber-400">⚠️ Importante:</strong> o {paymentProvider === 'asaas' ? 'Asaas' : 'Mercado Pago'} usa seu e-mail para identificar o pagamento.
+                  Informe um e-mail válido para receber a confirmação da cobrança.
                 </p>
               </div>
             </div>
