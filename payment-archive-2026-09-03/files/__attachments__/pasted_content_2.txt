@@ -1,0 +1,147 @@
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Mobiletec - 02/09/2026 às 23:03
+Status
+200
+
+
+Descrição
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Mobiletec - 02/09/2026 às 23:02
+Status
+200
+
+
+Descrição
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Mobiletec - 02/09/2026 às 23:02
+Status
+200
+
+
+Descrição
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Mobiletec - 02/09/2026 às 22:58
+Status
+200
+
+
+Descrição
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Mobiletec - 02/09/2026 às 22:58
+Status
+200
+
+
+Descrição
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Mobiletec - 02/09/2026 às 22:53
+Penalização aplicada
+Status
+503
+
+
+Descrição
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Mobiletec - 02/09/2026 às 22:53
+Penalização aplicada
+Status
+503
+
+
+Descrição
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Mobiletec - 02/09/2026 às 22:53
+Penalização aplicada
+Status
+503
+
+
+Descrição
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Mobiletec - 02/09/2026 às 22:52
+Penalização aplicada
+Status
+503
+
+
+Descrição
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Mobiletec - 02/09/2026 às 22:50
+Penalização aplicada
+Status
+503
+
+Próximo
+Detalhes
+https://qbcplbcdxoyqpmcehnvu.supabase.co/functions/v1/asaas-webhook
+Data da requisição
+02/09/2026 23:03
+Webhook
+Mobiletec
+Conteúdo enviado
+{
+  "id": "evt_bdaf5c611b55dc82906787d5bfe1e5e2&18768520",
+  "event": "PAYMENT_CHECKOUT_VIEWED",
+  "dateCreated": "2026-09-02 22:43:33",
+  "account": {
+    "id": "ed224f45-82cc-4f87-bbf7-f9acb7858368",
+    "ownerId": null
+  },
+  "payment": {
+    "object": "payment",
+    "id": "pay_84g5weq11kuwie65",
+    "dateCreated": "2026-09-02",
+    "customer": "cus_000008992735",
+    "checkoutSession": null,
+    "paymentLink": null,
+    "value": 2151.0,
+    "netValue": 2107.71,
+    "originalValue": null,
+    "interestValue": null,
+    "description": "Pedido d0ab824c-7a29-4652-aeab-d4dbed0cae78",
+    "billingType": "UNDEFINED",
+    "pixTransaction": null,
+    "status": "PENDING",
+    "dueDate": "2026-09-03",
+    "originalDueDate": "2026-09-03",
+    "paymentDate": null,
+    "clientPaymentDate": null,
+    "installmentNumber": null,
+    "invoiceUrl": "https://sandbox.asaas.com/i/84g5weq11kuwie65",
+    "invoiceNumber": "17540575",
+    "externalReference": "d0ab824c-7a29-4652-aeab-d4dbed0cae78",
+    "deleted": false,
+    "anticipated": false,
+    "anticipable": false,
+    "creditDate": null,
+    "estimatedCreditDate": null,
+    "transactionReceiptUrl": null,
+    "nossoNumero": "13147425",
+    "bankSlipUrl": "https://sandbox.asaas.com/b/pdf/84g5weq11kuwie65",
+    "lastInvoiceViewedDate": "2026-09-03T01:43:33Z",
+    "lastBankSlipViewedDate": null,
+    "discount": {
+      "value": 0.0,
+      "limitDate": null,
+      "dueDateLimitDays": 0.0,
+      "type": "FIXED"
+    },
+    "fine": {
+      "value": 0.0,
+      "type": "FIXED"
+    },
+    "interest": {
+      "value": 0.0,
+      "type": "PERCENTAGE"
+    },
+    "postalService": false,
+    "escrow": null,
+    "refunds": null
+  }
+}
+Conteúdo da resposta
+{
+  "received": true,
+  "order_id": "d0ab824c-7a29-4652-aeab-d4dbed0cae78",
+  "status": "pending_payment"
+}

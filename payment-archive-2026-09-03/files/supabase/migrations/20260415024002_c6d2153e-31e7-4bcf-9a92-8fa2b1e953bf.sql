@@ -1,0 +1,1 @@
+ALTER TABLE public.products ADD COLUMN shipping_fee_override numeric DEFAULT NULL;
