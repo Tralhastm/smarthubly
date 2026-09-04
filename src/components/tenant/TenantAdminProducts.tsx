@@ -442,7 +442,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
     setImportFileName(file.name);
     setImportSupplierName('');
-    setImportPriceType('resale');
+    setImportPriceType('cost');
     setImportSupplierId(null);
     setImportCancelled(false);
     
@@ -653,7 +653,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           
           // Se for custo, atualizamos o custo original se for menor (melhor preço)
           const currentCost = existing.original_price || 0;
-          if (isCost && (currentCost === 0 || importedCost < currentCost)) {
+          if (isCost && importedCost > 0 && importedCost !== currentCost) {
             updateData.original_price = original_price;
             updateData.supplier_id = currentSupplierId;
             

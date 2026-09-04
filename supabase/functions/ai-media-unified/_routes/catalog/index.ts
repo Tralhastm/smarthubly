@@ -173,7 +173,7 @@ Regras:
       } else {
         const res: any = await _callAiJson(admin, {
           systemPrompt: SYSTEM,
-          userPrompt: `CONTEÚDO:\n${text.slice(0, 10000)}\n\n${USER}`,
+          userPrompt: `CONTEÚDO:\n${text.slice(0, 30000)}\n\n${USER}`,
           temperature: 0.1,
         });
         items = res?.items || [];

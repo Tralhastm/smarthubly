@@ -159,7 +159,11 @@ function parseCatalogLegacy(text: string, priceType: string): ParsedProduct[] {
 const COLOR_WORDS = /preto|preta|pret[oa]s?|azul|azuis|verde|verdes|branco|branca|brancos|brancas|roxo|roxa|roxos|dourado|dourada|gold|prata|cinza|laranja|rosa|camuflada|camuflado|marrom|titanium|black|white|storm/i;
 
 function splitVariationNames(raw: string): string[] {
-  const suffix = normalize(raw.replace(/[()*]+/g, "").replace(/^[-–—:,\s]+|[-–—:,\s]+$/g, ""));
+  const suffix = normalize(raw
+    .replace(/[-–—]+\s*(?:fornecedor|supplier)\b.*$/i, "")
+    .replace(/\b(?:fornecedor|supplier)\b.*$/i, "")
+    .replace(/[()*]+/g, "")
+    .replace(/^[-–—:,\s]+|[-–—:,\s]+$/g, ""));
   if (!suffix || /^(?:conferir disponibilidade|disponibilidade a confirmar)$/i.test(suffix)) return [];
   const parts = suffix.split(/,|\s+e\s+/i).map(normalize).filter(Boolean);
   if (parts.length > 1 && parts.every((part) => COLOR_WORDS.test(part))) return [...new Set(parts)];
@@ -299,7 +303,7 @@ export default async function handler(req: Request, payload: any) {
         await supabase.from("supplier_product_prices").upsert({
           supplier_id: targetSupplierId,
           product_name: p.name.toLowerCase(),
-          unit_price: p.cost_price || p.price,
+          unit_price: priceType === 'resale' ? (p.resale_price || p.price) : (p.cost_price || p.price),
           available: true,
           price_types: priceTypes,
           metadata: { resale_price: p.resale_price || null, profit_margin: Number(profitMargin) || 0, shipping_fee: Number(shippingFee) || 0, variants: p.variants || [], needs_price_review: Boolean(p.needs_price_review) },

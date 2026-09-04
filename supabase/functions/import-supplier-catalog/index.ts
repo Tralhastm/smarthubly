@@ -636,7 +636,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
       } else {
         const res: any = await _callAiJson(admin, {
           systemPrompt: SYSTEM,
-          userPrompt: `CONTEÚDO DO CATÁLOGO:\n${text.slice(0, 6000)}\n\n${USER}`,
+          userPrompt: `CONTEÚDO DO CATÁLOGO:\n${text.slice(0, 30000)}\n\n${USER}`,
           temperature: 0.1,
         });
         items = res?.items || [];
@@ -658,7 +658,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
         const name = String(it.name || it.product_name || "").trim().toLowerCase();
         const cost = Number(it.cost_price ?? it.cost ?? it.custo ?? NaN);
         const resale = Number(it.resale_price ?? it.resale ?? it.venda_sugerida ?? it.price ?? it.unit_price ?? it.preco ?? NaN);
-        const price = Number.isFinite(cost) && cost > 0 ? cost : resale;
+        const price = priceType === 'resale' ? (Number.isFinite(resale) && resale > 0 ? resale : cost) : (Number.isFinite(cost) && cost > 0 ? cost : resale);
         if (!name || !Number.isFinite(price) || price <= 0) {
           skipped++;
           continue;
@@ -681,7 +681,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
       const name = String(it.name || it.product_name || "").trim().toLowerCase();
       const cost = Number(it.cost_price ?? it.cost ?? it.custo ?? NaN);
       const resale = Number(it.resale_price ?? it.resale ?? it.venda_sugerida ?? it.price ?? it.unit_price ?? it.preco ?? NaN);
-      const price = Number.isFinite(cost) && cost > 0 ? cost : resale;
+      const price = priceType === 'resale' ? (Number.isFinite(resale) && resale > 0 ? resale : cost) : (Number.isFinite(cost) && cost > 0 ? cost : resale);
       if (!name || !Number.isFinite(price) || price <= 0) {
         skipped++;
         continue;
