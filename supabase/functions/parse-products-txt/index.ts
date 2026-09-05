@@ -7,11 +7,12 @@ const corsHeaders = {
 };
 
 const PARSE_PROMPT = (txtContent: string) => `Você é um parser de produtos. Extraia os produtos do texto abaixo.
-Para cada produto extraia: name, price (número), category (inferida do nome), description (curta e atrativa).
+Para cada produto extraia: name, price (número), cost_price (número quando houver custo/fornecedor), resale_price (número quando houver revenda/preço de venda), category (inferida do nome), description (curta e atrativa).
+Quando a mesma linha trouxer custo e revenda, preserve os dois campos separadamente. Use price como resale_price quando houver revenda; caso contrário use cost_price. Ignore números de memória, armazenamento, datas e especificações técnicas.
 Se o preço não estiver claro, coloque 0.
 
 Responda APENAS com JSON válido neste formato exato, sem markdown:
-{"products": [{"name": "...", "price": 0, "category": "...", "description": "..."}]}
+{"products": [{"name": "...", "price": 0, "cost_price": 0, "resale_price": 0, "category": "...", "description": "..."}]}
 
 Texto:
 ${txtContent}`;
@@ -21,6 +22,8 @@ interface AiWorker { id: string; base_url: string; }
 interface ParsedProduct {
   name: string;
   price: number;
+  cost_price?: number;
+  resale_price?: number;
   category: string;
   description: string;
 }
@@ -114,16 +117,27 @@ function extractPrice(line: string): number | null {
   return null;
 }
 
+function extractLabeledPrice(line: string, label: RegExp): number | null {
+  const match = line.match(new RegExp(`${label.source}\\s*[:=\\-]?\\s*R?\\$?\\s*([\\d.]+(?:,\\d{1,2})?)`, "i"));
+  if (!match) return null;
+  const value = Number(match[1].replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 // Remove o trecho do preço da linha pra extrair o nome limpo
 function stripPriceFromLine(line: string): string {
   return line
+    .replace(/\|.*$/g, "")
+    .replace(/(?:→|->).*$/g, "")
+    .replace(/\(\s*(?:custo|revenda|preço de custo|preco de custo|preço de venda|preco de venda)[^)]*\)/gi, "")
     .replace(/R\$\s*\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?/g, "")
     .replace(/R\$\s*\d+(?:,\d{1,2})?/g, "")
     .replace(/\b\d+(?:[.,]\d+)?\s*[kK]\b/g, "")
     .replace(/\b\d{1,3}(?:\.\d{3})+,\d{1,2}\b/g, "")
     .replace(/\b\d+,\d{1,2}\b/g, "")
     .replace(/\b\d+\.\d{1,2}\b/g, "")
-    .replace(/\s*[-–—:|]\s*$/g, "")
+    .replace(/\b(?:custo|revenda|preço de custo|preco de custo|preço de venda|preco de venda)\b/gi, "")
+    .replace(/\s*[-–—:|()]\s*$/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -191,11 +205,15 @@ function parseLocally(txtContent: string): { products: ParsedProduct[] } {
       }
       for (const line of linesWithPrice) {
         const price = extractPrice(line)!;
+        const costPrice = extractLabeledPrice(line, /(?:custo|preço de custo|preco de custo|fornecedor)/i);
+        const resalePrice = extractLabeledPrice(line, /(?:revenda|preço de venda|preco de venda)/i);
         const name = stripPriceFromLine(stripDecor(line));
         if (!name) continue;
         products.push({
           name,
-          price,
+          price: resalePrice || costPrice || price,
+          ...(costPrice ? { cost_price: costPrice } : {}),
+          ...(resalePrice ? { resale_price: resalePrice } : {}),
           category: inferCategory(name, currentCategory),
           description: "",
         });
@@ -228,9 +246,13 @@ function parseLocally(txtContent: string): { products: ParsedProduct[] } {
       if (cleaned) descLines.push(cleaned);
     }
 
+    const costPrice = extractLabeledPrice(rawNameLine, /(?:custo|preço de custo|preco de custo|fornecedor)/i);
+    const resalePrice = extractLabeledPrice(rawNameLine, /(?:revenda|preço de venda|preco de venda)/i);
     products.push({
       name,
-      price,
+      price: resalePrice || costPrice || price,
+      ...(costPrice ? { cost_price: costPrice } : {}),
+      ...(resalePrice ? { resale_price: resalePrice } : {}),
       category: inferCategory(name, currentCategory),
       description: descLines.join(" ").slice(0, 500),
     });

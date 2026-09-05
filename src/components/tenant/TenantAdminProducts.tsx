@@ -38,6 +38,17 @@ const parseBrazilianMoney = (value: unknown) => {
 type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
 type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; variants?: ParsedVariant[]; needs_price_review?: boolean };
 
+const getImportedPrices = (product: ParsedProduct, priceType: string) => {
+  const legacyPrice = Number(product.price || 0) || 0;
+  const explicitCost = Number(product.cost_price || 0) || 0;
+  const explicitSale = Number(product.resale_price || 0) || 0;
+  const isCost = priceType === 'cost' || priceType === 'both';
+  const isSale = priceType === 'resale' || priceType === 'both';
+  const cost = isCost ? (explicitCost || (priceType === 'both' ? 0 : legacyPrice)) : explicitCost;
+  const sale = isSale ? (explicitSale || (priceType === 'resale' ? legacyPrice : 0)) : 0;
+  return { cost, sale };
+};
+
 const DEFAULT_BULK_DESCRIPTION_RULES = `Siga obrigatoriamente este formato editorial, sem alterar a ordem e sem usar marcadores, bullets ou títulos técnicos:
 
 1. Escreva um primeiro parágrafo comercial, com 2 a 3 frases, apresentando o produto e seu principal benefício.
@@ -645,14 +656,16 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       if (importCancelled) break;
       const p = uniqueParsed[i];
       try {
-        const isCost = importPriceType === 'cost' || importPriceType === 'both';
         const shipping = parseFloat(importShippingFee) || 0;
         const margin = parseFloat(importProfitMargin) || 0;
-        
-        // Se for custo, calcula a revenda automaticamente com base na margem e frete
-        const importedCost = isCost ? Number(p.cost_price || p.price) : 0;
+        const { cost: importedCost, sale: importedSale } = getImportedPrices(p, importPriceType);
+        const isCost = importPriceType === 'cost' || importPriceType === 'both';
         const original_price = importedCost;
-        const calculatedPrice = isCost ? (importedCost + shipping) * (1 + (margin / 100)) : Number(p.resale_price || p.price);
+        const calculatedPrice = importedSale > 0
+          ? importedSale
+          : importedCost > 0
+            ? (importedCost + shipping) * (1 + (margin / 100))
+            : Number(p.price || 0);
         const price = calculatedPrice;
         
         // Verificação de duplicata no Banco de Dados em tempo real
@@ -664,28 +677,21 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           .maybeSingle();
 
         if (existing) {
-          // Requisito: "valor de revenda N MUDARIA MAS IRIA TER UM ALERTA SOBRE A MARGEM DE LUCRO"
-          // Para produtos existentes, não alteramos o 'price' (revenda) da tabela products.
           const updateData: any = {
             updated_at: new Date().toISOString(),
           };
-          
-          // Se for custo, atualizamos o custo original se for menor (melhor preço)
-          const currentCost = existing.original_price || 0;
-          if (isCost && importedCost > 0 && importedCost !== currentCost) {
+
+          if (importedCost > 0 && importedCost !== Number(existing.original_price || 0)) {
             updateData.original_price = original_price;
             updateData.supplier_id = currentSupplierId;
-            
-            // Alerta de margem (apenas log/console por enquanto conforme pedido)
-            const currentResale = parseFloat(existing.price?.toString() || '0');
-            const newMargin = currentResale > 0 ? ((currentResale - importedCost) / importedCost) * 100 : 0;
-            if (newMargin < margin) {
-              console.log(`[Import] Margem baixa para ${p.name}: ${newMargin.toFixed(1)}%`);
-            }
+          }
+          if (importedSale > 0 && importedSale !== Number(existing.price || 0)) {
+            updateData.price = importedSale;
+            updateData.supplier_id = currentSupplierId;
           }
 
           await supabase.from('products').update(updateData).eq('id', existing.id);
-          await saveImportedVariants(existing.id, p, Number(existing.price) || price, Number(updateData.original_price || existing.original_price) || importedCost, isCost, shipping, margin);
+          await saveImportedVariants(existing.id, p, importedSale || Number(existing.price) || price, Number(updateData.original_price || existing.original_price) || importedCost, isCost, shipping, margin);
           insertedIds.push(existing.id);
         } else {
           // Produto novo: Insere
