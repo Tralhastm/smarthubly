@@ -19,9 +19,18 @@ import { unifiedInvoke } from "@/lib/unifiedInvoke";
 const parseBrazilianMoney = (value: unknown) => {
   const raw = String(value ?? '').trim().replace(/\s/g, '');
   if (!raw) return 0;
-  const normalized = raw.includes(',')
-    ? raw.replace(/\./g, '').replace(',', '.')
-    : /^\d{1,3}(\.\d{3})+$/.test(raw) ? raw.replace(/\./g, '') : raw;
+  const lastComma = raw.lastIndexOf(',');
+  const lastDot = raw.lastIndexOf('.');
+  let normalized = raw;
+  if (lastComma >= 0 && lastDot >= 0) {
+    const decimalSeparator = lastComma > lastDot ? ',' : '.';
+    const thousandsSeparator = decimalSeparator === ',' ? '.' : ',';
+    normalized = raw.split(thousandsSeparator).join('').replace(decimalSeparator, '.');
+  } else if (lastComma >= 0) {
+    normalized = raw.replace(/\./g, '').replace(',', '.');
+  } else if (/^\d{1,3}(\.\d{3})+$/.test(raw)) {
+    normalized = raw.replace(/\./g, '');
+  }
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
 };
