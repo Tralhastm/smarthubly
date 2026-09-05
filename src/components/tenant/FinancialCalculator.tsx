@@ -64,7 +64,7 @@ const FinancialCalculator = () => {
     const margin = suggested > 0 ? net / suggested * 100 : 0;
     const target = Number(targetMargin) || 0;
     const variableRate = rate + (freightUnit === 'percent' ? (Number(freight) || 0) / 100 : 0) + (discountUnit === 'percent' ? (Number(discount) || 0) / 100 : 0) + (otherUnit === 'percent' ? (Number(other) || 0) / 100 : 0);
-    const fixedExpenses = (freightUnit === 'brl' ? Number(freight) || 0 : 0) + (discountUnit === 'brl' ? Number(discount) || 0 : 0) + (otherUnit === 'brl' ? Number(other) || 0 : 0);
+    const fixedExpenses = (asaasUnit === 'brl' ? Number(asaas) || 0 : 0) + (freightUnit === 'brl' ? Number(freight) || 0 : 0) + (discountUnit === 'brl' ? Number(discount) || 0 : 0) + (otherUnit === 'brl' ? Number(other) || 0 : 0);
     const denominator = (1 - variableRate) * (1 - (Number(sellerPercent) || 0) / 100) - target / 100;
     const targetPrice = denominator > 0 ? (row.supplier + fixedExpenses) / denominator : 0;
     const colorSuggested = row.baseColor ? Math.max(0, row.baseColor - 20) : row.color ? Math.max(0, row.color - 20) : null;
