@@ -854,7 +854,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       affiliate_url: form.affiliate_url || null,
       affiliate_network: form.affiliate_network || null,
       affiliate_coupon_code: form.affiliate_coupon_code ? form.affiliate_coupon_code.trim().toUpperCase() : null,
-      affiliate_coupon_discount_price: form.affiliate_coupon_discount_price ? parseFloat(form.affiliate_coupon_discount_price) : null,
+      affiliate_coupon_discount_price: form.affiliate_coupon_discount_price ? parseBrazilianMoney(form.affiliate_coupon_discount_price) : null,
       affiliate_coupon_expires_at: form.affiliate_coupon_expires_at ? new Date(form.affiliate_coupon_expires_at).toISOString() : null,
       item_type: form.item_type,
       duration_minutes: form.item_type === 'service' && form.duration_minutes ? parseInt(form.duration_minutes) : null,
@@ -1375,7 +1375,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
                     placeholder="Código (ACHADINHO50)" maxLength={30}
                     className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground font-mono uppercase" />
                   <input value={form.affiliate_coupon_discount_price} onChange={e => setForm({ ...form, affiliate_coupon_discount_price: e.target.value })}
-                    placeholder="Preço com cupom (R$)" type="number" step="0.01" min="0"
+                  placeholder="Ex.: 1.213,00" inputMode="decimal"
                     className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
                 </div>
                 <label className="text-[10px] text-muted-foreground mt-2 block">Expira em</label>
