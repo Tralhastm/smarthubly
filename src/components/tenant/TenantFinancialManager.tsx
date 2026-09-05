@@ -13,6 +13,7 @@ import { useOrders } from '@/hooks/useOrders';
 import FiadoTab from './FiadoTab';
 import FinancialReportPDFButton from './FinancialReportPDFButton';
 import TenantBusinessPanel from './TenantBusinessPanel';
+import FinancialCalculator from './FinancialCalculator';
 import { useProducts } from '@/hooks/useProducts';
 import { useSuppliers } from '@/hooks/useSuppliers';
 import { useIntegrationSettings } from '@/hooks/useIntegration';
@@ -20,7 +21,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { isEmbedMode } from '@/lib/embed-mode';
 import { useSubTabs } from '@/lib/admin-subtabs';
 import {
-  Plus, Trash2, TrendingUp, Check, Factory,
+  Plus, Trash2, TrendingUp, Check, Factory, Calculator,
   Save, Loader2, Settings, AlertTriangle, CheckCircle2, AlertCircle,
   Sparkles, Lightbulb, Calendar, Target, Wallet, Receipt, Zap,
   ArrowDownCircle, ArrowUpCircle, PiggyBank, ShoppingCart, Truck,
@@ -62,7 +63,7 @@ const entrySubcategory = (e: { category?: string | null; subcategory?: string | 
 
 const TenantFinancialManager = ({ tenantId, isDropshipping }: { tenantId: string; isDropshipping?: boolean }) => {
   const embedded = isEmbedMode();
-  const [tab, setTab] = useState<'overview' | 'cashflow' | 'entries' | 'card' | 'debts' | 'fiado' | 'recurring' | 'suppliers' | 'projection' | 'fee_config' | 'clara'>('overview');
+  const [tab, setTab] = useState<'overview' | 'cashflow' | 'entries' | 'card' | 'debts' | 'fiado' | 'recurring' | 'suppliers' | 'projection' | 'fee_config' | 'clara' | 'calculator'>('overview');
   const { data: entries = [], isLoading: le } = useFinancialEntries(tenantId);
   const { data: debts = [], isLoading: ld } = useDebts(tenantId);
   const { data: orders = [] } = useOrders(tenantId);
@@ -432,6 +433,7 @@ const TenantFinancialManager = ({ tenantId, isDropshipping }: { tenantId: string
     { id: 'card', label: '💳 Cartão', icon: CreditCard },
     { id: 'debts', label: '💰 A Pagar / Receber', icon: Wallet },
     { id: 'suppliers', label: '🏭 Fornec.', icon: Factory },
+    { id: 'calculator', label: '🧮 Calculadora', icon: Calculator },
     { id: 'fee_config', label: '⚙️ Taxa', icon: Settings },
   ]);
 
@@ -1414,6 +1416,8 @@ const TenantFinancialManager = ({ tenantId, isDropshipping }: { tenantId: string
           )}
         </div>
       )}
+
+      {tab === 'calculator' && <FinancialCalculator />}
 
       {/* (Aba 'projection' foi mesclada dentro do Fluxo; aba 'fiado' agora vive dentro do toggle de 'debts') */}
 
