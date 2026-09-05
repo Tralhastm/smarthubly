@@ -572,9 +572,11 @@ const SupplierPanel = () => {
         flush();
         const name = cleanImportedName(line.slice(0, vendorPrice.index ?? 0));
         const vendorCost = parsePrice(vendorPrice[1]);
+        const remainder = line.slice((vendorPrice.index ?? 0) + vendorPrice[0].length);
+        const vendorResale = numberFromLine(remainder, ['venda sugerida', 'venda', 'revenda', 'resale', 'preço de venda', 'preco de venda']);
         const aliases = [name];
         if (brand && name && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
-        if (name && vendorCost != null) entries.push({ name, cost: vendorCost, resale: null, colors: extractColors(line.slice((vendorPrice.index ?? 0) + vendorPrice[0].length)), aliases });
+        if (name && vendorCost != null) entries.push({ name, cost: vendorCost, resale: vendorResale, colors: extractColors(remainder), aliases });
         continue;
       }
 
