@@ -16,6 +16,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
+const parseBrazilianMoney = (value: unknown) => {
+  const raw = String(value ?? '').trim().replace(/\s/g, '');
+  if (!raw) return 0;
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : /^\d{1,3}(\.\d{3})+$/.test(raw) ? raw.replace(/\./g, '') : raw;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
 type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; variants?: ParsedVariant[]; needs_price_review?: boolean };
 
@@ -832,8 +842,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     addMutation.mutate({
       tenant_id: tenantId,
       name: form.name,
-      price: parseFloat(form.price),
-      original_price: parseFloat(form.original_price) || 0,
+      price: parseBrazilianMoney(form.price),
+      original_price: parseBrazilianMoney(form.original_price),
       category: form.category || 'Geral',
       description: form.description,
       image: form.image,
@@ -1300,11 +1310,11 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-xs text-muted-foreground">Preço de venda (R$)</label>
-              <input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="Preço" type="number" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+              <input value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="Ex.: 1.213,00" inputMode="decimal" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Preço original/custo (R$)</label>
-              <input value={form.original_price} onChange={e => setForm({ ...form, original_price: e.target.value })} placeholder="Custo" type="number" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+              <input value={form.original_price} onChange={e => setForm({ ...form, original_price: e.target.value })} placeholder="Ex.: 900,00" inputMode="decimal" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
             </div>
           </div>
           {form.item_type === 'service' && (
@@ -1536,11 +1546,11 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-xs text-muted-foreground">Preço venda</label>
-            <input value={form.price} onChange={e => setForm({ ...form, price: parseFloat(e.target.value) || 0 })} type="number" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+            <input value={form.price} onChange={e => setForm({ ...form, price: parseBrazilianMoney(e.target.value) } as any)} inputMode="decimal" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
           </div>
           <div>
             <label className="text-xs text-muted-foreground">Preço custo</label>
-            <input value={(form as any).original_price ?? 0} onChange={e => setForm({ ...form, original_price: parseFloat(e.target.value) || 0 } as any)} type="number" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+            <input value={(form as any).original_price ?? 0} onChange={e => setForm({ ...form, original_price: parseBrazilianMoney(e.target.value) } as any)} inputMode="decimal" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
           </div>
         </div>
         <div className="space-y-2">
