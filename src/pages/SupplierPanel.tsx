@@ -480,7 +480,10 @@ const SupplierPanel = () => {
     toast.success(`Estoque atualizado: ${newQty}`);
   };
 
-  const normalizeProductName = (value: string) => value.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+  const normalizeProductName = (value: string) => value.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/^\s*\d+\s*[.)-]\s*/, '')
+    .replace(/[|*_]/g, ' ')
+    .replace(/\s+/g, ' ');
   const normalizeSupplierProductName = (value: string) => normalizeProductName(value)
     .replace(/\s*\([^)]*\)\s*$/g, '')
     .replace(/\bnfce\b/g, 'nfc')
@@ -650,7 +653,6 @@ const SupplierPanel = () => {
             unit_price: priceUpdateMode === 'resale' ? (entry.resale ?? entry.cost) : (entry.cost ?? entry.resale),
             available: true,
             price_types: priceUpdateMode === 'both' ? ['cost', 'resale'] : [priceUpdateMode],
-            metadata: { cost_price: entry.cost, resale_price: entry.resale },
           }, { onConflict: 'supplier_id,product_name' });
           // A tabela de comparação é auxiliar: não deve fazer a atualização do produto parecer falha.
           if (priceError) warnings.push(`${entry.name} (comparação não atualizada: ${priceError.message})`);
