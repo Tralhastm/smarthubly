@@ -524,7 +524,9 @@ const SupplierPanel = () => {
 
   const sectionBrand = (line: string) => {
     const upper = line.toLocaleUpperCase('pt-BR');
-    if (!line.includes('🟢') && !/LINHA\s+(REDMI|NOTE|POCO|MI)/i.test(line)) return '';
+    const heading = line.replace(/[🇧🇷🇨🇳☀️😍🤩🟢⚠️‼️*\s]/gu, '');
+    const isHeading = /(?:-{3,}|_{3,})/.test(line) || /^(?:REALME|SAMSUNG|MOTOROLA|INFINIX|OPPO|HONOR|REDMI|POCO|MI|NOTE)$/i.test(heading);
+    if (!line.includes('🟢') && !isHeading && !/LINHA\s+(REDMI|NOTE|POCO|MI)/i.test(line)) return '';
     if (upper.includes('SAMSUNG')) return 'Samsung';
     if (upper.includes('MOTOROLA')) return 'Motorola';
     if (upper.includes('REALME')) return 'Realme';
@@ -561,6 +563,7 @@ const SupplierPanel = () => {
     for (const rawLine of text.split(/\r?\n/)) {
       const line = rawLine.trim();
       if (!line) continue;
+      if (/^\*?\s*crit[eé]rio\s*:/i.test(line)) continue;
       const detectedBrand = sectionBrand(line);
       if (detectedBrand) { flush(); brand = detectedBrand; continue; }
 
@@ -646,17 +649,6 @@ const SupplierPanel = () => {
         }
         const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
         if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
-        if (entry.cost != null || entry.resale != null) {
-          const { error: priceError } = await (supabase as any).from('supplier_product_prices').upsert({
-            supplier_id: supplier.id,
-            product_name: product.name.trim().toLowerCase(),
-            unit_price: priceUpdateMode === 'resale' ? (entry.resale ?? entry.cost) : (entry.cost ?? entry.resale),
-            available: true,
-            price_types: priceUpdateMode === 'both' ? ['cost', 'resale'] : [priceUpdateMode],
-          }, { onConflict: 'supplier_id,product_name' });
-          // A tabela de comparação é auxiliar: não deve fazer a atualização do produto parecer falha.
-          if (priceError) warnings.push(`${entry.name} (comparação não atualizada: ${priceError.message})`);
-        }
         updated.push(entry.name);
         // A lista recebida é a fotografia atual do fornecedor. Portanto,
         // também sincronizamos quando não há cores: nesse caso, todas as
