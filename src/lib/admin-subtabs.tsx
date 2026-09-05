@@ -16,6 +16,7 @@ export const ADMIN_SUBTABS: Record<string, { id: string; label: string }[]> = {
     { id: 'card', label: '💳 Cartão' },
     { id: 'debts', label: '💰 A Pagar / Receber' },
     { id: 'suppliers', label: '🏭 Fornec.' },
+    { id: 'calculator', label: '🧮 Calculadora' },
     { id: 'fee_config', label: '⚙️ Taxa' },
   ],
   'finance-deep': [
