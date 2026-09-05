@@ -49,6 +49,15 @@ const getImportedPrices = (product: ParsedProduct, priceType: string) => {
   return { cost, sale };
 };
 
+const normalizeProductName = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLocaleLowerCase('pt-BR')
+  .replace(/^\s*\d+\s*[.)-]\s*/, '')
+  .replace(/[|*_]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
 const DEFAULT_BULK_DESCRIPTION_RULES = `Siga obrigatoriamente este formato editorial, sem alterar a ordem e sem usar marcadores, bullets ou títulos técnicos:
 
 1. Escreva um primeiro parágrafo comercial, com 2 a 3 frases, apresentando o produto e seu principal benefício.
@@ -647,7 +656,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
     // IA Analítica: Filtra duplicatas na lista parseada antes de começar
     const uniqueParsed = parsedProducts.filter((p, index, self) => 
-      index === self.findIndex((t) => t.name.trim().toLowerCase() === p.name.trim().toLowerCase())
+      index === self.findIndex((t) => normalizeProductName(t.name) === normalizeProductName(p.name))
     );
     
     setImportTotal(uniqueParsed.length);
@@ -669,12 +678,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         const price = calculatedPrice;
         
         // Verificação de duplicata no Banco de Dados em tempo real
-        const { data: existing } = await supabase
-          .from('products')
-          .select('id, price, original_price, supplier_id, description, category')
-          .eq('tenant_id', tenantId)
-          .ilike('name', p.name.trim())
-          .maybeSingle();
+        // A lista exportada pode ter numeração, asteriscos ou `|` no nome
+        // (ex.: `19. Mi 17T... |`). Compare os nomes normalizados localmente
+        // para não criar um produto novo quando o modelo já existe no catálogo.
+        const existing = products.find((candidate) =>
+          candidate.tenant_id === tenantId && normalizeProductName(candidate.name) === normalizeProductName(p.name)
+        ) || null;
 
         if (existing) {
           const updateData: any = {
