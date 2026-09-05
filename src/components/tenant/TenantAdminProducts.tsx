@@ -523,7 +523,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         result = { data: await response.json() };
       } else {
         // Fluxo TXT original
-        result = await unifiedInvoke("ai-media-unified", "parse-txt", { 
+        result = await unifiedInvoke("parse-products-txt", "", { 
           txtContent: importRawText,
           supplierName: importSupplierName,
           priceType: importPriceType,
