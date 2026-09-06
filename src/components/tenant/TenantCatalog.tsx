@@ -41,7 +41,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
   return (
     <div className="animate-fade-in" style={{ animationDelay: `${Math.min(index, 8) * 50}ms` }}>
       <div className="group relative flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card p-4 hover-glow transition-all duration-300 hover:border-primary/30">
-        <div className="aspect-square mb-3 cursor-pointer overflow-hidden rounded-md bg-secondary flex items-center justify-center relative" onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
+        <div className="aspect-square mb-3 cursor-pointer overflow-hidden rounded-md bg-white flex items-center justify-center relative" onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
           {Array.isArray(product.media) && product.media.length > 0 ? (
             <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-contain" videoClassName="h-full w-full object-contain" />
           ) : product.image ? (
@@ -93,7 +93,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
   const desc = formatDescriptionForDisplay(product.description);
   return (
     <div className="group flex gap-3 rounded-lg border border-border bg-card p-3 hover:border-primary/30 transition-colors animate-fade-in">
-      <div className="w-24 h-24 sm:w-28 sm:h-28 shrink-0 cursor-pointer overflow-hidden rounded-md bg-secondary flex items-center justify-center relative" onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
+      <div className="w-24 h-24 sm:w-28 sm:h-28 shrink-0 cursor-pointer overflow-hidden rounded-md bg-white flex items-center justify-center relative" onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
         {Array.isArray(product.media) && product.media.length > 0 ? (
           <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-contain" videoClassName="h-full w-full object-contain" />
         ) : product.image ? (
@@ -169,7 +169,7 @@ const MagazineCard = ({ product, addToCart, niche, hasExtras, displayPrice, onOp
   const cta = getItemCTA(product as any, niche);
   return (
     <div className={`group relative overflow-hidden rounded-xl border border-border bg-card hover:border-primary/40 transition-all animate-fade-in ${large ? 'md:col-span-2 md:row-span-2' : ''}`}>
-      <div className={`cursor-pointer overflow-hidden bg-secondary ${large ? 'aspect-[16/10]' : 'aspect-square'}`} onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
+      <div className={`cursor-pointer overflow-hidden bg-white ${large ? 'aspect-[16/10]' : 'aspect-square'}`} onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
         {Array.isArray(product.media) && product.media.length > 0 ? (
           <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-contain" videoClassName="h-full w-full object-contain" />
         ) : product.image ? (
