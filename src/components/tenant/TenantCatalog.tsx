@@ -620,7 +620,8 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
               </button>
               <button onClick={() => {
                   if (!detail.in_stock) return;
-                  if (extrasIds.has(detail.id)) setPickerProduct(detail);
+                  const hasDetailOptions = extrasIds.has(detail.id) || (variantMap.get(detail.id)?.length ?? 0) > 0;
+                  if (hasDetailOptions) setPickerProduct(detail);
                   else addToCart(detail);
                   setDetail(null);
                 }} disabled={!detail.in_stock}
