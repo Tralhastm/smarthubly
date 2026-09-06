@@ -18,7 +18,10 @@ import { unifiedInvoke } from "@/lib/unifiedInvoke";
 import { calculateFinalProfit } from '@/lib/pricing';
 
 const parseBrazilianMoney = (value: unknown) => {
-  const raw = String(value ?? '').trim().replace(/\s/g, '');
+  const raw = String(value ?? '')
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/[^\d,.-]/g, '');
   if (!raw) return 0;
   const lastComma = raw.lastIndexOf(',');
   const lastDot = raw.lastIndexOf('.');
