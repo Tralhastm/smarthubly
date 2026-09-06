@@ -281,6 +281,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
       displayFrom: uniquePrices.length > 1,
     };
   };
+  const getDisplayPrice = (product: Product) => getDisplayPriceInfo(product).displayPrice;
   const openDetails = splashEnabled ? setDetail : null;
 
   // Notifica a página quando o splash de detalhes abre/fecha para que os botões
