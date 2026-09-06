@@ -930,11 +930,17 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
   const productsWithoutImage = products.filter(p => !p.image || p.image === '').length;
   const productsWithAiImage = products.filter(p => p.image && p.image.includes('?ai=1')).length;
+  // A API pode devolver a lista em ordem diferente após qualquer atualização.
+  // Ordenação explícita mantém cada card no mesmo lugar durante a configuração.
+  const orderedProducts = [...products].sort((a, b) => {
+    const byName = String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR', { sensitivity: 'base', numeric: true });
+    return byName || String(a.id).localeCompare(String(b.id));
+  });
   const normalizedCatalogSearch = catalogSearch.trim().toLowerCase();
   const visibleProducts = normalizedCatalogSearch
-    ? products.filter(p => [p.name, p.category, (p as any).subcategory, (p as any).supplier_name]
+    ? orderedProducts.filter(p => [p.name, p.category, (p as any).subcategory, (p as any).supplier_name]
         .filter(Boolean).join(' ').toLowerCase().includes(normalizedCatalogSearch))
-    : products;
+    : orderedProducts;
   const productsWithGoogleImage = products.filter(p => p.image && p.image.includes('?src=google')).length;
   const lossProducts = products
     .map(product => ({ product, pricing: calculateFinalProfit(product.price, (product as any).original_price) }))
