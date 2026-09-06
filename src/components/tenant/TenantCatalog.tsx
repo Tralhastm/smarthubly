@@ -277,8 +277,8 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
       .filter(price => Number.isFinite(price) && price > 0);
     const uniquePrices = Array.from(new Set(prices.map(price => Math.round(price * 100))));
     return {
-      price: prices.length > 0 ? Math.min(...prices) : Number(product.price) || 0,
-      from: uniquePrices.length > 1,
+      displayPrice: prices.length > 0 ? Math.min(...prices) : Number(product.price) || 0,
+      displayFrom: uniquePrices.length > 1,
     };
   };
   const openDetails = splashEnabled ? setDetail : null;
