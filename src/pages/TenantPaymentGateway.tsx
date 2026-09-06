@@ -99,12 +99,15 @@ export default function TenantPaymentGateway() {
       <div className="mx-auto max-w-xl space-y-4 px-4 py-6">
         <section className="rounded-2xl border border-primary/30 bg-primary/5 p-5 text-center">
           <p className="text-xs text-muted-foreground">Pedido #{orderId?.slice(0, 8)}</p>
-          {total !== null && <p className="mt-1 text-3xl font-bold text-primary">R$ {total.toFixed(2)}</p>}
+          {total !== null && <>
+            <p className="mt-1 text-3xl font-bold text-primary">R$ {total.toFixed(2)}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Valor à vista/Pix</p>
+          </>}
           <p className="mt-2 text-xs text-muted-foreground">Pagamento processado por <strong className="text-foreground">{label}</strong></p>
         </section>
         <section className="rounded-xl border border-border bg-card p-4 text-sm">
           <h2 className="mb-3 flex items-center gap-2 font-bold text-foreground"><CheckCircle2 className="h-4 w-4 text-primary" /> Como pagar</h2>
-          <p className="text-muted-foreground">Escolha Pix, cartão ou boleto na página segura do {label}. Depois de pagar, volte para esta tela: a confirmação será detectada automaticamente.</p>
+          <p className="text-muted-foreground">No Pix, permanece o valor à vista indicado acima. No cartão, escolha a quantidade de parcelas na página segura do {label}; o provedor mostrará o valor total, os juros e o valor de cada parcela antes da confirmação. Depois de pagar, volte para esta tela: a confirmação será detectada automaticamente.</p>
           {provider === 'asaas' && <p className="mt-2 text-xs text-muted-foreground">O Asaas pode solicitar e-mail e CPF/CNPJ do pagador na própria fatura.</p>}
         </section>
         {loading && <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-card p-6 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /> Preparando pagamento...</div>}

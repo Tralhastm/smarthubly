@@ -1151,7 +1151,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     {hasOnlinePayment && (
                       <div className="rounded-lg border-2 border-primary/40 bg-primary/10 p-3 text-xs text-foreground mb-3">
                         ✅ <strong>Pagamento online disponível.</strong><br/>
-                        Para pagar agora com Pix instantâneo ou Cartão (aprovação automática), use o <strong>botão verde "Pagar agora"</strong> mais abaixo. Você não precisa preencher nada aqui.
+                        O preço exibido é o valor à vista/Pix. Para cartão, use o botão abaixo: no checkout seguro você escolhe em quantas vezes deseja pagar e vê o valor total, os juros e o valor de cada parcela antes de confirmar.
                       </div>
                     )}
                     <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2 mb-2 text-[11px] text-yellow-700 dark:text-yellow-400">
@@ -1251,10 +1251,14 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       qualquer ambiguidade de estado. O usuário escolhe pelo botão clicado. */}
                   {hasOnlinePayment && (
                     <>
+                      <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
+                        <strong className="text-foreground">Pix:</strong> valor mostrado acima.<br />
+                        <strong className="text-foreground">Cartão:</strong> escolha o número de parcelas no checkout do provedor. Qualquer tarifa ou juros será calculado e exibido antes do pagamento.
+                      </div>
                       <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
                         className="w-full py-4 rounded-lg font-bold text-base text-primary-foreground gradient-primary hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ring-2 ring-primary/40">
                         {creatingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
-                        {creatingPayment ? 'Gerando pagamento...' : `💳 Pagar R$${finalTotal.toFixed(2)} agora (${isAsaasActive ? 'Asaas' : 'Mercado Pago'})`}
+                        {creatingPayment ? 'Gerando pagamento...' : `💳 Ver opções de pagamento (${isAsaasActive ? 'Asaas' : 'Mercado Pago'})`}
                       </button>
                       {!!(tenant as any).demo_payment_enabled && (
                         <button onClick={() => submitOrder(false, true, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
