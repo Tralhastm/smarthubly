@@ -618,7 +618,12 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                 className="mb-2 flex w-full items-center justify-center rounded-xl border border-border px-6 py-3 text-sm font-semibold text-foreground transition hover:bg-secondary">
                 Voltar
               </button>
-              <button onClick={() => { addToCart(detail); setDetail(null); }} disabled={!detail.in_stock}
+              <button onClick={() => {
+                  if (!detail.in_stock) return;
+                  if (extrasIds.has(detail.id)) setPickerProduct(detail);
+                  else addToCart(detail);
+                  setDetail(null);
+                }} disabled={!detail.in_stock}
                 className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold uppercase tracking-wider gradient-primary text-primary-foreground transition hover:opacity-90 disabled:opacity-40">
                 <ShoppingCart className="h-5 w-5" />
                 {detail.in_stock ? 'Adicionar ao carrinho' : 'Indisponível'}
