@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct, type Product } from '@/hooks/useProducts';
 import { useProductVariants } from '@/hooks/useProductExtras';
 import { useSuppliers } from '@/hooks/useSuppliers';
@@ -92,6 +92,19 @@ const normalizeGeneratedDescription = (value: unknown) => {
 
 const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenantId: string; isDropshipping?: boolean; isAffiliate?: boolean }) => {
   const { data: products = [], isLoading, refetch } = useProducts(tenantId);
+  const { data: allVariants = [] } = useQuery({
+    queryKey: ['tenant-product-variants', tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('product_variants' as any)
+        .select('product_id,suggested_price,price_delta,cost_price')
+        .eq('tenant_id', tenantId);
+      if (error) throw error;
+      return (data || []) as Array<{ product_id: string; suggested_price: number | null; price_delta: number | null; cost_price: number | null }>;
+    },
+    enabled: !!tenantId,
+    staleTime: 30000,
+  });
   const queryClient = useQueryClient();
   const { data: suppliers = [] } = useSuppliers(tenantId);
   const { data: feeRequests = [] } = useFeeRequests(tenantId);
@@ -942,9 +955,19 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         .filter(Boolean).join(' ').toLowerCase().includes(normalizedCatalogSearch))
     : orderedProducts;
   const productsWithGoogleImage = products.filter(p => p.image && p.image.includes('?src=google')).length;
-  const lossProducts = products
-    .map(product => ({ product, pricing: calculateFinalProfit(product.price, (product as any).original_price) }))
-    .filter(item => item.pricing.isLoss);
+  const lossProducts = useMemo(() => products
+    .map(product => {
+      const variants = allVariants.filter(variant => variant.product_id === product.id);
+      const pricedVariants = variants.map(variant => ({
+        price: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0))),
+        cost: Number(variant.cost_price ?? (product as any).original_price) || 0,
+      })).filter(item => Number.isFinite(item.price) && item.price > 0);
+      const lowestVariant = pricedVariants.length > 0 ? pricedVariants.reduce((lowest, item) => item.price < lowest.price ? item : lowest) : null;
+      const referencePrice = Number(product.price) > 0 ? Number(product.price) : (lowestVariant?.price || 0);
+      const referenceCost = Number((product as any).original_price) > 0 ? Number((product as any).original_price) : (lowestVariant?.cost || 0);
+      return { product, pricing: calculateFinalProfit(referencePrice, referenceCost) };
+    })
+    .filter(item => item.pricing.isLoss), [products, allVariants]);
 
   return (
     <div className="space-y-4">
