@@ -644,14 +644,15 @@ const SupplierPanel = () => {
         const patch: Record<string, any> = {};
         if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) patch.original_price = entry.cost;
         if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) patch.price = entry.resale;
-        if (Object.keys(patch).length === 0) {
+        if (Object.keys(patch).length === 0 && entry.colors.length === 0) {
           const expected = priceUpdateMode === 'cost' ? 'CUSTO' : priceUpdateMode === 'resale' ? 'REVENDA' : 'CUSTO ou REVENDA';
           invalid.push(`${entry.name} (não contém ${expected})`);
           continue;
         }
-        const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
-        if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
-        updated.push(entry.name);
+        if (Object.keys(patch).length > 0) {
+          const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
+          if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
+        }
         // A lista recebida é a fotografia atual do fornecedor. Portanto,
         // também sincronizamos quando não há cores: nesse caso, todas as
         // variações antigas são removidas em vez de permanecerem acumuladas.
@@ -685,6 +686,7 @@ const SupplierPanel = () => {
             }
           }
         }
+        updated.push(entry.name);
         Object.assign(product, patch);
       }
       setProducts([...products]);
