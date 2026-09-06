@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct, type Product } from '@/hooks/useProducts';
 import { useProductVariants } from '@/hooks/useProductExtras';
@@ -955,7 +955,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         .filter(Boolean).join(' ').toLowerCase().includes(normalizedCatalogSearch))
     : orderedProducts;
   const productsWithGoogleImage = products.filter(p => p.image && p.image.includes('?src=google')).length;
-  const lossProducts = useMemo(() => products
+  const lossProducts = products
     .map(product => {
       const variants = allVariants.filter(variant => variant.product_id === product.id);
       const pricedVariants = variants.map(variant => ({
@@ -967,7 +967,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       const referenceCost = Number((product as any).original_price) > 0 ? Number((product as any).original_price) : (lowestVariant?.cost || 0);
       return { product, pricing: calculateFinalProfit(referencePrice, referenceCost) };
     })
-    .filter(item => item.pricing.isLoss), [products, allVariants]);
+    .filter(item => item.pricing.isLoss);
 
   return (
     <div className="space-y-4">
