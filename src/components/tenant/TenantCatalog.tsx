@@ -43,10 +43,10 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
       <div className="group relative flex h-full flex-col overflow-hidden rounded-lg border border-border bg-card p-4 hover-glow transition-all duration-300 hover:border-primary/30">
         <div className="aspect-square mb-3 cursor-pointer overflow-hidden rounded-md bg-secondary flex items-center justify-center relative" onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
           {Array.isArray(product.media) && product.media.length > 0 ? (
-            <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" videoClassName="h-full w-full object-cover" />
+            <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-contain" videoClassName="h-full w-full object-contain" />
           ) : product.image ? (
             <>
-              <img src={product.image} alt={product.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" decoding="async" />
+              <img src={product.image} alt={product.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
               {isAiGeneratedImage(product.image) && (
                 <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] text-white/70 leading-none select-none">Foto gerada por IA</span>
               )}
@@ -95,9 +95,9 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
     <div className="group flex gap-3 rounded-lg border border-border bg-card p-3 hover:border-primary/30 transition-colors animate-fade-in">
       <div className="w-24 h-24 sm:w-28 sm:h-28 shrink-0 cursor-pointer overflow-hidden rounded-md bg-secondary flex items-center justify-center relative" onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
         {Array.isArray(product.media) && product.media.length > 0 ? (
-          <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-cover" videoClassName="h-full w-full object-cover" />
+          <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-contain" videoClassName="h-full w-full object-contain" />
         ) : product.image ? (
-          <img src={product.image} alt={product.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+            <img src={product.image} alt={product.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
         ) : (<Package className="h-10 w-10 text-primary/40" />)}
       </div>
       <div className="flex-1 min-w-0 flex flex-col">
@@ -171,9 +171,9 @@ const MagazineCard = ({ product, addToCart, niche, hasExtras, displayPrice, onOp
     <div className={`group relative overflow-hidden rounded-xl border border-border bg-card hover:border-primary/40 transition-all animate-fade-in ${large ? 'md:col-span-2 md:row-span-2' : ''}`}>
       <div className={`cursor-pointer overflow-hidden bg-secondary ${large ? 'aspect-[16/10]' : 'aspect-square'}`} onClick={() => onOpenDetails?.(product)} role={onOpenDetails ? 'button' : undefined} tabIndex={onOpenDetails ? 0 : undefined} onKeyDown={e => { if (onOpenDetails && (e.key === 'Enter' || e.key === ' ')) onOpenDetails(product); }}>
         {Array.isArray(product.media) && product.media.length > 0 ? (
-          <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" videoClassName="h-full w-full object-cover" />
+          <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-contain" videoClassName="h-full w-full object-contain" />
         ) : product.image ? (
-          <img src={product.image} alt={product.name} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" decoding="async" />
+          <img src={product.image} alt={product.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
         ) : (
           <div className="h-full w-full flex items-center justify-center"><Package className="h-12 w-12 text-primary/40" /></div>
         )}
