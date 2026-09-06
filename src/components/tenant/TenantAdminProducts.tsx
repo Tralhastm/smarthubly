@@ -79,9 +79,17 @@ const COMPLETE_GUARANTEE = 'Garantia de 30 dias contra defeitos de funcionamento
 // Alguns provedores podem devolver a última linha com reticências mesmo quando
 // o restante da descrição está completo. Nunca deixa esse texto truncado chegar
 // ao formulário ou ao banco: recompõe a garantia padronizada do catálogo.
-const normalizeGeneratedDescription = (value: unknown) => {
-  const description = String(value ?? '').replace(/\r\n?/g, '\n').trim();
+const normalizeGeneratedDescription = (value: unknown, expectedName?: string) => {
+  let description = String(value ?? '').replace(/\r\n?/g, '\n').trim();
   if (!description) return '';
+
+  // O mecanismo de pesquisa pode confundir “Mi 17T” com “Xiaomi 13T” ou
+  // “17T Pro”. Nesse caso, preserva a identidade exata cadastrada pelo admin.
+  if (/\bmi\s*17t\b/i.test(expectedName || '')) {
+    description = description
+      .replace(/\bxiaomi\s*13t\b/gi, expectedName!.trim())
+      .replace(/\bmi\s*17t\s*pro\b/gi, expectedName!.trim());
+  }
 
   const guaranteeStart = description.search(/Garantia de 30 dias contra defeitos de funcion(?:amento)?/i);
   const body = (guaranteeStart >= 0 ? description.slice(0, guaranteeStart) : description)
@@ -245,11 +253,11 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             name: product.name,
             category: product.category,
             currentDescription: product.description || '',
-            rules: bulkDescriptionRules.trim(),
+            rules: `${bulkDescriptionRules.trim()}\n\nIDENTIDADE OBRIGATÓRIA: use exatamente o nome “${product.name}” ao mencionar o produto. Não substitua, corrija ou associe esse nome a outro modelo, mesmo que a pesquisa encontre um aparelho parecido.`,
             researchWeb: true,
           });
           if (error || data?.error || !data?.description) throw new Error(data?.error || error?.message || 'Descrição não gerada');
-          const description = normalizeGeneratedDescription(data.description);
+          const description = normalizeGeneratedDescription(data.description, product.name);
           const { error: updateError } = await supabase.from('products').update({ description }).eq('id', product.id);
           if (updateError) throw updateError;
           done++;
@@ -1597,13 +1605,13 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
           category: form.category,
           network: (form as any).affiliate_network || null,
           currentDescription: form.description,
-          rules: DEFAULT_BULK_DESCRIPTION_RULES,
+          rules: `${DEFAULT_BULK_DESCRIPTION_RULES}\n\nIDENTIDADE OBRIGATÓRIA: use exatamente o nome “${form.name}” ao mencionar o produto. Não substitua, corrija ou associe esse nome a outro modelo, mesmo que a pesquisa encontre um aparelho parecido.`,
           researchWeb: true,
         });
       if (error) throw error;
       if (data?.error) { toast.error(data.error); return; }
       if (data?.description) {
-        setForm(f => ({ ...f, description: normalizeGeneratedDescription(data.description) }));
+        setForm(f => ({ ...f, description: normalizeGeneratedDescription(data.description, form.name) }));
         toast.success('Descrição gerada!');
       }
     } catch (e: any) {
