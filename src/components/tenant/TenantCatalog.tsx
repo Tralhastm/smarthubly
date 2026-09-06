@@ -250,11 +250,26 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   // Assim, uma alteração de preço/custo passa a refletir na vitrine sem depender
   // de uma atualização manual de in_stock no banco.
   const storefrontProducts = useMemo(() => allProducts.map(product => {
-    const pricing = calculateFinalProfit(product.price, (product as any).original_price);
+    const variants = variantMap.get(product.id) || [];
+    const pricedVariants = variants.map(variant => ({
+      sale: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0))),
+      cost: Number(variant.cost_price ?? (product as any).original_price) || 0,
+    })).filter(item => Number.isFinite(item.sale) && item.sale > 0);
+    const lowestVariant = pricedVariants.length > 0
+      ? pricedVariants.reduce((lowest, item) => item.sale < lowest.sale ? item : lowest)
+      : null;
+    const referencePrice = Number(product.price) > 0 ? Number(product.price) : (lowestVariant?.sale || 0);
+    const referenceCost = Number((product as any).original_price) > 0
+      ? Number((product as any).original_price)
+      : (lowestVariant?.cost || 0);
+    // Produto com preço zero aguarda as variações carregarem; não deve ser
+    // marcado como prejuízo durante esse intervalo.
+    if (referencePrice <= 0) return product;
+    const pricing = calculateFinalProfit(referencePrice, referenceCost);
     if (pricing.isLoss) return { ...product, in_stock: false, pricing_blocked: true };
     if ((product as any).manual_blocked) return { ...product, in_stock: false };
     return product;
-  }), [allProducts]);
+  }), [allProducts, variantMap]);
   const getDisplayPrice = (product: Product) => {
     const variants = variantMap.get(product.id) || [];
     const prices = variants

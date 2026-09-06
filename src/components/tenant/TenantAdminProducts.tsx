@@ -1517,6 +1517,10 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
     salePrice: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta))) || 0,
     costPrice: Number(variant.cost_price ?? (product as any).original_price) || 0,
   }));
+  const variantSalePrices = variantPrices.map(v => v.salePrice).filter(price => price > 0);
+  const referencePrice = Number(product.price) > 0
+    ? Number(product.price)
+    : (variantSalePrices.length > 0 ? Math.min(...variantSalePrices) : 0);
 
   // Preços de outros fornecedores para este produto
   const [otherPrices, setOtherPrices] = useState<{ supplier_id: string; supplier_name: string; unit_price: number; price_types: string[]; description?: string; variations?: any }[]>([]);
@@ -1821,12 +1825,12 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
             )}
           </p>
           <p className="text-xs text-muted-foreground">
-            {product.category}{(product as any).subcategory ? ` › ${(product as any).subcategory}` : ''} · R${product.price.toFixed(2)}
+            {product.category}{(product as any).subcategory ? ` › ${(product as any).subcategory}` : ''} · R${referencePrice.toFixed(2)}{Number(product.price) <= 0 && referencePrice > 0 ? ' (menor preço por cor)' : ''}
             {(product as any).original_price > 0 && (
               <>
                 <span className="text-muted-foreground"> (custo: R${(product as any).original_price.toFixed(2)})</span>
                 {(() => {
-                  const price = product.price || 0;
+                  const price = referencePrice;
                   const cost = (product as any).original_price || 0;
                   const profit = price - cost;
                   const margin = price > 0 ? (profit / price) * 100 : 0;
