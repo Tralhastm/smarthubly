@@ -33,7 +33,7 @@ const formatDescriptionForDisplay = (value: unknown) => {
 // ============================================================
 // GRID — card grande com imagem grande (padrão atual)
 // ============================================================
-const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, hasExtras, displayPrice, onOpenPicker, onOpenDetails }: any) => {
+const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, hasExtras, displayPrice, displayFrom, onOpenPicker, onOpenDetails }: any) => {
   const isService = (product as any).item_type === 'service';
   const cta = getItemCTA(product as any, niche);
   const Icon = isService ? Calendar : ShoppingCart;
@@ -61,7 +61,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
         <div className="mt-auto flex items-center justify-between gap-3 pt-4">
           <div className="min-w-0">
-            <span className="block text-xl font-bold text-primary">R${displayPrice.toFixed(2)}</span>
+            <span className="block text-xl font-bold text-primary">{displayFrom && <span className="mr-1 text-xs font-medium">A partir de</span>}R${displayPrice.toFixed(2)}</span>
             {(product as any).stock_quantity != null && (product as any).stock_quantity <= 5 && product.in_stock && (
               <span className="mt-0.5 block text-xs text-yellow-400">Restam {(product as any).stock_quantity}</span>
             )}
@@ -88,7 +88,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
 // ============================================================
 // LIST — linha horizontal (estilo iFood/Anota AI), foto à esquerda
 // ============================================================
-const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtras, displayPrice, onOpenPicker, onOpenDetails }: any) => {
+const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtras, displayPrice, displayFrom, onOpenPicker, onOpenDetails }: any) => {
   const cta = getItemCTA(product as any, niche);
   const desc = formatDescriptionForDisplay(product.description);
   return (
@@ -112,7 +112,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
         </div>
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-end justify-between mt-auto gap-3 pt-2">
-          <span className="text-lg font-bold text-primary whitespace-nowrap">R${displayPrice.toFixed(2)}</span>
+          <span className="text-lg font-bold text-primary whitespace-nowrap">{displayFrom && <span className="mr-1 text-xs font-medium">A partir de</span>}R${displayPrice.toFixed(2)}</span>
           <div className="flex items-center gap-1.5">
             {isDropshipping && product.supplier_id && (
               <SupplierChatCustomer tenantId={tenantId} productId={product.id} supplierId={product.supplier_id} productName={product.name} />
@@ -135,7 +135,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
 // ============================================================
 // COMPACT — sem foto grande, foco no nome+preço (estilo cardápio impresso)
 // ============================================================
-const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, onOpenPicker, onOpenDetails }: any) => {
+const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, displayFrom, onOpenPicker, onOpenDetails }: any) => {
   const cta = getItemCTA(product as any, niche);
   const desc = formatDescriptionForDisplay(product.description);
   return (
@@ -144,7 +144,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, onOpen
         <div className="flex items-baseline justify-between gap-2 mb-0.5">
           <h3 className="font-heading text-base text-foreground">{product.name}{onOpenDetails && <span className="ml-1 text-primary/60">›</span>}</h3>
           <div className="flex-1 border-b border-dashed border-border/60 self-end mb-1.5" />
-          <span className="text-base font-bold text-primary shrink-0">R${displayPrice.toFixed(2)}</span>
+          <span className="text-base font-bold text-primary shrink-0">{displayFrom && <span className="mr-1 text-xs font-medium">A partir de</span>}R${displayPrice.toFixed(2)}</span>
         </div>
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-center gap-2 mt-1.5">
@@ -165,7 +165,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, onOpen
 // ============================================================
 // MAGAZINE — bento grid: 1 destaque grande + cards menores
 // ============================================================
-const MagazineCard = ({ product, addToCart, niche, hasExtras, displayPrice, onOpenPicker, onOpenDetails, large }: any) => {
+const MagazineCard = ({ product, addToCart, niche, hasExtras, displayPrice, displayFrom, onOpenPicker, onOpenDetails, large }: any) => {
   const cta = getItemCTA(product as any, niche);
   return (
     <div className={`group relative overflow-hidden rounded-xl border border-border bg-card hover:border-primary/40 transition-all animate-fade-in ${large ? 'md:col-span-2 md:row-span-2' : ''}`}>
@@ -182,7 +182,7 @@ const MagazineCard = ({ product, addToCart, niche, hasExtras, displayPrice, onOp
         <span className="text-[10px] font-medium text-white/70 uppercase tracking-wider">{product.category}</span>
         <h3 className={`font-heading text-white ${large ? 'text-xl' : 'text-base'} leading-tight`}>{product.name}</h3>
         <div className="flex items-center justify-between mt-2">
-          <span className={`font-bold text-white ${large ? 'text-2xl' : 'text-lg'}`}>R${displayPrice.toFixed(2)}</span>
+          <span className={`font-bold text-white ${large ? 'text-2xl' : 'text-lg'}`}>{displayFrom && <span className="mr-1 text-xs font-medium">A partir de</span>}R${displayPrice.toFixed(2)}</span>
           <button onClick={(e) => {
               e.stopPropagation();
               if (!product.in_stock) return;
@@ -270,12 +270,16 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     if ((product as any).manual_blocked) return { ...product, in_stock: false };
     return product;
   }), [allProducts, variantMap]);
-  const getDisplayPrice = (product: Product) => {
+  const getDisplayPriceInfo = (product: Product) => {
     const variants = variantMap.get(product.id) || [];
     const prices = variants
       .map(variant => Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0))))
       .filter(price => Number.isFinite(price) && price > 0);
-    return prices.length > 0 ? Math.min(...prices) : Number(product.price) || 0;
+    const uniquePrices = Array.from(new Set(prices.map(price => Math.round(price * 100))));
+    return {
+      price: prices.length > 0 ? Math.min(...prices) : Number(product.price) || 0,
+      from: uniquePrices.length > 1,
+    };
   };
   const openDetails = splashEnabled ? setDetail : null;
 
@@ -484,7 +488,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((product, i) => (
             <GridCard key={product.id} product={product} index={i} tenantId={tenantId} addToCart={addToCart}
-              isDropshipping={isDropshipping} niche={niche} hasExtras={extrasIds.has(product.id)} displayPrice={getDisplayPrice(product)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
+              isDropshipping={isDropshipping} niche={niche} hasExtras={extrasIds.has(product.id)} {...getDisplayPriceInfo(product)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
           ))}
         </div>
       )}
@@ -499,7 +503,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {items.map(product => (
                   <ListRow key={product.id} product={product} tenantId={tenantId} addToCart={addToCart}
-                    isDropshipping={isDropshipping} niche={niche} hasExtras={extrasIds.has(product.id)} displayPrice={getDisplayPrice(product)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
+                    isDropshipping={isDropshipping} niche={niche} hasExtras={extrasIds.has(product.id)} {...getDisplayPriceInfo(product)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
                 ))}
               </div>
             </section>
@@ -517,7 +521,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
               <div>
                 {items.map(product => (
                   <CompactRow key={product.id} product={product} addToCart={addToCart} niche={niche}
-                    hasExtras={extrasIds.has(product.id)} displayPrice={getDisplayPrice(product)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
+                    hasExtras={extrasIds.has(product.id)} {...getDisplayPriceInfo(product)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} />
                 ))}
               </div>
             </section>
@@ -529,7 +533,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 auto-rows-[140px] md:auto-rows-[180px]">
           {filtered.map((product, i) => (
             <MagazineCard key={product.id} product={product} addToCart={addToCart} niche={niche}
-              hasExtras={extrasIds.has(product.id)} displayPrice={getDisplayPrice(product)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} large={i % 7 === 0} />
+              hasExtras={extrasIds.has(product.id)} {...getDisplayPriceInfo(product)} onOpenPicker={setPickerProduct} onOpenDetails={openDetails} large={i % 7 === 0} />
           ))}
         </div>
       )}
