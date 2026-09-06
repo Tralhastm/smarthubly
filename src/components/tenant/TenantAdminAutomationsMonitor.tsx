@@ -101,6 +101,7 @@ export default function TenantAdminAutomationsMonitor({ tenantId }: Props) {
   const [backups, setBackups] = useState<Backup[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [running, setRunning] = useState<string | null>(null);
+  const [backupAction, setBackupAction] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -136,6 +137,83 @@ export default function TenantAdminAutomationsMonitor({ tenantId }: Props) {
       toast.error(`Falha em ${path}`, { description: e.message });
     } finally {
       setRunning(null);
+    }
+  };
+
+  const createCatalogBackup = async () => {
+    if (backupAction) return;
+    setBackupAction("create");
+    try {
+      const [{ data: products, error: productsError }, { data: variants, error: variantsError }, { data: addons, error: addonsError }] = await Promise.all([
+        supabase.from("products").select("*").eq("tenant_id", tenantId),
+        supabase.from("product_variants").select("*").eq("tenant_id", tenantId),
+        supabase.from("product_addons").select("*").eq("tenant_id", tenantId),
+      ]);
+      if (productsError) throw productsError;
+      if (variantsError) throw variantsError;
+      if (addonsError) throw addonsError;
+      const snapshot = {
+        tenant_id: tenantId,
+        snapshotted_at: new Date().toISOString(),
+        products: products || [],
+        variants: variants || [],
+        addons: addons || [],
+      };
+      const json = JSON.stringify(snapshot);
+      const { error } = await supabase.from("catalog_backups").insert({
+        tenant_id: tenantId,
+        product_count: snapshot.products.length,
+        variant_count: snapshot.variants.length,
+        addon_count: snapshot.addons.length,
+        snapshot,
+        size_bytes: json.length,
+      });
+      if (error) throw error;
+      toast.success(`Backup criado: ${snapshot.products.length} produtos, ${snapshot.variants.length} variações e ${snapshot.addons.length} adicionais.`);
+      await loadAll();
+    } catch (e: any) {
+      toast.error("Não foi possível criar o backup", { description: e.message || "Erro ao salvar snapshot" });
+    } finally {
+      setBackupAction(null);
+    }
+  };
+
+  const restoreCatalogBackup = async (backupId: string) => {
+    if (backupAction) return;
+    setBackupAction(backupId);
+    try {
+      const { data: backup, error: backupError } = await supabase
+        .from("catalog_backups")
+        .select("snapshot")
+        .eq("id", backupId)
+        .eq("tenant_id", tenantId)
+        .single();
+      if (backupError) throw backupError;
+      const snapshot = backup?.snapshot as { products?: any[]; variants?: any[]; addons?: any[] } | null;
+      const products = (snapshot?.products || []).filter(item => item?.id && item?.tenant_id === tenantId);
+      const variants = (snapshot?.variants || []).filter(item => item?.id && item?.tenant_id === tenantId);
+      const addons = (snapshot?.addons || []).filter(item => item?.id && item?.tenant_id === tenantId);
+      if (!products.length && !variants.length && !addons.length) throw new Error("O backup está vazio ou pertence a outra loja.");
+
+      // Restauração por mesclagem: recupera itens apagados/alterados, sem apagar itens criados depois do backup.
+      for (let i = 0; i < products.length; i += 100) {
+        const { error } = await supabase.from("products").upsert(products.slice(i, i + 100), { onConflict: "id" });
+        if (error) throw error;
+      }
+      for (let i = 0; i < variants.length; i += 100) {
+        const { error } = await supabase.from("product_variants").upsert(variants.slice(i, i + 100), { onConflict: "id" });
+        if (error) throw error;
+      }
+      for (let i = 0; i < addons.length; i += 100) {
+        const { error } = await supabase.from("product_addons").upsert(addons.slice(i, i + 100), { onConflict: "id" });
+        if (error) throw error;
+      }
+      toast.success(`Catálogo restaurado com segurança: ${products.length} produtos, ${variants.length} variações e ${addons.length} adicionais. Nenhum item atual foi apagado.`);
+      await loadAll();
+    } catch (e: any) {
+      toast.error("Não foi possível restaurar o catálogo", { description: e.message || "Erro ao restaurar snapshot" });
+    } finally {
+      setBackupAction(null);
     }
   };
 
@@ -307,7 +385,15 @@ export default function TenantAdminAutomationsMonitor({ tenantId }: Props) {
 
       {/* Backups catálogo */}
       <Card className="p-4">
-        <h3 className="font-heading text-sm mb-3 flex items-center gap-2"><DatabaseBackup className="h-4 w-4 text-blue-500" /> Backups do catálogo ({backups.length})</h3>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h3 className="font-heading text-sm flex items-center gap-2"><DatabaseBackup className="h-4 w-4 text-blue-500" /> Backups do catálogo ({backups.length})</h3>
+          {!isAffiliate && (
+            <Button size="sm" variant="outline" onClick={createCatalogBackup} disabled={!!backupAction} className="text-xs">
+              {backupAction === "create" ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <DatabaseBackup className="h-3.5 w-3.5 mr-1" />}
+              Fazer backup agora
+            </Button>
+          )}
+        </div>
         {backups.length === 0 ? (
           <p className="text-xs text-muted-foreground">Nenhum backup ainda.</p>
         ) : (
@@ -318,7 +404,15 @@ export default function TenantAdminAutomationsMonitor({ tenantId }: Props) {
                   <strong>{b.product_count} produtos</strong>
                   <span className="text-muted-foreground"> · {b.variant_count} variantes · {b.addon_count} adicionais · {(b.size_bytes / 1024).toFixed(1)} KB</span>
                 </div>
-                <span className="text-muted-foreground">{timeAgo(b.created_at)}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">{timeAgo(b.created_at)}</span>
+                  {!isAffiliate && (
+                    <Button size="sm" variant="ghost" onClick={() => restoreCatalogBackup(b.id)} disabled={!!backupAction} className="h-7 px-2 text-[10px]">
+                      {backupAction === b.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1" />}
+                      Restaurar
+                    </Button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
