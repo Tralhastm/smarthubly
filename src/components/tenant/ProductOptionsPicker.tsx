@@ -44,7 +44,12 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
     .filter(a => (addonQty[a.id] || 0) > 0)
     .map(a => ({ id: a.id, name: a.name, price: a.price, quantity: addonQty[a.id] }));
 
-  const variantDelta = selectedVariant?.price_delta || 0;
+  // suggested_price é o preço final absoluto da cor; só usamos a diferença
+  // em relação ao preço base porque o carrinho soma esse campo ao produto.
+  const selectedVariantPrice = selectedVariant
+    ? Number(selectedVariant.suggested_price ?? (product.price + Number(selectedVariant.price_delta || 0)))
+    : Number(product.price);
+  const variantDelta = selectedVariant ? selectedVariantPrice - Number(product.price) : 0;
   const addonsTotal = cartAddons.reduce((s, a) => s + a.price * a.quantity, 0);
   const unitTotal = (selectedVariant?.suggested_price ?? (product.price + variantDelta)) + addonsTotal;
 
@@ -85,7 +90,9 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
               <h4 className="text-sm font-medium text-foreground mb-2">Cores disponíveis e preços</h4>
               <div className="space-y-1.5">
                 {variants.map(v => {
-                  const profitable = hasPositiveFinalProfit(v.suggested_price ?? (product.price + Number(v.price_delta || 0)), v.cost_price ?? (product as any).original_price);
+                  const variantPrice = Number(v.suggested_price ?? (product.price + Number(v.price_delta || 0)));
+                  const displayDelta = variantPrice - Number(product.price);
+                  const profitable = hasPositiveFinalProfit(variantPrice, v.cost_price ?? (product as any).original_price);
                   const available = Boolean(v.in_stock) && profitable;
                   return (
                   <button
@@ -110,8 +117,8 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
                           {!available && <span className="text-[10px] text-muted-foreground">({profitable ? 'esgotado' : 'indisponível por prejuízo'})</span>}
                     </span>
                     <span className="text-xs font-medium text-primary">
-                      R${(Number(v.suggested_price ?? (product.price + v.price_delta)) || 0).toFixed(2)}
-                      {v.price_delta !== 0 && <span className="ml-1 opacity-80">({v.price_delta > 0 ? '+' : ''}R${v.price_delta.toFixed(2)})</span>}
+                      R${variantPrice.toFixed(2)}
+                      {displayDelta !== 0 && <span className="ml-1 opacity-80">({displayDelta > 0 ? '+' : ''}R${displayDelta.toFixed(2)} na cor)</span>}
                     </span>
                   </button>
                   );
