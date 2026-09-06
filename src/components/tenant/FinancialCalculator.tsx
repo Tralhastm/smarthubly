@@ -14,6 +14,7 @@ const numberBR = (value: string) => {
   return Number.isFinite(result) ? result : 0;
 };
 const priceToken = (value: string) => numberBR(value.replace(/[^\d.,-]/g, ''));
+const moneyPattern = String.raw`R?\$?\s*[\d.]+(?:,\d{1,2})?`;
 const parseRow = (line: string): InputRow | null => {
   const text = line.trim();
   if (!text || /^(produto|nome)\b/i.test(text)) return null;
@@ -22,6 +23,19 @@ const parseRow = (line: string): InputRow | null => {
     const values = parts.slice(1).map(priceToken);
     if (!values[0] && !values[1]) return null;
     return { name: parts[0].replace(/^\s*\d+[.)-]\s*/, '').trim(), supplier: values[0], base: values[1], color: values[2] || null, baseColor: values[3] || null };
+  }
+  // Formato de ficha/WhatsApp: Nome — Preço venda R$ 7.579,00 — Preço custo R$ 6.100,00
+  // O preço de venda é tratado como preço-base de mercado; a regra da calculadora
+  // ainda desconta automaticamente R$ 20 para chegar ao preço sugerido.
+  const saleMatch = text.match(new RegExp(`(?:pre[cç]o\\s*(?:de\\s*)?(?:venda|revenda)|valor\\s*(?:de\\s*)?venda)\\s*[:=-]?\\s*(${moneyPattern})`, 'i'));
+  const costMatch = text.match(new RegExp(`(?:pre[cç]o\\s*(?:de\\s*)?(?:custo|fornecedor)|valor\\s*(?:do\\s*)?fornecedor)\\s*[:=-]?\\s*(${moneyPattern})`, 'i'));
+  if (saleMatch && costMatch) {
+    const firstLabel = Math.min(saleMatch.index ?? text.length, costMatch.index ?? text.length);
+    const name = text.slice(0, firstLabel)
+      .replace(/^\s*\d+[.)-]\s*/, '')
+      .replace(/[|,;:-]\s*$/, '')
+      .trim();
+    return { name: name || 'Produto', supplier: priceToken(costMatch[1]), base: priceToken(saleMatch[1]), color: null, baseColor: null };
   }
   const labeled = [...text.matchAll(/(?:fornecedor|custo|base\s*cor|pre[cç]o\s*cor|pre[cç]o\s*base|base)\s*[:=-]\s*(R?\$?\s*[\d.,]+)/giu)];
   if (labeled.length >= 2) {
@@ -95,7 +109,7 @@ const FinancialCalculator = () => {
   return <div className="space-y-4">
     <div className="rounded-xl border border-primary/30 bg-card p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="flex items-center gap-2 text-lg font-semibold"><Calculator className="h-5 w-5 text-primary" /> Calculadora de precificação</h2><p className="text-xs text-muted-foreground mt-1">Cole até centenas de produtos. Formato: Nome | Fornecedor | Preço base | Preço cor | Preço base cor.</p></div><label className="cursor-pointer rounded-lg border border-border bg-secondary px-3 py-2 text-xs"><Upload className="mr-1 inline h-3.5 w-3.5" /> Importar .txt<input type="file" accept=".txt,.csv" className="hidden" onChange={async e => { const file = e.target.files?.[0]; if (file) setText(await file.text()); e.currentTarget.value = ''; }} /></label></div>
-      <textarea value={text} onChange={e => setText(e.target.value)} rows={8} placeholder={'Exemplo:\nRealme C100x | 1000 | 1259,90 | 1050 | 1309,90\nRedmi A7 | 710 | 829'} className="w-full rounded-lg border border-border bg-background p-3 font-mono text-xs" />
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={8} placeholder={'Exemplo 1:\nRealme C100x | 1.000,00 | 1.259,90 | 1.050,00 | 1.309,90\n\nExemplo 2:\nGalaxy S26 Ultra — Preço venda R$ 7.579,00 — Preço custo R$ 6.100,00'} className="w-full rounded-lg border border-border bg-background p-3 font-mono text-xs" />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><Field label="Taxa Asaas/checkout" value={asaas} setValue={setAsaas} unit={asaasUnit} setUnit={setAsaasUnit} /><Field label="Frete" value={freight} setValue={setFreight} unit={freightUnit} setUnit={setFreightUnit} /><Field label="Desconto cliente" value={discount} setValue={setDiscount} unit={discountUnit} setUnit={setDiscountUnit} /><Field label="Outros gastos" value={other} setValue={setOther} unit={otherUnit} setUnit={setOtherUnit} /></div>
       <div className="grid grid-cols-2 gap-2"><label className="rounded-lg border border-border bg-secondary/40 p-2 text-xs text-muted-foreground">Comissão vendedor sobre lucro (%)<input value={sellerPercent} onChange={e => setSellerPercent(e.target.value)} inputMode="decimal" className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm" /></label><label className="rounded-lg border border-border bg-secondary/40 p-2 text-xs text-muted-foreground">Margem líquida desejada (%)<input value={targetMargin} onChange={e => setTargetMargin(e.target.value)} inputMode="decimal" className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm" /></label></div>
       <p className="text-xs text-muted-foreground">Preço sugerido automático = preço base − R$ 20. O vendedor recebe somente a porcentagem configurada sobre o lucro positivo. A coluna “Preço para meta” mostra quanto cobrar para atingir a margem líquida desejada.</p>
