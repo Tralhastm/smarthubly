@@ -105,10 +105,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     queryFn: async () => {
       const { data, error } = await supabase
         .from('product_variants' as any)
-        .select('product_id,suggested_price,price_delta,cost_price')
+        .select('product_id,name,suggested_price,price_delta,cost_price,in_stock')
         .eq('tenant_id', tenantId);
       if (error) throw error;
-      return (data || []) as Array<{ product_id: string; suggested_price: number | null; price_delta: number | null; cost_price: number | null }>;
+      return (data || []) as Array<{ product_id: string; name: string; suggested_price: number | null; price_delta: number | null; cost_price: number | null; in_stock: boolean }>;
     },
     enabled: !!tenantId,
     staleTime: 30000,
