@@ -3,6 +3,7 @@ import { useProductVariants, useProductAddons, type ProductVariant, type Product
 import { useCart, type CartAddon } from '@/contexts/CartContext';
 import type { Tables } from '@/integrations/supabase/types';
 import { X, Plus, Minus, Check } from 'lucide-react';
+import { hasPositiveFinalProfit } from '@/lib/pricing';
 
 type Product = Tables<'products'>;
 
@@ -23,10 +24,10 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
   // Auto-seleciona primeira variante disponível
   useEffect(() => {
     if (variants.length > 0 && !selectedVariant) {
-      const first = variants.find(v => v.in_stock) || variants[0];
-      setSelectedVariant(first);
+      const first = variants.find(v => v.in_stock && hasPositiveFinalProfit(v.suggested_price ?? (product.price + Number(v.price_delta || 0)), v.cost_price ?? (product as any).original_price));
+      if (first) setSelectedVariant(first);
     }
-  }, [variants, selectedVariant]);
+  }, [variants, selectedVariant, product]);
 
   const updateAddon = (id: string, delta: number, max: number) => {
     setAddonQty(prev => {
@@ -83,15 +84,18 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
             <div>
               <h4 className="text-sm font-medium text-foreground mb-2">Cores disponíveis e preços</h4>
               <div className="space-y-1.5">
-                {variants.map(v => (
+                {variants.map(v => {
+                  const profitable = hasPositiveFinalProfit(v.suggested_price ?? (product.price + Number(v.price_delta || 0)), v.cost_price ?? (product as any).original_price);
+                  const available = Boolean(v.in_stock) && profitable;
+                  return (
                   <button
                     key={v.id}
-                    onClick={() => v.in_stock && setSelectedVariant(v)}
-                    disabled={!v.in_stock}
+                    onClick={() => available && setSelectedVariant(v)}
+                    disabled={!available}
                     className={`w-full flex items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
                       selectedVariant?.id === v.id
                         ? 'border-primary bg-primary/10 text-foreground'
-                        : v.in_stock
+                            : available
                           ? 'border-border bg-secondary text-foreground hover:border-primary/40'
                           : 'border-border bg-secondary opacity-50 cursor-not-allowed'
                     }`}
@@ -103,14 +107,15 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
                         {selectedVariant?.id === v.id && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                       </span>
                       <span>{v.name}</span>
-                      {!v.in_stock && <span className="text-[10px] text-muted-foreground">(esgotado)</span>}
+                          {!available && <span className="text-[10px] text-muted-foreground">({profitable ? 'esgotado' : 'indisponível por prejuízo'})</span>}
                     </span>
                     <span className="text-xs font-medium text-primary">
                       R${(Number(v.suggested_price ?? (product.price + v.price_delta)) || 0).toFixed(2)}
                       {v.price_delta !== 0 && <span className="ml-1 opacity-80">({v.price_delta > 0 ? '+' : ''}R${v.price_delta.toFixed(2)})</span>}
                     </span>
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

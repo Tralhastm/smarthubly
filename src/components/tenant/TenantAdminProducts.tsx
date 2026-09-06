@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
+import { calculateFinalProfit } from '@/lib/pricing';
 
 const parseBrazilianMoney = (value: unknown) => {
   const raw = String(value ?? '').trim().replace(/\s/g, '');
@@ -932,9 +933,31 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         .filter(Boolean).join(' ').toLowerCase().includes(normalizedCatalogSearch))
     : products;
   const productsWithGoogleImage = products.filter(p => p.image && p.image.includes('?src=google')).length;
+  const lossProducts = products
+    .map(product => ({ product, pricing: calculateFinalProfit(product.price, (product as any).original_price) }))
+    .filter(item => item.pricing.isLoss);
 
   return (
     <div className="space-y-4">
+      {lossProducts.length > 0 && (
+        <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-destructive">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="min-w-0">
+              <p className="font-semibold">Atenção: {lossProducts.length} produto(s) indisponível(is) por prejuízo</p>
+              <p className="mt-1 text-xs text-destructive/80">A vitrine bloqueia automaticamente a compra quando o lucro líquido final fica negativo, considerando Asaas de 4,6%, frete de R$ 20, desconto de R$ 10 e 20% do vendedor sobre o lucro positivo.</p>
+              <div className="mt-2 space-y-1 text-xs">
+                {lossProducts.map(({ product, pricing }) => (
+                  <div key={product.id} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
+                    <span className="font-medium">{product.name}</span>
+                    <span>prejuízo final: R$ {Math.abs(pricing.finalProfit).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex gap-2 flex-wrap">
         <div className="relative min-w-[240px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
