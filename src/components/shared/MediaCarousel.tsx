@@ -3,6 +3,12 @@ import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
 export type MediaItem = { type: 'image' | 'video'; url: string };
 
+/** Prefere a versão 2X do CDN do Mercado Livre sem alterar outras URLs. */
+export const getHighResolutionImageUrl = (url: string) =>
+  url.includes('http2.mlstatic.com/D_NQ_NP_')
+    ? url.replace('http2.mlstatic.com/D_NQ_NP_', 'http2.mlstatic.com/D_NQ_NP_2X_')
+    : url;
+
 type Props = {
   items: MediaItem[];
   className?: string;
@@ -61,11 +67,15 @@ const MediaCarousel = ({
       ) : (
         <img
           key={current.url}
-          src={current.url}
+          src={getHighResolutionImageUrl(current.url)}
           alt=""
           className={imgClassName}
           loading="lazy"
           decoding="async"
+          onError={(e) => {
+            const image = e.currentTarget;
+            if (image.src !== current.url) image.src = current.url;
+          }}
         />
       )}
 

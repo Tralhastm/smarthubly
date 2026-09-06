@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Search, ShoppingCart, Package, Loader2, Calendar, ChevronDown, ChevronLeft } from 'lucide-react';
 import SupplierChatCustomer from './SupplierChatCustomer';
 import ProductOptionsPicker from './ProductOptionsPicker';
-import MediaCarousel from '@/components/shared/MediaCarousel';
+import MediaCarousel, { getHighResolutionImageUrl } from '@/components/shared/MediaCarousel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getItemCTA } from '@/lib/niche-labels';
 import { normalizeProductDescription } from '@/lib/product-description';
@@ -97,7 +97,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
         {Array.isArray(product.media) && product.media.length > 0 ? (
           <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-contain" videoClassName="h-full w-full object-contain" />
         ) : product.image ? (
-            <img src={product.image} alt={product.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+            <img src={getHighResolutionImageUrl(product.image)} alt={product.name} className="h-full w-full object-contain" loading="lazy" decoding="async" onError={(e) => { if (e.currentTarget.src !== product.image) e.currentTarget.src = product.image; }} />
         ) : (<Package className="h-10 w-10 text-primary/40" />)}
       </div>
       <div className="flex-1 min-w-0 flex flex-col">
@@ -173,7 +173,7 @@ const MagazineCard = ({ product, addToCart, niche, hasExtras, displayPrice, disp
         {Array.isArray(product.media) && product.media.length > 0 ? (
           <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-contain" videoClassName="h-full w-full object-contain" />
         ) : product.image ? (
-          <img src={product.image} alt={product.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+          <img src={getHighResolutionImageUrl(product.image)} alt={product.name} className="h-full w-full object-contain" loading="lazy" decoding="async" onError={(e) => { if (e.currentTarget.src !== product.image) e.currentTarget.src = product.image; }} />
         ) : (
           <div className="h-full w-full flex items-center justify-center"><Package className="h-12 w-12 text-primary/40" /></div>
         )}
