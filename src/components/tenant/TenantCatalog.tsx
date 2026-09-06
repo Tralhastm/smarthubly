@@ -54,7 +54,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
           ) : (<Package className="h-16 w-16 text-primary/40" />)}
         </div>
         {!product.in_stock && (
-          <span className="absolute top-6 right-6 rounded-full bg-destructive px-3 py-1 text-xs font-medium text-destructive-foreground">{(product as any).pricing_blocked ? 'Indisponível' : 'Esgotado'}</span>
+          <span className="absolute top-6 right-6 rounded-full bg-destructive px-3 py-1 text-xs font-medium text-destructive-foreground">{(product as any).pricing_blocked ? 'Indisponível por prejuízo' : (product as any).manual_blocked ? 'Indisponível' : 'Esgotado'}</span>
         )}
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{product.category}</span>
         <h3 className="font-heading text-lg mt-1 text-foreground">{product.name}</h3>
@@ -107,7 +107,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
             <h3 className="font-heading text-base text-foreground truncate">{product.name}{onOpenDetails && <span className="ml-1 text-primary/60">›</span>}</h3>
           </div>
           {!product.in_stock && (
-            <span className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-medium text-destructive-foreground shrink-0">{(product as any).pricing_blocked ? 'Indisponível' : 'Esgotado'}</span>
+            <span className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-medium text-destructive-foreground shrink-0">{(product as any).pricing_blocked ? 'Indisponível por prejuízo' : (product as any).manual_blocked ? 'Indisponível' : 'Esgotado'}</span>
           )}
         </div>
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
@@ -149,7 +149,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, onOpen
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-center gap-2 mt-1.5">
           {!product.in_stock ? (
-            <span className="text-[10px] text-destructive">{(product as any).pricing_blocked ? 'Indisponível por prejuízo' : 'Esgotado'}</span>
+            <span className="text-[10px] text-destructive">{(product as any).pricing_blocked ? 'Indisponível por prejuízo' : (product as any).manual_blocked ? 'Indisponível manualmente' : 'Esgotado'}</span>
           ) : (
             <button onClick={(e) => { e.stopPropagation(); hasExtras ? onOpenPicker(product) : addToCart(product); }}
               className="text-xs font-medium text-primary hover:underline">
@@ -251,7 +251,9 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   // de uma atualização manual de in_stock no banco.
   const storefrontProducts = useMemo(() => allProducts.map(product => {
     const pricing = calculateFinalProfit(product.price, (product as any).original_price);
-    return pricing.isLoss ? { ...product, in_stock: false, pricing_blocked: true } : product;
+    if (pricing.isLoss) return { ...product, in_stock: false, pricing_blocked: true };
+    if ((product as any).manual_blocked) return { ...product, in_stock: false };
+    return product;
   }), [allProducts]);
   const getDisplayPrice = (product: Product) => {
     const variants = variantMap.get(product.id) || [];

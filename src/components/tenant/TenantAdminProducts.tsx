@@ -1769,6 +1769,10 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" checked={form.in_stock} onChange={e => setForm({ ...form, in_stock: e.target.checked })} className="accent-primary" /> Em estoque
         </label>
+        <label className="flex items-center gap-2 text-sm text-foreground" title="Bloqueia a venda na vitrine mesmo quando o produto estiver em estoque">
+          <input type="checkbox" checked={Boolean((form as any).manual_blocked)} onChange={e => setForm({ ...form, manual_blocked: e.target.checked } as any)} className="accent-primary" />
+          Bloquear produto na vitrine
+        </label>
         <label className="flex items-center gap-2 text-sm text-foreground" title="Quando você clicar em 'Categorizar tudo com IA', este produto será ignorado">
           <input type="checkbox" checked={(form as any).auto_categorize !== false} onChange={e => setForm({ ...form, auto_categorize: e.target.checked } as any)} className="accent-primary" />
           Incluir na categorização automática por IA
@@ -1829,7 +1833,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
             )}
             {(product as any).platform_fee_percent != null && <span className="text-primary"> · Taxa: {(product as any).platform_fee_percent}%</span>}
             {(product as any).stock_quantity != null && <span className="text-primary"> · Estoque: {(product as any).stock_quantity}</span>}
-            {!product.in_stock && <span className="text-destructive"> · Esgotado</span>}
+            {!product.in_stock && <span className="text-destructive"> · {(product as any).manual_blocked ? 'Bloqueado manualmente' : 'Esgotado'}</span>}
             {supplierName && <span className="text-primary"> · {supplierName}</span>}
             {(product as any).auto_categorize === false && <span className="text-muted-foreground"> · 🚫 IA off</span>}
           </p>
@@ -1847,6 +1851,13 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
           )}
         </div>
         <div className="flex gap-1">
+          <button
+            onClick={() => onSave({ ...product, manual_blocked: !(product as any).manual_blocked } as any)}
+            className={`rounded-md px-2 py-1 text-[11px] font-medium ${((product as any).manual_blocked) ? 'bg-green-500/15 text-green-600 hover:bg-green-500/25' : 'bg-destructive/15 text-destructive hover:bg-destructive/25'}`}
+            title={((product as any).manual_blocked) ? 'Liberar produto na vitrine' : 'Bloquear produto na vitrine'}
+          >
+            {((product as any).manual_blocked) ? 'Liberar' : 'Bloquear'}
+          </button>
           <button onClick={onEdit} className="rounded-md p-2 text-muted-foreground hover:text-primary hover:bg-primary/10"><Edit className="h-4 w-4" /></button>
           <button onClick={onDelete} className="rounded-md p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></button>
         </div>
