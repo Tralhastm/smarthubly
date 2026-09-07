@@ -728,13 +728,13 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         }
       });
 
-      const fragments = new Map<string, string[]>();
+      const fragments = new Map<string, typeof items>();
       items.forEach(item => {
         const best = bestSuppliers.get(productMatchKey(item.product.name));
-        const targetSupplierId = best?.supplier_id || (item.product as any).supplier_id;
+        const targetSupplierId = item.variantSupplierId || best?.supplier_id || (item.product as any).supplier_id;
         if (targetSupplierId) {
           const list = fragments.get(targetSupplierId) || [];
-          list.push(item.product.name);
+          list.push(item);
           fragments.set(targetSupplierId, list);
         }
       });
@@ -797,8 +797,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       // Cria fragmentos operacionais se o pedido for fragmentado (#4)
       if (orderResult?.id && needsFragmentation) {
         try {
-          for (const [supplierId, productNames] of fragments.entries()) {
-            const fragmentItems = items.filter(i => productNames.includes(i.product.name));
+          for (const [supplierId, fragmentItems] of fragments.entries()) {
             const fragmentTotal = fragmentItems.reduce((sum, i) => sum + (getCartLineUnitPrice(i) * i.quantity), 0);
             
             await supabase.from('order_fragments').insert({

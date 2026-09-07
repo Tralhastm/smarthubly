@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useProductVariants, useProductAddons, useSaveVariant, useDeleteVariant, useSaveAddon, useDeleteAddon } from '@/hooks/useProductExtras';
+import { useSuppliers } from '@/hooks/useSuppliers';
 import { Plus, Trash2, X, Check, Pencil, Layers, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -21,6 +22,7 @@ const normalizeVariantCost = (cost: number | null | undefined, sale: number | nu
 const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
   const [open, setOpen] = useState(false);
   const { data: variants = [] } = useProductVariants(productId);
+  const { data: suppliers = [] } = useSuppliers(tenantId);
   const variantsToReview = variants.filter(v => v.needs_price_review);
   const { data: addons = [] } = useProductAddons(open ? productId : undefined);
   const saveVariant = useSaveVariant();
@@ -32,6 +34,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
   const [vDelta, setVDelta] = useState('');
   const [vCost, setVCost] = useState('');
   const [vSale, setVSale] = useState('');
+  const [vSupplierId, setVSupplierId] = useState('');
   const [aName, setAName] = useState('');
   const [aPrice, setAPrice] = useState('');
   const [aRequired, setARequired] = useState(false);
@@ -45,12 +48,13 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       product_id: productId,
       tenant_id: tenantId,
       name: vName.trim(),
+      supplier_id: vSupplierId || null,
       price_delta: parseFloat(vDelta) || 0,
       cost_price: vCost.trim() ? normalizeVariantCost(parseMoney(vCost), parseMoney(vSale)) : null,
       suggested_price: vSale.trim() ? parseMoney(vSale) : null,
       sort_order: variants.length,
     });
-    setVName(''); setVDelta(''); setVCost(''); setVSale('');
+    setVName(''); setVDelta(''); setVCost(''); setVSale(''); setVSupplierId('');
     toast.success('Variante adicionada');
   };
 
@@ -58,6 +62,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
     setEditingVariantId(variant.id);
     setEditingVariantPrice(String(Number(variant.suggested_price ?? (basePrice + variant.price_delta)).toFixed(2)));
     setVCost(variant.cost_price == null ? '' : String(normalizeVariantCost(variant.cost_price, variant.suggested_price ?? (basePrice + variant.price_delta)).toFixed(2)));
+    setVSupplierId(variant.supplier_id || '');
   };
 
   const saveVariantPrice = async (variant: typeof variants[number]) => {
@@ -68,6 +73,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       price_delta: price - basePrice,
       suggested_price: price,
       cost_price: vCost.trim() ? normalizeVariantCost(parseMoney(vCost), price) : null,
+      supplier_id: vSupplierId || null,
       needs_price_review: false,
     });
     setEditingVariantId(null);
@@ -111,7 +117,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
             <div className="space-y-1.5 mb-2">
               {variants.map(v => (
                 <div key={v.id} className="flex items-center gap-1.5 text-xs">
-                  <span className="flex-1 text-foreground truncate">{v.name}</span>
+                      <span className="flex-1 text-foreground truncate">{v.name}{v.supplier_id && <span className="ml-1 text-[10px] text-muted-foreground">· {suppliers.find(s => s.id === v.supplier_id)?.name || 'fornecedor'}</span>}</span>
                   {editingVariantId === v.id ? (
                     <>
                       <input value={vCost} onChange={e => setVCost(e.target.value)} type="text" inputMode="decimal" placeholder="custo" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" /><input value={editingVariantPrice} onChange={e => setEditingVariantPrice(e.target.value)} type="text" inputMode="decimal" className="w-20 rounded border border-primary bg-card px-1.5 py-0.5 text-[11px] text-foreground" />
@@ -150,6 +156,10 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
               />
               <input value={vCost} onChange={e => setVCost(e.target.value)} placeholder="custo opcional" type="number" step="0.01" className="w-24 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground" />
               <input value={vSale} onChange={e => setVSale(e.target.value)} placeholder="revenda opcional" type="number" step="0.01" className="w-24 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground" />
+              <select value={vSupplierId} onChange={e => setVSupplierId(e.target.value)} title="Fornecedor desta cor" className="w-28 rounded-md border border-border bg-card px-1.5 py-1 text-[11px] text-foreground">
+                <option value="">fornecedor base</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
               <button
                 onClick={addVariant}
                 className="rounded-md gradient-primary text-primary-foreground px-2 py-1 text-xs flex items-center gap-1"

@@ -6,6 +6,7 @@ export type ProductVariant = {
   product_id: string;
   tenant_id: string;
   name: string;
+  supplier_id: string | null;
   price_delta: number;
   cost_price: number | null;
   suggested_price: number | null;
@@ -73,6 +74,7 @@ export const useSaveVariant = () => {
       if (v.id) {
         const { error } = await supabase.from('product_variants' as any).update({
           name: v.name,
+          supplier_id: v.supplier_id ?? null,
           price_delta: v.price_delta ?? 0,
           cost_price: v.cost_price ?? null,
           suggested_price: v.suggested_price ?? null,
@@ -87,6 +89,7 @@ export const useSaveVariant = () => {
           product_id: v.product_id,
           tenant_id: v.tenant_id,
           name: v.name,
+          supplier_id: v.supplier_id ?? null,
           price_delta: v.price_delta ?? 0,
           cost_price: v.cost_price ?? null,
           suggested_price: v.suggested_price ?? null,

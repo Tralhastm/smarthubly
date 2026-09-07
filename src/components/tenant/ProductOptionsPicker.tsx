@@ -58,6 +58,7 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
     addToCart(product, {
       variantId: selectedVariant?.id || null,
       variantName: selectedVariant?.name || null,
+      variantSupplierId: selectedVariant?.supplier_id || null,
       variantPriceDelta: variantDelta,
       addons: cartAddons,
       notes: notes.trim(),
