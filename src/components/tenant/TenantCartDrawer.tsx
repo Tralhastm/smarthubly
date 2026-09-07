@@ -731,7 +731,11 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       const fragments = new Map<string, typeof items>();
       items.forEach(item => {
         const best = bestSuppliers.get(productMatchKey(item.product.name));
-        const targetSupplierId = item.variantSupplierId || best?.supplier_id || (item.product as any).supplier_id;
+        // Variações novas exigem escolha manual: não usar o fornecedor de menor preço
+        // quando a cor ainda não possui supplier_id definido.
+        const targetSupplierId = item.variantId
+          ? item.variantSupplierId
+          : (best?.supplier_id || (item.product as any).supplier_id);
         if (targetSupplierId) {
           const list = fragments.get(targetSupplierId) || [];
           list.push(item);
