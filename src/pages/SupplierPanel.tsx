@@ -14,6 +14,7 @@ import SupplierDeliveriesPanel from '@/components/tenant/SupplierDeliveriesPanel
 import SupplierLalamoveConfig from '@/components/tenant/SupplierLalamoveConfig';
 import SupplierShippingConfig from '@/components/tenant/SupplierShippingConfig';
 import SupplierDriversPanel from '@/components/tenant/SupplierDriversPanel';
+import SupplierProfileSettings from '@/components/tenant/SupplierProfileSettings';
 import HelpButton from '@/components/tenant/HelpButton';
 import SofiaChat from '@/components/SofiaChat';
 import { logOrderEvent } from '@/lib/order-events';
@@ -60,7 +61,7 @@ const SupplierPanel = () => {
   const { data: supplier, isLoading } = useSupplierByToken(token);
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tab, setTab] = useState<'orders' | 'deliveries' | 'stock' | 'import-export' | 'chats' | 'reviews' | 'lalamove' | 'shipping' | 'drivers'>('orders');
+  const [tab, setTab] = useState<'orders' | 'deliveries' | 'stock' | 'import-export' | 'chats' | 'reviews' | 'lalamove' | 'shipping' | 'drivers' | 'profile'>('orders');
   const [group, setGroup] = useState<'operacao' | 'catalogo' | 'config'>('operacao');
   const [isDark, setIsDark] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
@@ -761,7 +762,7 @@ const SupplierPanel = () => {
         const TAB_GROUP: Record<typeof tab, 'operacao' | 'catalogo' | 'config'> = {
           orders: 'operacao', deliveries: 'operacao', drivers: 'operacao',
           stock: 'catalogo', 'import-export': 'catalogo', chats: 'catalogo', reviews: 'catalogo',
-          shipping: 'config', lalamove: 'config',
+          shipping: 'config', lalamove: 'config', profile: 'config',
         };
         // Mantém grupo sincronizado se a tab atual pertence a outro grupo
         const currentGroup = TAB_GROUP[tab] ?? group;
@@ -809,6 +810,7 @@ const SupplierPanel = () => {
               { id: 'reviews' as const, label: 'Avaliações', icon: <Star className="h-4 w-4" />, group: 'catalogo' as const },
               { id: 'shipping' as const, label: 'Frete', icon: <Truck className="h-4 w-4" />, group: 'config' as const },
               { id: 'lalamove' as const, label: 'Lalamove', icon: <Settings className="h-4 w-4" />, group: 'config' as const },
+              { id: 'profile' as const, label: 'Meus dados', icon: <User className="h-4 w-4" />, group: 'config' as const },
             ];
             return ALL_TABS.filter(t => t.group === group).map(t => (
               <button
@@ -840,6 +842,7 @@ const SupplierPanel = () => {
                 reviews: 'supplierReviews',
                 shipping: 'supplierShipping',
                 lalamove: 'supplierLalamove',
+                profile: 'supplierProfile',
               };
               return <HelpButton topic={HELP_TOPIC[tab]} label="Como usar" />;
             })()}
@@ -1103,6 +1106,13 @@ const SupplierPanel = () => {
         {tab === 'lalamove' && <SupplierLalamoveConfig supplierId={supplier.id} />}
 
         {tab === 'shipping' && <SupplierShippingConfig supplierId={supplier.id} initialAddress={supplier.address || ''} />}
+
+        {tab === 'profile' && (
+          <SupplierProfileSettings
+            supplier={supplier}
+            onSaved={(changes) => Object.assign(supplier as any, changes)}
+          />
+        )}
       </div>
 
       {/* Sofia — papel travado: fornecedor. Backend sabe os pedidos abertos dele. */}
