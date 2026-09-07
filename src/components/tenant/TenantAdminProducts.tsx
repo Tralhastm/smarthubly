@@ -174,7 +174,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   };
 
   const catalogSlug = () => (tenantId || 'catalogo').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'catalogo';
-  const money = (value: unknown) => Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const money = (value: unknown) =>
+    Number(value || 0)
+      .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+      .replace(/\u00a0/g, ' ');
 
   const getExportVariants = (product: Product) => allVariants
     .filter(variant => variant.product_id === product.id)
@@ -215,7 +218,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       if (p.supplier_id) lines.push(`Fornecedor ID: ${p.supplier_id}`);
       lines.push(`Imagens (${images.length}):`, ...images.map((url: string) => `- ${url}`), '', '---', '');
     });
-    downloadBlob(lines.join('\n'), `catalogo-${catalogSlug()}.txt`, 'text/plain;charset=utf-8');
+    // BOM ajuda WhatsApp, Windows e editores simples a reconhecerem UTF-8,
+    // evitando textos como "CATÃLOGO" e "R$Â" ao abrir o arquivo.
+    downloadBlob(`\uFEFF${lines.join('\n')}`, `catalogo-${catalogSlug()}.txt`, 'text/plain;charset=utf-8');
     toast.success('Catálogo TXT exportado.');
   };
 
