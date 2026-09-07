@@ -31,17 +31,26 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
   const [asaasProductionToken, setAsaasProductionToken] = useState('');
   const [asaasWebhookToken, setAsaasWebhookToken] = useState('');
   const [showAsaasTokens, setShowAsaasTokens] = useState(false);
+  const [mercadoPagoEnabled, setMercadoPagoEnabled] = useState(false);
+  const [mercadoPagoEnvironment, setMercadoPagoEnvironment] = useState<'sandbox' | 'production'>('sandbox');
+  const [mercadoPagoSandboxToken, setMercadoPagoSandboxToken] = useState('');
+  const [mercadoPagoProductionToken, setMercadoPagoProductionToken] = useState('');
+  const [showMercadoPagoTokens, setShowMercadoPagoTokens] = useState(false);
 
   // Número de falhas consecutivas do tick antes de pausar o autoSync (5s * 24 = 2 min)
 
   useEffect(() => {
-    supabase.from('tenants').select('asaas_enabled,asaas_environment,asaas_sandbox_token,asaas_production_token,asaas_webhook_token').eq('id', tenantId).single().then(({ data }) => {
+    supabase.from('tenants').select('asaas_enabled,asaas_environment,asaas_sandbox_token,asaas_production_token,asaas_webhook_token,mercadopago_enabled,mercadopago_environment,mercadopago_sandbox_token,mercadopago_production_token,mercadopago_token').eq('id', tenantId).single().then(({ data }) => {
       if (!data) return;
       setAsaasEnabled((data as any).asaas_enabled ?? false);
       setAsaasEnvironment(((data as any).asaas_environment as any) || 'sandbox');
       setAsaasSandboxToken((data as any).asaas_sandbox_token || '');
       setAsaasProductionToken((data as any).asaas_production_token || '');
       setAsaasWebhookToken((data as any).asaas_webhook_token || '');
+      setMercadoPagoEnabled((data as any).mercadopago_enabled ?? !!(data as any).mercadopago_token);
+      setMercadoPagoEnvironment(((data as any).mercadopago_environment as any) || 'sandbox');
+      setMercadoPagoSandboxToken((data as any).mercadopago_sandbox_token || (data as any).mercadopago_token || '');
+      setMercadoPagoProductionToken((data as any).mercadopago_production_token || '');
     });
   }, [tenantId]);
 
@@ -171,7 +180,7 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
     tenantId,
   ]);
 
-  const saveAsaas = async () => {
+  const savePaymentIntegrations = async () => {
     const sandboxToken = asaasSandboxToken.trim() || null;
     const productionToken = asaasProductionToken.trim() || null;
     const selectedToken = asaasEnvironment === 'production' ? productionToken : sandboxToken;
@@ -182,10 +191,15 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
       asaas_sandbox_token: sandboxToken,
       asaas_production_token: productionToken,
       asaas_webhook_token: asaasWebhookToken.trim() || null,
+      mercadopago_enabled: mercadoPagoEnabled,
+      mercadopago_environment: mercadoPagoEnvironment,
+      mercadopago_sandbox_token: mercadoPagoSandboxToken.trim() || null,
+      mercadopago_production_token: mercadoPagoProductionToken.trim() || null,
+      mercadopago_token: (mercadoPagoEnvironment === 'production' ? mercadoPagoProductionToken : mercadoPagoSandboxToken).trim() || null,
       payment_provider: asaasIsReady ? 'asaas' : 'mercadopago',
     } as any).eq('id', tenantId);
-    if (error) toast({ title: 'Erro ao salvar Asaas', description: error.message, variant: 'destructive' });
-    else toast({ title: 'Asaas salvo', description: 'As credenciais foram atualizadas com segurança.' });
+    if (error) toast({ title: 'Erro ao salvar pagamentos', description: error.message, variant: 'destructive' });
+    else toast({ title: 'Pagamentos salvos', description: 'As configurações do Asaas e Mercado Pago foram atualizadas.' });
   };
 
   const save = async () => {
@@ -364,7 +378,14 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
           <label className="text-xs font-medium text-muted-foreground">Token Produção<input type={showAsaasTokens ? 'text' : 'password'} value={asaasProductionToken} onChange={e => setAsaasProductionToken(e.target.value)} placeholder="$aact_..." className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono" /></label>
         </div>
         <label className="text-xs font-medium text-muted-foreground">Token de autenticação do webhook<input type={showAsaasTokens ? 'text' : 'password'} value={asaasWebhookToken} onChange={e => setAsaasWebhookToken(e.target.value)} placeholder="Token definido em Configurações → Webhooks no Asaas" className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono" /></label>
-        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setShowAsaasTokens(v => !v)} className="rounded-md border border-border px-3 py-2 text-sm">{showAsaasTokens ? 'Ocultar tokens' : 'Mostrar tokens'}</button><button type="button" onClick={saveAsaas} className="rounded-md gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground">Salvar Asaas</button></div>
+        <div className="rounded-md border border-border bg-secondary/40 p-3 space-y-2">
+          <div className="flex items-center gap-2"><KeyRound className="h-4 w-4 text-primary" /><span className="text-sm font-medium">Mercado Pago — pagamentos</span></div>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={mercadoPagoEnabled} onChange={e => setMercadoPagoEnabled(e.target.checked)} className="h-4 w-4" /> Ativar Mercado Pago nesta loja</label>
+          <div><label className="text-xs font-medium text-muted-foreground">Ambiente</label><select value={mercadoPagoEnvironment} onChange={e => setMercadoPagoEnvironment(e.target.value as any)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"><option value="sandbox">Sandbox / homologação</option><option value="production">Produção</option></select></div>
+          <div className="grid gap-3 md:grid-cols-2"><label className="text-xs font-medium text-muted-foreground">Token Sandbox<input type={showMercadoPagoTokens ? 'text' : 'password'} value={mercadoPagoSandboxToken} onChange={e => setMercadoPagoSandboxToken(e.target.value)} placeholder="TEST-..." className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono" /></label><label className="text-xs font-medium text-muted-foreground">Token Produção<input type={showMercadoPagoTokens ? 'text' : 'password'} value={mercadoPagoProductionToken} onChange={e => setMercadoPagoProductionToken(e.target.value)} placeholder="APP_USR-..." className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono" /></label></div>
+          <p className="text-xs text-muted-foreground">Ao salvar com o Asaas ativo, ele continua sendo o provedor selecionado. Para usar o Mercado Pago, desative o Asaas e ative o Mercado Pago.</p>
+        </div>
+        <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setShowAsaasTokens(v => !v)} className="rounded-md border border-border px-3 py-2 text-sm">{showAsaasTokens ? 'Ocultar tokens Asaas' : 'Mostrar tokens Asaas'}</button><button type="button" onClick={() => setShowMercadoPagoTokens(v => !v)} className="rounded-md border border-border px-3 py-2 text-sm">{showMercadoPagoTokens ? 'Ocultar tokens Mercado Pago' : 'Mostrar tokens Mercado Pago'}</button><button type="button" onClick={savePaymentIntegrations} className="rounded-md gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground">Salvar pagamentos</button></div>
         <p className="text-xs text-muted-foreground">Webhook: <code>{`${import.meta.env.VITE_SUPABASE_URL || ''}/functions/v1/asaas-webhook`}</code></p>
       </div>
 

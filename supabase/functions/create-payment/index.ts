@@ -111,8 +111,9 @@ async function createAsaas(supabase: any, tenant: any, order: any, tenantId: str
 }
 
 async function createMercadoPago(supabase: any, tenant: any, order: any, items: any[], tenantId: string, orderId: string, origin: string) {
-  const token = clean(tenant.mercadopago_token, 500);
-  if (!token) return reply({ provider: "mercadopago", code: "PROVIDER_NOT_CONFIGURED", error: "Loja sem integração de pagamento configurada." }, 400);
+  const environment = tenant.mercadopago_environment === "production" ? "production" : "sandbox";
+  const token = clean(environment === "production" ? (tenant.mercadopago_production_token || tenant.mercadopago_token) : (tenant.mercadopago_sandbox_token || tenant.mercadopago_token), 500);
+  if (tenant.mercadopago_enabled === false || !token) return reply({ provider: "mercadopago", code: "PROVIDER_NOT_CONFIGURED", error: "Mercado Pago está desativado ou sem token configurado." }, 400);
   const storeUrl = `${origin}/loja/${clean(tenant.slug)}`;
   const body = {
     items: reconcileItems(items, order), external_reference: orderId,
@@ -122,7 +123,7 @@ async function createMercadoPago(supabase: any, tenant: any, order: any, items: 
   };
   const result = await fetchJson("https://api.mercadopago.com/checkout/preferences", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!result.response.ok) return errorFromProvider("mercadopago", result.data, "Não foi possível criar o checkout no Mercado Pago.");
-  const initPoint = token.startsWith("TEST-") ? result.data.sandbox_init_point : result.data.init_point;
+  const initPoint = environment === "sandbox" ? result.data.sandbox_init_point : result.data.init_point;
   if (!initPoint) return reply({ provider: "mercadopago", code: "CHECKOUT_URL_MISSING", error: "O Mercado Pago não retornou a URL de checkout." }, 502);
   await supabase.from("orders").update({ payment_external_id: result.data.id, payment_provider: "mercadopago", payment_flow: "online" }).eq("id", orderId);
   await supabase.from("payment_transactions").insert({ tenant_id: tenantId, order_id: orderId, provider: "mercadopago", method: "checkout_link", status: "pending", amount: money(order.total), external_id: result.data.id, external_reference: orderId, checkout_url: initPoint, raw_request: body, raw_response: result.data });
@@ -156,7 +157,7 @@ Deno.serve(async (req) => {
     if (!url || !serviceKey) return reply({ code: "SERVER_MISCONFIGURED", error: "Servidor de pagamentos sem configuração interna." }, 500);
     const supabase = createClient(url, serviceKey);
     const [tenantResult, orderResult, itemsResult] = await Promise.all([
-      supabase.from("tenants").select("id,slug,name,payment_provider,mercadopago_token,pagbank_token,pagbank_env,asaas_enabled,asaas_environment,asaas_sandbox_token,asaas_production_token").eq("id", tenantId).maybeSingle(),
+      supabase.from("tenants").select("id,slug,name,payment_provider,mercadopago_enabled,mercadopago_environment,mercadopago_sandbox_token,mercadopago_production_token,mercadopago_token,pagbank_token,pagbank_env,asaas_enabled,asaas_environment,asaas_sandbox_token,asaas_production_token").eq("id", tenantId).maybeSingle(),
       supabase.from("orders").select("*").eq("id", orderId).eq("tenant_id", tenantId).maybeSingle(),
       supabase.from("order_items").select("*").eq("order_id", orderId),
     ]);
