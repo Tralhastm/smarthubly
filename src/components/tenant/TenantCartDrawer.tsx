@@ -367,7 +367,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const onlineTotal = shouldProtectOnlinePrice
     ? grossUpPaymentFee(finalTotal, onlineFeePercent)
     : finalTotal;
-  const protectedCartSubtotal = hasOnlinePayment ? grossUpPaymentFee(total, 0.99) : total;
+  const cartUsesProtectedPrice = !isWhatsAppMode && !isLocalOnly && !isAffiliate;
+  const protectedCartSubtotal = cartUsesProtectedPrice ? grossUpPaymentFee(total, 0.99) : total;
   // Em delivery, pagamentos só ficam disponíveis após uma cotação válida.
   // Em dropshipping, a cotação ViaCEP também é a prova de que o endereço está dentro do raio do fornecedor.
   const deliveryBlocked = deliveryType === 'delivery' && (
@@ -980,7 +981,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     <>
                       {items.map(item => {
                         const unit = getCartLineUnitPrice(item);
-                        const displayedUnit = hasOnlinePayment ? grossUpPaymentFee(unit, 0.99) : unit;
+                        const displayedUnit = cartUsesProtectedPrice ? grossUpPaymentFee(unit, 0.99) : unit;
                         return (
                         <div key={item.key} className="flex items-start gap-3 p-3 rounded-lg bg-secondary">
                           <div className="flex-1 min-w-0">
