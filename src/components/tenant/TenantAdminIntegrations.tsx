@@ -36,11 +36,13 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
   const [mercadoPagoSandboxToken, setMercadoPagoSandboxToken] = useState('');
   const [mercadoPagoProductionToken, setMercadoPagoProductionToken] = useState('');
   const [showMercadoPagoTokens, setShowMercadoPagoTokens] = useState(false);
+  const [paymentFeePassThroughEnabled, setPaymentFeePassThroughEnabled] = useState(false);
+  const [paymentFeePassThroughPercent, setPaymentFeePassThroughPercent] = useState('4.98');
 
   // Número de falhas consecutivas do tick antes de pausar o autoSync (5s * 24 = 2 min)
 
   useEffect(() => {
-    supabase.from('tenants').select('asaas_enabled,asaas_environment,asaas_sandbox_token,asaas_production_token,asaas_webhook_token,mercadopago_enabled,mercadopago_environment,mercadopago_sandbox_token,mercadopago_production_token,mercadopago_token').eq('id', tenantId).single().then(({ data }) => {
+    supabase.from('tenants').select('asaas_enabled,asaas_environment,asaas_sandbox_token,asaas_production_token,asaas_webhook_token,mercadopago_enabled,mercadopago_environment,mercadopago_sandbox_token,mercadopago_production_token,mercadopago_token,payment_fee_pass_through_enabled,payment_fee_pass_through_percent').eq('id', tenantId).single().then(({ data }) => {
       if (!data) return;
       setAsaasEnabled((data as any).asaas_enabled ?? false);
       setAsaasEnvironment(((data as any).asaas_environment as any) || 'sandbox');
@@ -51,6 +53,8 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
       setMercadoPagoEnvironment(((data as any).mercadopago_environment as any) || 'sandbox');
       setMercadoPagoSandboxToken((data as any).mercadopago_sandbox_token || (data as any).mercadopago_token || '');
       setMercadoPagoProductionToken((data as any).mercadopago_production_token || '');
+      setPaymentFeePassThroughEnabled((data as any).payment_fee_pass_through_enabled ?? false);
+      setPaymentFeePassThroughPercent(String((data as any).payment_fee_pass_through_percent ?? 4.98));
     });
   }, [tenantId]);
 
@@ -196,6 +200,8 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
       mercadopago_sandbox_token: mercadoPagoSandboxToken.trim() || null,
       mercadopago_production_token: mercadoPagoProductionToken.trim() || null,
       mercadopago_token: (mercadoPagoEnvironment === 'production' ? mercadoPagoProductionToken : mercadoPagoSandboxToken).trim() || null,
+      payment_fee_pass_through_enabled: paymentFeePassThroughEnabled,
+      payment_fee_pass_through_percent: Math.max(0, Number(String(paymentFeePassThroughPercent).replace(',', '.')) || 0),
       payment_provider: asaasIsReady ? 'asaas' : 'mercadopago',
     } as any).eq('id', tenantId);
     if (error) toast({ title: 'Erro ao salvar pagamentos', description: error.message, variant: 'destructive' });
@@ -384,6 +390,16 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
           <div><label className="text-xs font-medium text-muted-foreground">Ambiente</label><select value={mercadoPagoEnvironment} onChange={e => setMercadoPagoEnvironment(e.target.value as any)} className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"><option value="sandbox">Sandbox / homologação</option><option value="production">Produção</option></select></div>
           <div className="grid gap-3 md:grid-cols-2"><label className="text-xs font-medium text-muted-foreground">Token Sandbox<input type={showMercadoPagoTokens ? 'text' : 'password'} value={mercadoPagoSandboxToken} onChange={e => setMercadoPagoSandboxToken(e.target.value)} placeholder="TEST-..." className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono" /></label><label className="text-xs font-medium text-muted-foreground">Token Produção<input type={showMercadoPagoTokens ? 'text' : 'password'} value={mercadoPagoProductionToken} onChange={e => setMercadoPagoProductionToken(e.target.value)} placeholder="APP_USR-..." className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono" /></label></div>
           <p className="text-xs text-muted-foreground">Ao salvar com o Asaas ativo, ele continua sendo o provedor selecionado. Para usar o Mercado Pago, desative o Asaas e ative o Mercado Pago.</p>
+          <div className="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={paymentFeePassThroughEnabled} onChange={e => setPaymentFeePassThroughEnabled(e.target.checked)} className="h-4 w-4" />
+              Repassar taxa estimada do Checkout ao cliente
+            </label>
+            <p className="text-xs text-muted-foreground">Quando ativo, o sistema faz o gross-up apenas em pagamentos online para preservar o líquido estimado. Não altera pedidos no WhatsApp, balcão ou pagamento na entrega.</p>
+            <label className="block text-xs font-medium text-muted-foreground">Taxa estimada do Checkout (%)
+              <input type="text" inputMode="decimal" value={paymentFeePassThroughPercent} onChange={e => setPaymentFeePassThroughPercent(e.target.value)} className="mt-1 w-32 rounded-md border border-border bg-background px-3 py-2 text-sm" />
+            </label>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setShowAsaasTokens(v => !v)} className="rounded-md border border-border px-3 py-2 text-sm">{showAsaasTokens ? 'Ocultar tokens Asaas' : 'Mostrar tokens Asaas'}</button><button type="button" onClick={() => setShowMercadoPagoTokens(v => !v)} className="rounded-md border border-border px-3 py-2 text-sm">{showMercadoPagoTokens ? 'Ocultar tokens Mercado Pago' : 'Mostrar tokens Mercado Pago'}</button><button type="button" onClick={savePaymentIntegrations} className="rounded-md gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground">Salvar pagamentos</button></div>
         <p className="text-xs text-muted-foreground">Webhook: <code>{`${import.meta.env.VITE_SUPABASE_URL || ''}/functions/v1/asaas-webhook`}</code></p>

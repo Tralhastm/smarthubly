@@ -350,6 +350,13 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         : Math.min(appliedCoupon.discount_value, subtotalForCoupon))
     : 0;
   const finalTotal = Math.max(0, subtotalForCoupon - discountAmount);
+  // Repasse opcional da taxa do Checkout: o valor cobrado é aumentado pelo
+  // gross-up, para que após a taxa estimada reste o total líquido do pedido.
+  const paymentFeePassThroughEnabled = (tenant as any).payment_fee_pass_through_enabled === true;
+  const paymentFeePassThroughPercent = Math.max(0, Number((tenant as any).payment_fee_pass_through_percent) || 0);
+  const onlineTotal = paymentFeePassThroughEnabled && paymentFeePassThroughPercent > 0 && paymentFeePassThroughPercent < 100
+    ? Math.ceil((finalTotal / (1 - paymentFeePassThroughPercent / 100)) * 100) / 100
+    : finalTotal;
   // Em delivery, pagamentos só ficam disponíveis após uma cotação válida.
   // Em dropshipping, a cotação ViaCEP também é a prova de que o endereço está dentro do raio do fornecedor.
   const deliveryBlocked = deliveryType === 'delivery' && (
@@ -759,7 +766,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       const orderResult = await addOrderMutation.mutateAsync({
         order: {
           tenant_id: tenant.id,
-          total: finalTotal,
+          total: payOnline ? onlineTotal : finalTotal,
           platform_fee: platformFee,
           delivery_type: deliveryType,
           delivery_fee: deliveryType === 'delivery' ? (effectiveDeliveryFee + shippingFee) : 0,
@@ -779,12 +786,16 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           seller_id: appliedCoupon?.seller_id ?? null,
           seller_code_id: appliedCoupon?.seller_code_id ?? null,
           change_for: !payOnline && paymentMethod === 'dinheiro' && changeFor ? parseFloat(changeFor.replace(',', '.')) || 0 : 0,
-          metadata: { 
+            metadata: {
             needs_fragmentation: needsFragmentation,
             supplier_ids: supplierIdsInCart,
             fragmentation_map: Object.fromEntries(fragments.entries()),
             payment_provider: isInfinitePay ? 'infinitepay' : isAsaasActive ? 'asaas' : ((tenant as any).payment_provider || 'mercadopago'),
-            payment_flow: infinitePayTap ? 'delivery_tap' : (payOnline ? 'online' : 'delivery')
+            payment_flow: infinitePayTap ? 'delivery_tap' : (payOnline ? 'online' : 'delivery'),
+            base_total_before_online_fee: finalTotal,
+            online_fee_pass_through_enabled: payOnline && paymentFeePassThroughEnabled,
+            online_fee_pass_through_percent: payOnline ? paymentFeePassThroughPercent : 0,
+            online_fee_pass_through_amount: payOnline ? Math.max(0, onlineTotal - finalTotal) : 0
           }
         } as any,
         items: items.map(i => ({
@@ -1254,14 +1265,14 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       qualquer ambiguidade de estado. O usuário escolhe pelo botão clicado. */}
                   {hasOnlinePayment && (
                     <>
-                      <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
-                        <strong className="text-foreground">Pix:</strong> valor mostrado acima.<br />
+          <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
+                        <strong className="text-foreground">Pagamento online:</strong> {paymentFeePassThroughEnabled && onlineTotal > finalTotal ? `R$${onlineTotal.toFixed(2)} (inclui a taxa estimada do Checkout).` : 'valor mostrado acima.'}<br />
                         <strong className="text-foreground">Cartão:</strong> escolha o número de parcelas no checkout do provedor. Qualquer tarifa ou juros será calculado e exibido antes do pagamento.
                       </div>
                       <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
                         className="w-full py-4 rounded-lg font-bold text-base text-primary-foreground gradient-primary hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ring-2 ring-primary/40">
                         {creatingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
-                        {creatingPayment ? 'Gerando pagamento...' : `💳 Ver opções de pagamento (${isAsaasActive ? 'Asaas' : 'Mercado Pago'})`}
+                        {creatingPayment ? 'Gerando pagamento...' : `💳 Pagar R$${onlineTotal.toFixed(2)} (${isAsaasActive ? 'Asaas' : 'Mercado Pago'})`}
                       </button>
                       {!!(tenant as any).demo_payment_enabled && (
                         <button onClick={() => submitOrder(false, true, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
