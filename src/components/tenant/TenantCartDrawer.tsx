@@ -717,6 +717,24 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         .select('id')
         .eq('tenant_id', tenant.id);
       const supplierIds = (tenantSuppliers || []).map((s: any) => s.id).filter(Boolean);
+      const { data: supplierVariantOffers } = supplierIds.length > 0
+        ? await (supabase as any)
+          .from('supplier_variant_offers')
+          .select('product_variant_id, supplier_id, unit_cost')
+          .in('supplier_id', supplierIds)
+          .eq('available', true)
+        : { data: [] as any[] };
+      const bestVariantSuppliers = new Map<string, { supplier_id: string; price: number }>();
+      (supplierVariantOffers || []).forEach((offer: any) => {
+        if (!offer.product_variant_id) return;
+        const current = bestVariantSuppliers.get(offer.product_variant_id);
+        if (!current || Number(offer.unit_cost) < current.price) {
+          bestVariantSuppliers.set(offer.product_variant_id, {
+            supplier_id: offer.supplier_id,
+            price: Number(offer.unit_cost),
+          });
+        }
+      });
       const { data: supplierPrices } = supplierIds.length > 0
         ? await supabase
           .from('supplier_product_prices')
@@ -740,8 +758,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         const best = bestSuppliers.get(productMatchKey(item.product.name));
         // Variações novas exigem escolha manual: não usar o fornecedor de menor preço
         // quando a cor ainda não possui supplier_id definido.
+        const bestVariant = item.variantId ? bestVariantSuppliers.get(item.variantId) : null;
         const targetSupplierId = item.variantId
-          ? item.variantSupplierId
+          ? (bestVariant?.supplier_id || item.variantSupplierId)
           : (best?.supplier_id || (item.product as any).supplier_id);
         if (targetSupplierId) {
           const list = fragments.get(targetSupplierId) || [];

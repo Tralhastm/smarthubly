@@ -693,7 +693,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     if (!supplierId) return;
 
     const { data: existingVariants, error: variantsError } = await supabase.from('product_variants' as any)
-      .select('*').eq('product_id', productId).eq('supplier_id', supplierId).limit(100);
+      .select('*').eq('product_id', productId).limit(100);
     if (variantsError) throw variantsError;
 
     const existingByName = new Map<string, any>();
@@ -742,6 +742,50 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         ? await supabase.from('product_variants' as any).update(payload).eq('id', existing.id)
         : await supabase.from('product_variants' as any).insert(payload);
       if (result.error) throw result.error;
+
+      // Guarda a oferta deste fornecedor separadamente. A variante visível
+      // recebe automaticamente o fornecedor de menor custo via trigger SQL.
+      const { data: savedVariant, error: savedVariantError } = await supabase
+        .from('product_variants' as any)
+        .select('id')
+        .eq('product_id', productId)
+        .eq('name', name)
+        .limit(1)
+        .maybeSingle();
+      if (savedVariantError) throw savedVariantError;
+      if (savedVariant?.id && variantCost > 0) {
+        const { error: offerError } = await supabase.from('supplier_variant_offers' as any).upsert({
+          tenant_id: tenantId,
+          product_id: productId,
+          product_variant_id: savedVariant.id,
+          supplier_id: supplierId,
+          variant_name: name,
+          variant_key: key,
+          unit_cost: variantCost,
+          available: variant.available !== false,
+          source: 'supplier_list',
+          last_seen_at: new Date().toISOString(),
+        }, { onConflict: 'supplier_id,product_id,variant_key' });
+        if (offerError) throw offerError;
+      }
+    }
+
+    // A lista por cor é fonte de verdade somente para as cores deste produto
+    // e fornecedor: cores ausentes ficam indisponíveis, sem apagar ofertas.
+    const importedKeys = new Set(product.variants.map(v => v.name.trim().toLocaleLowerCase('pt-BR')));
+    const { data: supplierOffers, error: offersError } = await supabase
+      .from('supplier_variant_offers' as any)
+      .select('id, variant_key')
+      .eq('product_id', productId)
+      .eq('supplier_id', supplierId)
+      .limit(100);
+    if (offersError) throw offersError;
+    for (const offer of (supplierOffers || []) as any[]) {
+      if (!importedKeys.has(String(offer.variant_key).toLocaleLowerCase('pt-BR'))) {
+        const { error } = await supabase.from('supplier_variant_offers' as any)
+          .update({ available: false, last_seen_at: new Date().toISOString() }).eq('id', offer.id);
+        if (error) throw error;
+      }
     }
 
     // A lista diária representa a disponibilidade atual do fornecedor. Variantes antigas
