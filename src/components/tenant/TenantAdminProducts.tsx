@@ -105,10 +105,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     queryFn: async () => {
       const { data, error } = await supabase
         .from('product_variants' as any)
-        .select('product_id,name,suggested_price,price_delta,cost_price,in_stock')
+        .select('product_id,name,suggested_price,price_delta,cost_price,in_stock,needs_price_review')
         .eq('tenant_id', tenantId);
       if (error) throw error;
-      return (data || []) as Array<{ product_id: string; name: string; suggested_price: number | null; price_delta: number | null; cost_price: number | null; in_stock: boolean }>;
+      return (data || []) as Array<{ product_id: string; name: string; suggested_price: number | null; price_delta: number | null; cost_price: number | null; in_stock: boolean; needs_price_review: boolean }>;
     },
     enabled: !!tenantId,
     staleTime: 30000,
@@ -786,6 +786,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     }
 
     await queryClient.invalidateQueries({ queryKey: ['product-variants'] });
+    await queryClient.invalidateQueries({ queryKey: ['tenant-product-variants', tenantId] });
     await refetch();
 
     const msg = importCancelled
@@ -1563,6 +1564,8 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
     costPrice: Number(variant.cost_price ?? (product as any).original_price) || 0,
   }));
   const variantSalePrices = variantPrices.map(v => v.salePrice).filter(price => price > 0);
+  const unavailableVariants = variantPrices.filter(v => v.in_stock === false);
+  const resaleReviewVariants = variantPrices.filter(v => v.needs_price_review && v.in_stock !== false);
   const referencePrice = Number(product.price) > 0
     ? Number(product.price)
     : (variantSalePrices.length > 0 ? Math.min(...variantSalePrices) : 0);
@@ -1908,6 +1911,16 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
                   <span>Custo: {variant.costPrice > 0 ? `R$${variant.costPrice.toFixed(2)}` : '—'}</span>
                   <span className="text-primary">Revenda: R${variant.salePrice.toFixed(2)}</span>
                 </p>
+              ))}
+            </div>
+          )}
+          {(unavailableVariants.length > 0 || resaleReviewVariants.length > 0) && (
+            <div className="mt-2 space-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-600">
+              {unavailableVariants.map(variant => (
+                <p key={`missing-${variant.id}`}>⚠ {variant.name} do {product.name} não está na lista do fornecedor.</p>
+              ))}
+              {resaleReviewVariants.map(variant => (
+                <p key={`review-${variant.id}`}>⚠ {variant.name} do {product.name}: defina o preço de revenda.</p>
               ))}
             </div>
           )}
