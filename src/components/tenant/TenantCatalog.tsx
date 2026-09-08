@@ -638,7 +638,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
         </div>
       )}
       {pickerProduct && (
-        <ProductOptionsPicker product={pickerProduct} onClose={() => setPickerProduct(null)} />
+        <ProductOptionsPicker product={pickerProduct} showPixPrice={showPixPrice} onClose={() => setPickerProduct(null)} />
       )}
     </div>
   );

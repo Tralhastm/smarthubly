@@ -3,16 +3,17 @@ import { useProductVariants, useProductAddons, type ProductVariant, type Product
 import { useCart, type CartAddon } from '@/contexts/CartContext';
 import type { Tables } from '@/integrations/supabase/types';
 import { X, Plus, Minus, Check } from 'lucide-react';
-import { hasPositiveFinalProfit } from '@/lib/pricing';
+import { hasPositiveFinalProfit, grossUpPaymentFee } from '@/lib/pricing';
 
 type Product = Tables<'products'>;
 
 interface Props {
   product: Product;
+  showPixPrice?: boolean;
   onClose: () => void;
 }
 
-const ProductOptionsPicker = ({ product, onClose }: Props) => {
+const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props) => {
   const { data: variants = [] } = useProductVariants(product.id);
   const { data: addons = [] } = useProductAddons(product.id);
   const { addToCart } = useCart();
@@ -20,6 +21,7 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [addonQty, setAddonQty] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
+  const displayPrice = (value: number) => showPixPrice ? grossUpPaymentFee(value, 0.99) : value;
 
   // Auto-seleciona primeira variante disponível
   useEffect(() => {
@@ -76,7 +78,7 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
         <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
           <div className="min-w-0">
             <h3 className="font-heading text-base text-foreground truncate">{product.name}</h3>
-            <p className="text-xs text-muted-foreground">Personalize seu pedido</p>
+            <p className="text-xs text-muted-foreground">Personalize seu pedido{showPixPrice ? ' · preço no Pix' : ''}</p>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1 shrink-0">
             <X className="h-5 w-5" />
@@ -119,7 +121,7 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
                           {!available && <span className="text-[10px] text-muted-foreground">({profitable ? 'esgotado' : 'indisponível por prejuízo'})</span>}
                     </span>
                     <span className="text-xs font-medium text-primary">
-                      R${variantPrice.toFixed(2)}
+                      R${displayPrice(variantPrice).toFixed(2)}
                       {displayDelta !== 0 && <span className="ml-1 opacity-80">({displayDelta > 0 ? '+' : ''}R${displayDelta.toFixed(2)} na cor)</span>}
                     </span>
                   </button>
@@ -207,7 +209,7 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
             className="w-full flex items-center justify-between gap-2 rounded-lg gradient-primary text-primary-foreground px-4 py-3 font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span>Adicionar ao carrinho</span>
-            <span className="font-bold">R${unitTotal.toFixed(2)}</span>
+            <span className="font-bold">R${displayPrice(unitTotal).toFixed(2)}</span>
           </button>
         </div>
       </div>
