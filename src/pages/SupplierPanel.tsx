@@ -81,7 +81,7 @@ const SupplierPanel = () => {
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [priceText, setPriceText] = useState('');
-  const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both'>('cost');
+  const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both' | 'color'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
   const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[] } | null>(null);
   const [tenant, setTenant] = useState<any>(null);
@@ -182,10 +182,21 @@ const SupplierPanel = () => {
 
   const fetchProducts = useCallback(async () => {
     if (!supplier) return;
-    // Only fetch products assigned to this supplier
-    const { data } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id')
-      .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
-    setProducts((data as Product[]) || []);
+    // Mostra produtos próprios e também produtos nos quais este fornecedor
+    // possui uma oferta por cor/custo menor.
+    const [{ data: own }, { data: offers }] = await Promise.all([
+      supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity')
+        .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id),
+      (supabase as any).from('supplier_variant_offers').select('product_id')
+        .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).limit(500),
+    ]);
+    const ids = Array.from(new Set(((offers || []) as any[]).map(o => o.product_id).filter(Boolean)));
+    const { data: offered } = ids.length
+      ? await supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity').in('id', ids)
+      : { data: [] as any[] };
+    const merged = new Map<string, Product>();
+    [...((own as any[]) || []), ...((offered as any[]) || [])].forEach(p => merged.set(p.id, p as Product));
+    setProducts([...merged.values()]);
   }, [supplier]);
 
   const fetchOrdersRef = useRef<() => Promise<void>>(async () => {});
@@ -193,9 +204,19 @@ const SupplierPanel = () => {
   const fetchOrders = useCallback(async () => {
     if (!supplier) return;
     try {
-      // Always fetch supplier's products fresh to avoid stale state
-      const { data: freshProducts } = await supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity')
+      // Produtos próprios + produtos em que o fornecedor possui oferta por cor.
+      const { data: offerRows } = await (supabase as any).from('supplier_variant_offers')
+        .select('product_id').eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).limit(500);
+      const offeredIds = Array.from(new Set(((offerRows || []) as any[]).map(o => o.product_id).filter(Boolean)));
+      const ownQuery = supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
+      const offeredQuery = offeredIds.length
+        ? supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity').in('id', offeredIds)
+        : Promise.resolve({ data: [] as any[], error: null } as any);
+      const [{ data: ownProducts }, { data: offeredProducts }] = await Promise.all([ownQuery, offeredQuery]);
+      const productsById = new Map<string, Product>();
+      [...((ownProducts as any[]) || []), ...((offeredProducts as any[]) || [])].forEach(p => productsById.set(p.id, p as Product));
+      const freshProducts = [...productsById.values()];
       const myProducts = (freshProducts as Product[]) || [];
       setProducts(prev => (prev.length === 0 && myProducts.length > 0 ? myProducts : prev));
       const myProductNames = new Set(myProducts.map(p => p.name));
@@ -211,12 +232,21 @@ const SupplierPanel = () => {
         return;
       }
 
-      // Filter: orders directly assigned to this supplier OR containing my products
+      // Filter seguro: pedido direto deste fornecedor ou fragmento destinado a ele.
+      // O endereço continua visível aqui no painel autenticado pelo token; ele não
+      // é usado na mensagem de WhatsApp.
       const allOrders = (data as any[]) || [];
-      const relevantOrders = allOrders.filter(o =>
-        o.supplier_id === supplier.id ||
-        (o.order_items || []).some((item: any) => myProductNames.has(item.product_name))
-      ) as OrderWithItems[];
+      const { data: fragments } = await (supabase as any).from('order_fragments')
+        .select('order_id, items').eq('supplier_id', supplier.id).limit(500);
+      const fragmentByOrder = new Map<string, any>();
+      ((fragments || []) as any[]).forEach(f => fragmentByOrder.set(f.order_id, f));
+      const relevantOrders = allOrders.filter(o => o.supplier_id === supplier.id || fragmentByOrder.has(o.id))
+        .map(o => {
+          const fragment = fragmentByOrder.get(o.id);
+          if (!fragment?.items) return o;
+          const allowed = new Set((fragment.items || []).map((i: any) => `${i.product_name}::${i.variant_name || ''}`));
+          return { ...o, order_items: (o.order_items || []).filter((i: any) => allowed.has(`${i.product_name}::${i.variant_name || ''}`)) };
+        }) as OrderWithItems[];
 
       console.log('[SupplierPanel] fetched', allOrders.length, 'total orders,', relevantOrders.length, 'relevant for supplier', supplier.id);
 
@@ -494,7 +524,14 @@ const SupplierPanel = () => {
     .trim();
   const extractColors = (value: string) => {
     const colorPattern = /\b(preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|black|white|camuflada)\b/giu;
-    return [...value.matchAll(colorPattern)].map(match => match[1]).filter((color, index, all) => all.findIndex(c => c.toLocaleLowerCase('pt-BR') === color.toLocaleLowerCase('pt-BR')) === index);
+    const emojiColors: Array<[RegExp, string]> = [
+      [/🔵|💙/gu, 'Azul'], [/⚫️?|🖤/gu, 'Preto'], [/🩷|💗/gu, 'Rosa'],
+      [/🟣|💜/gu, 'Roxo'], [/⚪️?|🤍/gu, 'Branco'], [/🟢|💚/gu, 'Verde'],
+      [/🟠|🧡/gu, 'Laranja'], [/🩶|🩵/gu, 'Cinza'], [/🌕|🟡/gu, 'Dourado'],
+    ];
+    const colors = [...value.matchAll(colorPattern)].map(match => match[1]);
+    emojiColors.forEach(([pattern, color]) => { if (pattern.test(value)) colors.push(color); });
+    return colors.filter((color, index, all) => all.findIndex(c => c.toLocaleLowerCase('pt-BR') === color.toLocaleLowerCase('pt-BR')) === index);
   };
   const inferProductCategory = (value: string) => {
     const name = normalizeSupplierProductName(value);
@@ -565,6 +602,13 @@ const SupplierPanel = () => {
       const line = rawLine.trim();
       if (!line) continue;
       if (/^\*?\s*crit[eé]rio\s*:/i.test(line)) continue;
+      const emojiOnly = line.replace(/[\s*🔵💙⚫️🖤🩷💗🟣💜⚪️🤍🟢💚🟠🧡🩶🩵🌕🟡]/gu, '') === '' && /[🔵💙⚫️🖤🩷💗🟣💜⚪️🤍🟢💚🟠🧡🩶🩵🌕🟡]/u.test(line);
+      if (emojiOnly) {
+        const colors = extractColors(line);
+        if (current) current.colors = [...new Set([...current.colors, ...colors])];
+        else if (entries.length) entries[entries.length - 1].colors = [...new Set([...entries[entries.length - 1].colors, ...colors])];
+        continue;
+      }
       const detectedBrand = sectionBrand(line);
       if (detectedBrand) { flush(); brand = detectedBrand; continue; }
 
@@ -625,7 +669,7 @@ const SupplierPanel = () => {
     if (!supplier || importingPrices) return;
     const entries = parseImportedEntries(priceText);
     if (entries.length === 0) {
-      toast.error('Nenhuma linha válida encontrada. Use: produto - CUSTO: R$ 990,00 - REVENDA: R$ 1.199,00');
+      toast.error('Nenhuma linha válida encontrada. Use: produto - CUSTO: R$ 990,00 - REVENDA: R$ 1.199,00 - cores');
       return;
     }
     setImportingPrices(true);
@@ -646,17 +690,16 @@ const SupplierPanel = () => {
         if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) patch.original_price = entry.cost;
         if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) patch.price = entry.resale;
         if (Object.keys(patch).length === 0 && entry.colors.length === 0) {
-          const expected = priceUpdateMode === 'cost' ? 'CUSTO' : priceUpdateMode === 'resale' ? 'REVENDA' : 'CUSTO ou REVENDA';
+          const expected = priceUpdateMode === 'color' ? 'CUSTO por cor' : priceUpdateMode === 'cost' ? 'CUSTO' : priceUpdateMode === 'resale' ? 'REVENDA' : 'CUSTO ou REVENDA';
           invalid.push(`${entry.name} (não contém ${expected})`);
           continue;
         }
-        if (Object.keys(patch).length > 0) {
+        if (Object.keys(patch).length > 0 && product.supplier_id === supplier.id) {
           const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
           if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
         }
-        // A lista recebida é a fotografia atual do fornecedor. Portanto,
-        // também sincronizamos quando não há cores: nesse caso, todas as
-        // variações antigas são removidas em vez de permanecerem acumuladas.
+        // Cada cor é uma oferta independente. Nunca apagamos a variante de
+        // outro fornecedor; apenas atualizamos/criamos a oferta deste fornecedor.
         {
           const { data: existingVariants, error: variantsReadError } = await (supabase as any).from('product_variants').select('id, name').eq('product_id', product.id).limit(100);
           if (variantsReadError) {
@@ -668,22 +711,37 @@ const SupplierPanel = () => {
               incomingNames.add(normalizedColor);
               const old = (existingVariants || []).find((variant: any) => normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, '')) === normalizedColor);
               const variantPatch: Record<string, any> = { in_stock: true };
-              if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) variantPatch.cost_price = entry.cost;
               if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) {
                 variantPatch.suggested_price = entry.resale;
                 variantPatch.price_delta = entry.resale - Number(product.price || 0);
               }
               const { error: variantError } = old
                 ? await (supabase as any).from('product_variants').update(variantPatch).eq('id', old.id)
-                : await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, name: color, price_delta: priceUpdateMode === 'resale' && entry.resale != null ? entry.resale - Number(product.price || 0) : 0, cost_price: priceUpdateMode !== 'resale' ? entry.cost : null, suggested_price: priceUpdateMode !== 'cost' ? entry.resale : null, in_stock: true, sort_order: entry.colors.indexOf(color) });
+                : await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, name: color, price_delta: priceUpdateMode === 'resale' && entry.resale != null ? entry.resale - Number(product.price || 0) : 0, suggested_price: priceUpdateMode !== 'cost' ? entry.resale : null, in_stock: true, sort_order: entry.colors.indexOf(color) });
               if (variantError) warnings.push(`${entry.name} (cor ${color} não atualizada: ${variantError.message})`);
+              const variant = old || (await (supabase as any).from('product_variants').select('id').eq('product_id', product.id).eq('name', color).limit(1).maybeSingle()).data;
+              if (variant?.id && entry.cost != null && Number(entry.cost) > 0) {
+                const { error: offerError } = await (supabase as any).from('supplier_variant_offers').upsert({
+                  tenant_id: supplier.tenant_id,
+                  product_id: product.id,
+                  product_variant_id: variant.id,
+                  supplier_id: supplier.id,
+                  variant_name: color,
+                  variant_key: normalizedColor,
+                  unit_cost: Number(entry.cost),
+                  available: true,
+                  source: 'supplier_panel',
+                  last_seen_at: new Date().toISOString(),
+                }, { onConflict: 'supplier_id,product_id,variant_key' });
+                if (offerError) warnings.push(`${entry.name} (oferta da cor ${color} não atualizada: ${offerError.message})`);
+              }
             }
-            const staleIds = (existingVariants || [])
-              .filter((variant: any) => !incomingNames.has(normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, ''))))
-              .map((variant: any) => variant.id);
-            if (staleIds.length) {
-              const { error: deleteError } = await (supabase as any).from('product_variants').delete().in('id', staleIds);
-              if (deleteError) warnings.push(`${entry.name} (cores antigas não removidas: ${deleteError.message})`);
+            const { error: staleError } = await (supabase as any).from('supplier_variant_offers')
+              .update({ available: false, last_seen_at: new Date().toISOString() })
+              .eq('product_id', product.id).eq('supplier_id', supplier.id)
+              .not('variant_key', 'in', `(${[...incomingNames].map(k => `"${k.replace(/"/g, '""')}"`).join(',') || '"__none__"'})`);
+            if (staleError) {
+              warnings.push(`${entry.name} (cores ausentes não ocultadas: ${staleError.message})`);
             }
           }
         }
@@ -1049,12 +1107,13 @@ const SupplierPanel = () => {
               <p className="text-xs text-muted-foreground">Cole a lista original do fornecedor ou escolha um arquivo .txt. O valor entre parênteses é o custo e as cores após o preço também são importadas. Só serão atualizados produtos já vinculados a este fornecedor.</p>
               <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
                 <label className="block text-xs font-semibold text-foreground">O que deseja atualizar?</label>
-                <select value={priceUpdateMode} onChange={e => { setPriceUpdateMode(e.target.value as 'cost' | 'resale' | 'both'); setImportResult(null); }} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
+                <select value={priceUpdateMode} onChange={e => { setPriceUpdateMode(e.target.value as 'cost' | 'resale' | 'both' | 'color'); setImportResult(null); }} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
                   <option value="cost">Somente preço de custo</option>
                   <option value="resale">Somente preço de revenda</option>
                   <option value="both">Preço de custo e revenda</option>
+                  <option value="color">Seletor por cor — custo e disponibilidade</option>
                 </select>
-                <p className="text-[11px] text-muted-foreground">Produtos não vinculados ao fornecedor serão ignorados. No modo “somente custo”, o preço de revenda permanece inalterado.</p>
+                <p className="text-[11px] text-muted-foreground">No Seletor por cor, uma cor nova pode ser criada. O custo fica registrado para este fornecedor; o sistema escolhe o menor custo sem vender abaixo do preço da loja. Se empatar, vence quem já recebeu mais pedidos daquela cor.</p>
               </div>
               <div className="rounded-md bg-secondary/60 p-3 text-xs text-muted-foreground font-mono">🇧🇷 *Galaxy A07 128GB - (R$ 750)* preto</div>
               <textarea value={priceText} onChange={e => { setPriceText(e.target.value); setImportResult(null); }} rows={8} placeholder="Uma linha por produto..." className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground" />
