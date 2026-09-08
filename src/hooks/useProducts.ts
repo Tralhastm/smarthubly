@@ -89,6 +89,7 @@ export const useUpdateProduct = () => {
         description: product.description,
         in_stock: product.in_stock,
         manual_blocked: Boolean((product as any).manual_blocked),
+        allow_loss: Boolean((product as any).allow_loss),
         supplier_id: product.supplier_id,
         platform_fee_percent: (product as any).platform_fee_percent ?? null,
         has_shipping: (product as any).has_shipping ?? false,

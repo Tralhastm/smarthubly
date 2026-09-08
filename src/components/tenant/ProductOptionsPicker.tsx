@@ -24,7 +24,7 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
   // Auto-seleciona primeira variante disponível
   useEffect(() => {
     if (variants.length > 0 && !selectedVariant) {
-      const first = variants.find(v => v.in_stock && hasPositiveFinalProfit(v.suggested_price ?? (product.price + Number(v.price_delta || 0)), v.cost_price ?? (product as any).original_price));
+      const first = variants.find(v => v.in_stock && ((v as any).allow_loss || (product as any).allow_loss || hasPositiveFinalProfit(v.suggested_price ?? (product.price + Number(v.price_delta || 0)), v.cost_price ?? (product as any).original_price)));
       if (first) setSelectedVariant(first);
     }
   }, [variants, selectedVariant, product]);
@@ -95,7 +95,7 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
                   const basePrice = Number(product.price) || 0;
                   const displayDelta = basePrice > 0 ? variantPrice - basePrice : 0;
                   const profitable = hasPositiveFinalProfit(variantPrice, v.cost_price ?? (product as any).original_price);
-                  const available = Boolean(v.in_stock) && profitable;
+                  const available = Boolean(v.in_stock) && ((v as any).allow_loss || (product as any).allow_loss || profitable);
                   return (
                   <button
                     key={v.id}

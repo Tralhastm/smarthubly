@@ -1849,6 +1849,10 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
           <input type="checkbox" checked={Boolean((form as any).manual_blocked)} onChange={e => setForm({ ...form, manual_blocked: e.target.checked } as any)} className="accent-primary" />
           Bloquear produto na vitrine
         </label>
+        <label className="flex items-center gap-2 text-sm text-foreground" title="Libera a venda mesmo quando o cálculo de lucro final ficar negativo">
+          <input type="checkbox" checked={Boolean((form as any).allow_loss)} onChange={e => setForm({ ...form, allow_loss: e.target.checked } as any)} className="accent-primary" />
+          Liberar mesmo com prejuízo
+        </label>
         <label className="flex items-center gap-2 text-sm text-foreground" title="Quando você clicar em 'Categorizar tudo com IA', este produto será ignorado">
           <input type="checkbox" checked={(form as any).auto_categorize !== false} onChange={e => setForm({ ...form, auto_categorize: e.target.checked } as any)} className="accent-primary" />
           Incluir na categorização automática por IA

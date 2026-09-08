@@ -266,7 +266,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     // marcado como prejuízo durante esse intervalo.
     if (referencePrice <= 0) return product;
     const pricing = calculateFinalProfit(referencePrice, referenceCost);
-    if (pricing.isLoss) return { ...product, in_stock: false, pricing_blocked: true };
+    if (pricing.isLoss && !(product as any).allow_loss) return { ...product, in_stock: false, pricing_blocked: true };
     if ((product as any).manual_blocked) return { ...product, in_stock: false };
     return product;
   }), [allProducts, variantMap]);
