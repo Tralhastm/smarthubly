@@ -63,7 +63,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const [creatingPayment, setCreatingPayment] = useState(false);
   const [distanceError, setDistanceError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('pix');
-  const [onlinePaymentMethod, setOnlinePaymentMethod] = useState<'pix' | 'card'>('card');
+  const [onlinePaymentMethod, setOnlinePaymentMethod] = useState<'pix' | 'credit' | 'debit' | null>(null);
   const [changeFor, setChangeFor] = useState('');
   // Pagamento online (MercadoPago ou PagBank) — flag derivada da view pública (não expõe o token).
   const isInfinitePay = (tenant as any)?.payment_provider === 'infinitepay' && (tenant as any)?.infinitepay_enabled !== false;
@@ -1251,7 +1251,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     )}
                     {shippingFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete (produtos):</span><span>R${shippingFee.toFixed(2)}</span></div>}
                     {discountAmount > 0 && <div className="flex justify-between text-sm text-green-400"><span>Cupom ({appliedCoupon?.code}):</span><span>−R${discountAmount.toFixed(2)}</span></div>}
-                    <div className="flex justify-between text-lg font-bold text-foreground"><span>Total:</span><span className="text-primary">R${finalTotal.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-lg font-bold text-foreground"><span>{onlinePaymentMethod === 'pix' ? 'Total Pix:' : onlinePaymentMethod === 'credit' ? 'Total cartão:' : onlinePaymentMethod === 'debit' ? 'Total débito:' : 'Subtotal:'}</span><span className="text-primary">R${(hasOnlinePayment && onlinePaymentMethod ? onlineTotal : finalTotal).toFixed(2)}</span></div>
                   </div>
 
                   {isWhatsAppMode && showPixToCustomer && (
@@ -1271,24 +1271,24 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       qualquer ambiguidade de estado. O usuário escolhe pelo botão clicado. */}
                   {hasOnlinePayment && (
                     <>
-                      <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="grid grid-cols-3 gap-2 mb-2">
                         <button type="button" onClick={() => setOnlinePaymentMethod('pix')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'pix' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}>
                           <strong className="block text-foreground">Pix</strong>
-                          <span>{paymentFeePassThroughEnabled ? `R$${pixOnlineTotal.toFixed(2)} · taxa 0,99%` : 'valor normal'}</span>
+                          <span>R${pixOnlineTotal.toFixed(2)}</span>
                         </button>
-                        <button type="button" onClick={() => setOnlinePaymentMethod('card')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'card' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}>
-                          <strong className="block text-foreground">Cartão</strong>
-                          <span>{paymentFeePassThroughEnabled ? `R$${cardOnlineTotal.toFixed(2)} · taxa ${paymentFeePassThroughPercent.toFixed(2)}%` : 'valor normal'}</span>
+                        <button type="button" onClick={() => setOnlinePaymentMethod('credit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'credit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}>
+                          <strong className="block text-foreground">Crédito</strong>
+                          <span>R${cardOnlineTotal.toFixed(2)}</span>
+                        </button>
+                        <button type="button" onClick={() => setOnlinePaymentMethod('debit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'debit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}>
+                          <strong className="block text-foreground">Débito</strong>
+                          <span>R${cardOnlineTotal.toFixed(2)}</span>
                         </button>
                       </div>
-                      <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
-                        <strong className="text-foreground">Pagamento online:</strong> {paymentFeePassThroughEnabled && onlineTotal > finalTotal ? `R$${onlineTotal.toFixed(2)} (taxa da modalidade selecionada incluída).` : 'valor mostrado acima.'}<br />
-                        <strong className="text-foreground">Cartão:</strong> escolha o número de parcelas no checkout do provedor. Qualquer tarifa ou juros será calculado e exibido antes do pagamento.
-                      </div>
-                      <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
+                      <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked || !onlinePaymentMethod}
                         className="w-full py-4 rounded-lg font-bold text-base text-primary-foreground gradient-primary hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ring-2 ring-primary/40">
                         {creatingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
-                        {creatingPayment ? 'Gerando pagamento...' : `💳 Pagar R$${onlineTotal.toFixed(2)} (${onlinePaymentMethod === 'pix' ? 'Pix' : 'cartão'} · ${isAsaasActive ? 'Asaas' : 'Mercado Pago'})`}
+                        {creatingPayment ? 'Gerando pagamento...' : onlinePaymentMethod ? `💳 Pagar R$${onlineTotal.toFixed(2)} (${onlinePaymentMethod === 'pix' ? 'Pix' : onlinePaymentMethod === 'credit' ? 'crédito' : 'débito'})` : 'Escolha Pix, crédito ou débito'}
                       </button>
                       {!!(tenant as any).demo_payment_enabled && (
                         <button onClick={() => submitOrder(false, true, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
