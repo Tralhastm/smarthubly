@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getItemCTA } from '@/lib/niche-labels';
 import { normalizeProductDescription } from '@/lib/product-description';
 import { ExpandableProductDescription } from './ExpandableProductDescription';
-import { calculateFinalProfit, grossUpPaymentFee } from '@/lib/pricing';
+import { calculateFinalProfit } from '@/lib/pricing';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
 
@@ -275,14 +275,14 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     const prices = variants
       .map(variant => {
         const raw = Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0)));
-        return showPixPrice ? grossUpPaymentFee(raw, 0.99) : raw;
+        return raw;
       })
       .filter(price => Number.isFinite(price) && price > 0);
     const uniquePrices = Array.from(new Set(prices.map(price => Math.round(price * 100))));
     return {
-      displayPrice: prices.length > 0 ? Math.min(...prices) : (showPixPrice ? grossUpPaymentFee(Number(product.price) || 0, 0.99) : Number(product.price) || 0),
+      displayPrice: prices.length > 0 ? Math.min(...prices) : Number(product.price) || 0,
       displayFrom: uniquePrices.length > 1,
-      pricePrefix: showPixPrice ? 'No Pix, a partir de' : undefined,
+      pricePrefix: undefined,
     };
   };
   const getDisplayPrice = (product: Product) => getDisplayPriceInfo(product).displayPrice;

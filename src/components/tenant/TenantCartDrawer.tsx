@@ -17,7 +17,6 @@ import type { Tenant } from '@/hooks/useTenants';
 import { ShoppingCart, X, Plus, Minus, Trash2, MessageCircle, CreditCard, MapPin, Loader2, ExternalLink, Tag, CheckCircle2, CalendarClock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
-import { grossUpPaymentFee } from '@/lib/pricing';
 
 type SupplierShipping = {
   id: string;
@@ -352,23 +351,10 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         : Math.min(appliedCoupon.discount_value, subtotalForCoupon))
     : 0;
   const finalTotal = Math.max(0, subtotalForCoupon - discountAmount);
-  // Repasse opcional da taxa do Checkout: o valor cobrado é aumentado pelo
-  // gross-up, para que após a taxa estimada reste o total líquido do pedido.
-  const paymentFeePassThroughEnabled = (tenant as any).payment_fee_pass_through_enabled === true;
-  const paymentFeePassThroughPercent = Math.max(0, Number((tenant as any).payment_fee_pass_through_percent) || 0);
-  // O preço público da loja deve proteger o valor líquido quando o Mercado Pago
-  // está ativo, mesmo que a view pública antiga ainda não exponha o toggle.
-  const shouldProtectOnlinePrice = paymentFeePassThroughEnabled || (
-    hasOnlinePayment && ((tenant as any).payment_provider === 'mercadopago' || isDropshipping)
-  );
-  const onlineFeePercent = onlinePaymentMethod === 'pix' ? 0.99 : (paymentFeePassThroughPercent || 4.98);
-  const pixOnlineTotal = shouldProtectOnlinePrice ? grossUpPaymentFee(finalTotal, 0.99) : finalTotal;
-  const cardOnlineTotal = shouldProtectOnlinePrice ? grossUpPaymentFee(finalTotal, paymentFeePassThroughPercent || 4.98) : finalTotal;
-  const onlineTotal = shouldProtectOnlinePrice
-    ? grossUpPaymentFee(finalTotal, onlineFeePercent)
-    : finalTotal;
-  const cartUsesProtectedPrice = !isWhatsAppMode && !isLocalOnly && !isAffiliate;
-  const protectedCartSubtotal = cartUsesProtectedPrice ? grossUpPaymentFee(total, 0.99) : total;
+  // A loja absorve as taxas básicas do gateway. O cliente paga apenas os juros
+  // do parcelamento mostrados pelo Mercado Pago no checkout seguro.
+  const paymentFeePassThroughEnabled = false;
+  const onlineTotal = finalTotal;
   // Em delivery, pagamentos só ficam disponíveis após uma cotação válida.
   // Em dropshipping, a cotação ViaCEP também é a prova de que o endereço está dentro do raio do fornecedor.
   const deliveryBlocked = deliveryType === 'delivery' && (
@@ -806,9 +792,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             payment_flow: infinitePayTap ? 'delivery_tap' : (payOnline ? 'online' : 'delivery'),
             base_total_before_online_fee: finalTotal,
             online_fee_pass_through_enabled: payOnline && paymentFeePassThroughEnabled,
-            online_fee_pass_through_percent: payOnline ? onlineFeePercent : 0,
+            online_fee_pass_through_percent: 0,
             online_payment_method: payOnline ? onlinePaymentMethod : null,
-            online_fee_pass_through_amount: payOnline ? Math.max(0, onlineTotal - finalTotal) : 0
+            online_fee_pass_through_amount: 0
           }
         } as any,
         items: items.map(i => ({
@@ -981,7 +967,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     <>
                       {items.map(item => {
                         const unit = getCartLineUnitPrice(item);
-                        const displayedUnit = cartUsesProtectedPrice ? grossUpPaymentFee(unit, 0.99) : unit;
+                        const displayedUnit = unit;
                         return (
                         <div key={item.key} className="flex items-start gap-3 p-3 rounded-lg bg-secondary">
                           <div className="flex-1 min-w-0">
@@ -1010,7 +996,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       })}
                       <div className="border-t border-border pt-4">
                         <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                          <span>Subtotal:</span><span>R${protectedCartSubtotal.toFixed(2)}</span>
+                          <span>Subtotal:</span><span>R${total.toFixed(2)}</span>
                         </div>
                         {customerFee > 0 && (
                           <div className="flex justify-between text-sm text-muted-foreground mb-1">
@@ -1018,7 +1004,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                           </div>
                         )}
                         <div className="flex justify-between text-lg font-bold text-foreground">
-                          <span>Total:</span><span className="text-primary">R${(protectedCartSubtotal + customerFee).toFixed(2)}</span>
+                          <span>Total:</span><span className="text-primary">R${(total + customerFee).toFixed(2)}</span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">+ entrega calculada após informar o endereço</p>
                       </div>

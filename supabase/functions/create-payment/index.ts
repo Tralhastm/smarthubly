@@ -133,7 +133,7 @@ async function createMercadoPago(supabase: any, tenant: any, order: any, items: 
     notification_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/mercadopago-webhook`,
     payment_methods: selectedMethod === 'pix'
       ? { excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }], installments: 1 }
-      : { excluded_payment_types: [{ id: 'bank_transfer' }, { id: 'ticket' }], installments: 18 },
+      : { excluded_payment_types: [{ id: 'bank_transfer' }, { id: 'ticket' }], installments: 12 },
     statement_descriptor: clean(tenant.name || "Loja", 22),
     auto_return: "approved", back_urls: { success: `${storeUrl}/pedido/${orderId}`, failure: storeUrl, pending: `${storeUrl}/pedido/${orderId}` },
   };
