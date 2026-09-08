@@ -774,13 +774,17 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         ) || null;
 
         if (existing) {
-          const updateData: any = {
-            updated_at: new Date().toISOString(),
-            condition: p.condition || 'new',
-            // O modelo voltou a aparecer na lista atual: reativa o card na vitrine.
-            in_stock: true,
-            supplier_id: currentSupplierId || existing.supplier_id || null,
-          };
+          // O Seletor por cor não é uma lista de dispositivos: não pode
+          // reativar, esgotar, trocar fornecedor ou alterar preço do produto.
+          const updateData: any = colorOnly
+            ? { updated_at: new Date().toISOString() }
+            : {
+                updated_at: new Date().toISOString(),
+                condition: p.condition || 'new',
+                // O modelo voltou a aparecer na lista atual: reativa o card na vitrine.
+                in_stock: true,
+                supplier_id: currentSupplierId || existing.supplier_id || null,
+              };
 
           if (!colorOnly && importedCost > 0 && importedCost !== Number(existing.original_price || 0)) {
             updateData.original_price = original_price;
@@ -816,7 +820,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     // A lista diária é a fonte de verdade da disponibilidade do fornecedor.
     // Modelos cadastrados para este fornecedor que não apareceram nesta lista
     // ficam ocultos, mas continuam salvos para serem reativados quando voltarem.
-    if (currentSupplierId) {
+    // Somente a lista de dispositivos controla o esgotamento do produto.
+    // A lista do Seletor por cor pode ser parcial e nunca deve esconder um
+    // dispositivo que não apareceu nela.
+    if (currentSupplierId && importPriceType !== 'color') {
       const supplierProducts = products.filter(product =>
         product.tenant_id === tenantId && product.supplier_id === currentSupplierId
       );
