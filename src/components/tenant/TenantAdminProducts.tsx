@@ -644,7 +644,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const saveImportedVariants = async (productId: string, product: ParsedProduct, baseSalePrice: number, baseCost: number, isCost: boolean, shipping: number, margin: number) => {
+  const saveImportedVariants = async (productId: string, product: ParsedProduct, baseSalePrice: number, baseCost: number, isCost: boolean, shipping: number, margin: number, supplierId: string | null) => {
     // Se a lista trouxe cores, ela passa a ser a fonte de verdade para este modelo.
     // Quando não trouxe variantes, preservamos as existentes para não apagar dados manualmente cadastrados.
     if (!Array.isArray(product.variants) || product.variants.length === 0) return;
@@ -686,6 +686,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         needs_price_review: !existing || variantSale <= 0 || (variantCost > 0 && baseCost > 0 && variantCost > baseCost),
         price_source: variantCost > 0 ? 'lista_diaria' : 'lista_diaria_sem_custo',
         in_stock: variant.available !== false,
+        supplier_id: supplierId || existing?.supplier_id || null,
         sort_order: sortOrder,
       };
       const result = existing
@@ -752,6 +753,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         if (existing) {
           const updateData: any = {
             updated_at: new Date().toISOString(),
+            // O modelo voltou a aparecer na lista atual: reativa o card na vitrine.
+            in_stock: true,
+            supplier_id: currentSupplierId || existing.supplier_id || null,
           };
 
           if (importedCost > 0 && importedCost !== Number(existing.original_price || 0)) {
@@ -768,7 +772,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           // transformar custo do fornecedor em preço de venda automaticamente.
           const { error: updateError } = await supabase.from('products').update(updateData).eq('id', existing.id);
           if (updateError) throw updateError;
-          await saveImportedVariants(existing.id, p, importedSale || Number(existing.price) || price, Number(updateData.original_price || existing.original_price) || importedCost, isCost, shipping, margin);
+          await saveImportedVariants(existing.id, p, importedSale || Number(existing.price) || price, Number(updateData.original_price || existing.original_price) || importedCost, isCost, shipping, margin, currentSupplierId);
           insertedIds.push(existing.id);
         } else {
           // A lista diária é uma fonte de atualização de custo, nunca de criação automática.
@@ -783,6 +787,25 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         console.error('Failed to process', p.name, err);
       }
       setImportProgress(i + 1);
+    }
+
+    // A lista diária é a fonte de verdade da disponibilidade do fornecedor.
+    // Modelos cadastrados para este fornecedor que não apareceram nesta lista
+    // ficam ocultos, mas continuam salvos para serem reativados quando voltarem.
+    if (currentSupplierId) {
+      const importedModelKeys = new Set(uniqueParsed.map(item => normalizeProductName(item.name)));
+      const supplierProducts = products.filter(product =>
+        product.tenant_id === tenantId && product.supplier_id === currentSupplierId
+      );
+      for (const product of supplierProducts) {
+        if (!importedModelKeys.has(normalizeProductName(product.name))) {
+          const { error } = await supabase
+            .from('products')
+            .update({ in_stock: false, updated_at: new Date().toISOString() })
+            .eq('id', product.id);
+          if (error) throw error;
+        }
+      }
     }
 
     await queryClient.invalidateQueries({ queryKey: ['product-variants'] });
