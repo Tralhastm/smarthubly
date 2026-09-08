@@ -1081,6 +1081,20 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           title="Importe catálogos em TXT, PDF ou Imagem. A IA extrairá os produtos e preços automaticamente.">
           <FileText className="h-4 w-4" /> Importar Catálogo (IA)
         </button>
+        <button onClick={() => {
+          setImportRawText('');
+          setImportFileName('Lista colada');
+          setImportSupplierName('');
+          setImportPriceType('cost');
+          setImportSupplierId(null);
+          setImportCancelled(false);
+          (window as any)._importFile = null;
+          setImportStep('config');
+        }} disabled={importStep !== 'idle'}
+          className="flex items-center gap-2 rounded-lg bg-primary/15 text-primary px-4 py-2 text-sm font-medium hover:bg-primary/25 disabled:opacity-50"
+          title="Cole a lista diretamente, sem criar ou enviar um arquivo.">
+          <Clipboard className="h-4 w-4" /> Colar lista
+        </button>
         <button onClick={() => setShowBulkDescriptions(true)} disabled={!products.length || bulkDescriptionRunning}
           className="flex items-center gap-2 rounded-lg bg-primary/15 text-primary px-4 py-2 text-sm font-medium hover:bg-primary/25 disabled:opacity-50"
           title="Pesquisa especificações na internet e gera descrições comerciais para vários produtos">
@@ -1301,6 +1315,20 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               <FileText className="h-4 w-4 text-primary" /> Configurar importação{importFileName ? ` — ${importFileName}` : ''}
             </h3>
             <p className="text-xs text-muted-foreground">Escolha o fornecedor e o que a lista deve atualizar. O Seletor por cor altera somente as cores/variantes; custos e preços dos dispositivos permanecem intactos.</p>
+            {!(window as any)._importFile && (
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Cole a lista do fornecedor aqui</label>
+                <textarea
+                  value={importRawText}
+                  onChange={e => setImportRawText(e.target.value)}
+                  rows={8}
+                  autoFocus
+                  placeholder="Copie a lista do WhatsApp e cole aqui..."
+                  className="w-full resize-y rounded-md border border-primary/30 bg-background px-3 py-2 text-xs leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <p className="mt-1 text-[11px] text-muted-foreground">Não precisa criar arquivo: cole diretamente e clique em “Analisar com IA”.</p>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-medium text-foreground mb-1">Nome do fornecedor</label>
               <input
@@ -1363,7 +1391,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               </div>
             )}
             <div className="flex gap-2">
-              <button onClick={handleStartParsing} className="flex-1 items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm font-medium">
+              <button onClick={handleStartParsing} disabled={!(window as any)._importFile && !importRawText.trim()} className="flex-1 items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm font-medium disabled:opacity-50">
                 <Sparkles className="h-4 w-4" /> Analisar com IA
               </button>
               <button onClick={() => { setImportStep('idle'); setImportRawText(''); setImportFileName(''); setImportSupplierName(''); }} className="flex-1 items-center gap-1 rounded-lg bg-secondary text-muted-foreground px-4 py-2 text-sm">
