@@ -1184,33 +1184,36 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                         O preço exibido é o valor à vista/Pix. Para cartão, use o botão abaixo: no checkout seguro você escolhe em quantas vezes deseja pagar e vê o valor total, os juros e o valor de cada parcela antes de confirmar.
                       </div>
                     )}
-                    <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2 mb-2 text-[11px] text-yellow-700 dark:text-yellow-400">
-                      ⚠️ Se preferir pagar <strong>{deliveryType === 'pickup' ? 'no balcão ao retirar' : 'na hora da entrega'}</strong>, escolha a forma abaixo:
-                    </div>
-                    <label className="text-xs font-medium text-muted-foreground">
-                      {deliveryType === 'pickup' ? 'Forma na retirada/balcão' : 'Forma na entrega'}
-                    </label>
-                    <div className="grid grid-cols-2 gap-2 mt-1">
-                      {[
-                        { value: 'pix', label: 'Pix (manual)' },
-                        { value: 'dinheiro', label: 'Dinheiro' },
-                        { value: 'débito', label: 'Débito' },
-                        { value: 'crédito', label: 'Crédito' },
-                      ].map(m => (
-                        <button key={m.value} onClick={() => setPaymentMethod(m.value)}
-                          className={`py-2 rounded-lg text-sm font-medium transition-all ${paymentMethod === m.value ? 'gradient-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
-                          <CreditCard className="h-3 w-3 inline mr-1" />{m.label}
-                        </button>
-                      ))}
-                    </div>
-                    {paymentMethod === 'pix' && waNumber ? (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        💚 Pix manual (chave da loja). Após pagar, envie o comprovante pelo WhatsApp da loja para confirmarmos. Para Pix com aprovação automática ou cartão, use <strong>Pagar agora</strong>.
-                      </p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Você paga ao {deliveryType === 'pickup' ? 'retirar' : 'receber'} o pedido.
-                      </p>
+                    {!hasOnlinePayment && <>
+                      <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2 mb-2 text-[11px] text-yellow-700 dark:text-yellow-400">
+                        ⚠️ Se preferir pagar <strong>{deliveryType === 'pickup' ? 'no balcão ao retirar' : 'na hora da entrega'}</strong>, escolha a forma abaixo:
+                      </div>
+                      <label className="text-xs font-medium text-muted-foreground">
+                        {deliveryType === 'pickup' ? 'Forma na retirada/balcão' : 'Forma na entrega'}
+                      </label>
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        {[
+                          { value: 'pix', label: 'Pix (manual)' },
+                          { value: 'dinheiro', label: 'Dinheiro' },
+                          { value: 'débito', label: 'Débito' },
+                          { value: 'crédito', label: 'Crédito' },
+                        ].map(m => (
+                          <button key={m.value} onClick={() => setPaymentMethod(m.value)}
+                            className={`py-2 rounded-lg text-sm font-medium transition-all ${paymentMethod === m.value ? 'gradient-primary text-primary-foreground' : 'bg-secondary text-muted-foreground'}`}>
+                            <CreditCard className="h-3 w-3 inline mr-1" />{m.label}
+                          </button>
+                        ))}
+                      </div>
+                      {paymentMethod === 'pix' && waNumber ? (
+                        <p className="text-xs text-muted-foreground mt-1">💚 Pix manual (chave da loja). Após pagar, envie o comprovante pelo WhatsApp da loja para confirmarmos.</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-1">Você paga ao {deliveryType === 'pickup' ? 'retirar' : 'receber'} o pedido.</p>
+                      )}
+                    </>}
+                    {hasOnlinePayment && (
+                      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm text-foreground">
+                        Pagamento selecionado: <strong>{onlinePaymentMethod === 'pix' ? 'Pix' : onlinePaymentMethod === 'credit' ? 'Crédito' : 'Débito'}</strong> — <strong>R${onlineTotal.toFixed(2)}</strong>
+                      </div>
                     )}
 
                     {paymentMethod === 'dinheiro' && (
@@ -1249,17 +1252,6 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     )}
                     {couponMsg && !appliedCoupon && <p className="text-xs text-destructive">{couponMsg}</p>}
                   </div>
-
-                  {hasOnlinePayment && (
-                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
-                      <p className="text-sm font-semibold text-foreground">Como você quer pagar?</p>
-                      <div className="grid grid-cols-3 gap-2">
-                        <button type="button" onClick={() => setOnlinePaymentMethod('pix')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'pix' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Pix</strong><span>R${pixOnlineTotal.toFixed(2)}</span></button>
-                        <button type="button" onClick={() => setOnlinePaymentMethod('credit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'credit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Crédito</strong><span>R${cardOnlineTotal.toFixed(2)}</span></button>
-                        <button type="button" onClick={() => setOnlinePaymentMethod('debit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'debit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Débito</strong><span>R${cardOnlineTotal.toFixed(2)}</span></button>
-                      </div>
-                    </div>
-                  )}
 
                   <div className="border-t border-border pt-3 space-y-1">
                     <div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal:</span><span>R${total.toFixed(2)}</span></div>
