@@ -94,8 +94,6 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
               <div className="space-y-1.5">
                 {variants.map(v => {
                   const variantPrice = Number(v.suggested_price ?? (product.price + Number(v.price_delta || 0)));
-                  const basePrice = Number(product.price) || 0;
-                  const displayDelta = basePrice > 0 ? variantPrice - basePrice : 0;
                   const profitable = hasPositiveFinalProfit(variantPrice, v.cost_price ?? (product as any).original_price);
                   const available = Boolean(v.in_stock) && ((v as any).allow_loss || (product as any).allow_loss || profitable);
                   return (
@@ -122,7 +120,6 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
                     </span>
                     <span className="text-xs font-medium text-primary">
                       R${displayPrice(variantPrice).toFixed(2)}
-                      {displayDelta !== 0 && <span className="ml-1 opacity-80">({displayDelta > 0 ? '+' : ''}R${displayDelta.toFixed(2)} na cor)</span>}
                     </span>
                   </button>
                   );
