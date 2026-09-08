@@ -62,6 +62,22 @@ const normalizeProductName = (value: unknown) => String(value ?? '')
   .replace(/\s+/g, ' ')
   .trim();
 
+const productCapacities = (value: unknown) =>
+  [...normalizeProductName(value).matchAll(/\b(\d+)\s*(gb|tb)\b/g)].map(match => `${match[1]}${match[2]}`);
+
+const sameProductModel = (left: unknown, right: unknown) => {
+  const a = normalizeProductName(left);
+  const b = normalizeProductName(right);
+  if (a === b) return true;
+  const aCapacities = productCapacities(left);
+  const bCapacities = productCapacities(right);
+  // Se os dois lados informam capacidade, ela precisa ser igual para não
+  // confundir, por exemplo, um Pro Max 256GB com um Pro Max 512GB.
+  if (aCapacities.length && bCapacities.length && aCapacities.join('|') !== bCapacities.join('|')) return false;
+  const withoutCapacity = (value: string) => value.replace(/\b\d+\s*(?:gb|tb)\b/g, '').replace(/\s+/g, ' ').trim();
+  return withoutCapacity(a) === withoutCapacity(b);
+};
+
 const DEFAULT_BULK_DESCRIPTION_RULES = `Siga obrigatoriamente este formato editorial, sem alterar a ordem e sem usar marcadores, bullets ou títulos técnicos:
 
 1. Escreva um primeiro parágrafo comercial, com 2 a 3 frases, apresentando o produto e seu principal benefício.
@@ -747,7 +763,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         // (ex.: `19. Mi 17T... |`). Compare os nomes normalizados localmente
         // para não criar um produto novo quando o modelo já existe no catálogo.
         const existing = products.find((candidate) =>
-          candidate.tenant_id === tenantId && normalizeProductName(candidate.name) === normalizeProductName(p.name)
+          candidate.tenant_id === tenantId && sameProductModel(candidate.name, p.name)
         ) || null;
 
         if (existing) {
@@ -793,12 +809,11 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     // Modelos cadastrados para este fornecedor que não apareceram nesta lista
     // ficam ocultos, mas continuam salvos para serem reativados quando voltarem.
     if (currentSupplierId) {
-      const importedModelKeys = new Set(uniqueParsed.map(item => normalizeProductName(item.name)));
       const supplierProducts = products.filter(product =>
         product.tenant_id === tenantId && product.supplier_id === currentSupplierId
       );
       for (const product of supplierProducts) {
-        if (!importedModelKeys.has(normalizeProductName(product.name))) {
+        if (!uniqueParsed.some(item => sameProductModel(product.name, item.name))) {
           const { error } = await supabase
             .from('products')
             .update({ in_stock: false, updated_at: new Date().toISOString() })
