@@ -89,19 +89,30 @@ function parseCatalog(text: string): Product[] {
   const grouped = new Map<string, Product>();
   let section = "Geral";
   let condition: ProductCondition = "new";
+  let skipGradeASection = false;
   for (const raw of String(text || "").split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
     const header = line.replace(/^[-=*#\s]+|[-=*#\s]+$/g, "").trim();
     const normalizedHeader = normalize(header);
+    if (skipGradeASection) {
+      // A seção Grade A fica fora da importação. Se houver uma nova seção
+      // explícita depois dela, retomamos o processamento nessa nova seção.
+      if (!/R\$\s*[\d.,]+/i.test(line) && /^[A-ZÀ-Ý0-9 /&+.'-]{3,60}$/u.test(header)) {
+        skipGradeASection = false;
+        condition = "new";
+        section = header;
+      } else {
+        continue;
+      }
+    }
     if (/tabela\s+apple\s+novos|produtos\s+apple\s+novos|atacado\s+sem\s+garantia/.test(normalizedHeader)) {
       condition = "new";
       section = "Geral";
       continue;
     }
-    if (/grade\s*a/.test(normalizedHeader)) {
-      condition = "grade_a";
-      section = "Grade A";
+    if (/\bgrade\s+a\b/.test(normalizedHeader) && /\bpremium\b/.test(normalizedHeader)) {
+      skipGradeASection = true;
       continue;
     }
     if (!/R\$\s*[\d.,]+/i.test(line) && /^[A-ZÀ-Ý0-9 /&+.'-]{3,60}$/u.test(header)) {
