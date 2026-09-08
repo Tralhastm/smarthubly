@@ -40,7 +40,7 @@ const parseBrazilianMoney = (value: unknown) => {
 };
 
 type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
-type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; variants?: ParsedVariant[]; needs_price_review?: boolean };
+type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; condition?: 'new' | 'grade_a'; variants?: ParsedVariant[]; needs_price_review?: boolean };
 
 const getImportedPrices = (product: ParsedProduct, priceType: string) => {
   const legacyPrice = Number(product.price || 0) || 0;
@@ -540,7 +540,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
+    const file = files[0];
     if (!file) return;
     
     const isText = file.type === 'text/plain' || file.name.endsWith('.txt');
@@ -552,14 +553,14 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       return;
     }
 
-    setImportFileName(file.name);
+    setImportFileName(files.length > 1 ? files.map(item => item.name).join(' + ') : file.name);
     setImportSupplierName('');
     setImportPriceType('cost');
     setImportSupplierId(null);
     setImportCancelled(false);
     
-    if (isText) {
-      const text = await file.text();
+    if (isText && files.every(item => item.type === 'text/plain' || item.name.endsWith('.txt'))) {
+      const text = (await Promise.all(files.map(item => item.text()))).join('\n\n');
       if (!text.trim()) { toast.error('Arquivo vazio'); return; }
       setImportRawText(text);
       (window as any)._importFile = null;
@@ -763,12 +764,14 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         // (ex.: `19. Mi 17T... |`). Compare os nomes normalizados localmente
         // para não criar um produto novo quando o modelo já existe no catálogo.
         const existing = products.find((candidate) =>
-          candidate.tenant_id === tenantId && sameProductModel(candidate.name, p.name)
+          candidate.tenant_id === tenantId && sameProductModel(candidate.name, p.name) &&
+          String((candidate as any).condition || 'new') === String(p.condition || 'new')
         ) || null;
 
         if (existing) {
           const updateData: any = {
             updated_at: new Date().toISOString(),
+            condition: p.condition || 'new',
             // O modelo voltou a aparecer na lista atual: reativa o card na vitrine.
             in_stock: true,
             supplier_id: currentSupplierId || existing.supplier_id || null,
@@ -813,7 +816,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         product.tenant_id === tenantId && product.supplier_id === currentSupplierId
       );
       for (const product of supplierProducts) {
-        if (!uniqueParsed.some(item => sameProductModel(product.name, item.name))) {
+        if (!uniqueParsed.some(item => sameProductModel(product.name, item.name) &&
+          String((product as any).condition || 'new') === String(item.condition || 'new'))) {
           const { error } = await supabase
             .from('products')
             .update({ in_stock: false, updated_at: new Date().toISOString() })
@@ -1143,7 +1147,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             Apagar todos os produtos ({products.length})
           </button>
         )}
-        <input ref={fileInputRef} type="file" accept=".txt,.pdf,.png,.jpg,.jpeg" className="hidden" onChange={handleFileSelect} />
+        <input ref={fileInputRef} type="file" multiple accept=".txt,.pdf,.png,.jpg,.jpeg" className="hidden" onChange={handleFileSelect} />
       </div>
 
       {showBulkDescriptions && (

@@ -12,6 +12,8 @@ type Variant = {
   available: boolean;
 };
 
+type ProductCondition = "new" | "grade_a";
+
 type Product = {
   name: string;
   price: number;
@@ -19,6 +21,7 @@ type Product = {
   resale_price: number;
   category: string;
   description: string;
+  condition: ProductCondition;
   variants: Variant[];
 };
 
@@ -26,13 +29,16 @@ const COLOR_WORDS = new Set([
   "azul", "amarelo", "branco", "branca", "camuflada", "cinza", "dourado", "dourada",
   "gold", "laranja", "marrom", "prata", "preto", "preta", "roxo", "rosa", "verde",
   "titanium", "storm titanium", "ironman", "iron man", "black", "white", "blue", "pink",
-  "purple", "orange", "sage", "green", "yellow", "silver", "golden",
+  "purple", "orange", "sage", "green", "yellow", "silver", "golden", "starlight", "midnight",
+  "space gray", "sky blue", "citrus", "indigo",
 ]);
 
 const COLOR_ALIASES: Record<string, string> = {
   blue: "Azul", pink: "Rosa", black: "Preto", white: "Branco", purple: "Roxo",
   orange: "Laranja", sage: "Sálvia", green: "Verde", yellow: "Amarelo",
-  silver: "Prata", golden: "Dourado", gold: "Dourado",
+  silver: "Prata", golden: "Dourado", gold: "Dourado", starlight: "Starlight",
+  midnight: "Midnight", "space gray": "Space Gray", "sky blue": "Azul",
+  citrus: "Cítrus", indigo: "Índigo",
 };
 
 function parseMoney(raw: string): number {
@@ -82,10 +88,22 @@ function extractColors(raw: string): string[] {
 function parseCatalog(text: string): Product[] {
   const grouped = new Map<string, Product>();
   let section = "Geral";
+  let condition: ProductCondition = "new";
   for (const raw of String(text || "").split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
     const header = line.replace(/^[-=*#\s]+|[-=*#\s]+$/g, "").trim();
+    const normalizedHeader = normalize(header);
+    if (/tabela\s+apple\s+novos|produtos\s+apple\s+novos|atacado\s+sem\s+garantia/.test(normalizedHeader)) {
+      condition = "new";
+      section = "Geral";
+      continue;
+    }
+    if (/grade\s*a/.test(normalizedHeader)) {
+      condition = "grade_a";
+      section = "Grade A";
+      continue;
+    }
     if (!/R\$\s*[\d.,]+/i.test(line) && /^[A-ZÀ-Ý0-9 /&+.'-]{3,60}$/u.test(header)) {
       section = header;
       continue;
@@ -98,10 +116,11 @@ function parseCatalog(text: string): Product[] {
     const afterPrice = line.slice((priceMatch.index || 0) + priceMatch[0].length).trim();
     const name = cleanName(beforePrice);
     if (!name) continue;
-    const key = normalize(name);
+    if (/grade\s*a|tabela\s+apple|lançamentos?|linha\s+(note|poco|mi)/i.test(name)) continue;
+    const key = `${normalize(name)}|${condition}`;
     let product = grouped.get(key);
     if (!product) {
-      product = { name, price, cost_price: price, resale_price: 0, category: category(name, section), description: "", variants: [] };
+      product = { name, price, cost_price: price, resale_price: 0, category: category(name, section), description: "", condition, variants: [] };
       grouped.set(key, product);
     }
     const colors = extractColors(afterPrice);
