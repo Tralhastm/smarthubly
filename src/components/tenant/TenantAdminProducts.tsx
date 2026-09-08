@@ -700,7 +700,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         price_delta: variantSale > 0 ? variantSale - baseSalePrice : 0,
         cost_price: variantCost > 0 ? variantCost : null,
         suggested_price: variantSale > 0 ? variantSale : null,
-        needs_price_review: !existing || variantSale <= 0 || (variantCost > 0 && baseCost > 0 && variantCost > baseCost),
+        // O custo pode variar por cor/capacidade. Isso não significa que a
+        // revenda esteja pendente: só sinalizar quando não houver preço de
+        // revenda definido para a variante.
+        needs_price_review: variantSale <= 0,
         price_source: variantCost > 0 ? 'lista_diaria' : 'lista_diaria_sem_custo',
         in_stock: variant.available !== false,
         supplier_id: supplierId || existing?.supplier_id || null,
