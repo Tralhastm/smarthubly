@@ -68,7 +68,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   // Pagamento online (MercadoPago ou PagBank) — flag derivada da view pública (não expõe o token).
   const isInfinitePay = (tenant as any)?.payment_provider === 'infinitepay' && (tenant as any)?.infinitepay_enabled !== false;
   const isAsaasActive = (tenant as any)?.payment_provider === 'asaas' && (tenant as any)?.asaas_enabled === true;
-  const hasOnlinePayment = !isWhatsAppMode && !!((tenant as any).has_online_payment === true || (tenant as any).mercadopago_enabled === true || !!(tenant as any).mercadopago_token || !!(tenant as any).pagbank_token || ((tenant as any).infinitepay_handle && (tenant as any).infinitepay_enabled));
+  const hasOnlinePayment = !isWhatsAppMode && !!((tenant as any).has_online_payment === true || (tenant as any).payment_provider === 'mercadopago' || (tenant as any).mercadopago_enabled === true || !!(tenant as any).mercadopago_token || !!(tenant as any).pagbank_token || ((tenant as any).infinitepay_handle && (tenant as any).infinitepay_enabled));
 
   
   const [name, setName] = useState(() => {
