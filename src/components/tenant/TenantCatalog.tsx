@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getItemCTA } from '@/lib/niche-labels';
 import { normalizeProductDescription } from '@/lib/product-description';
 import { ExpandableProductDescription } from './ExpandableProductDescription';
-import { calculateFinalProfit } from '@/lib/pricing';
+import { calculateFinalProfit, grossUpPaymentFee } from '@/lib/pricing';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
 
@@ -33,7 +33,7 @@ const formatDescriptionForDisplay = (value: unknown) => {
 // ============================================================
 // GRID — card grande com imagem grande (padrão atual)
 // ============================================================
-const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, hasExtras, displayPrice, displayFrom, onOpenPicker, onOpenDetails }: any) => {
+const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, hasExtras, displayPrice, displayFrom, pricePrefix, onOpenPicker, onOpenDetails }: any) => {
   const isService = (product as any).item_type === 'service';
   const cta = getItemCTA(product as any, niche);
   const Icon = isService ? Calendar : ShoppingCart;
@@ -61,7 +61,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
         <div className="mt-auto flex items-center justify-between gap-3 pt-4">
           <div className="min-w-0">
-            <span className="block text-xl font-bold text-primary">{displayFrom && <span className="mr-1 text-xs font-medium">A partir de</span>}R${displayPrice.toFixed(2)}</span>
+            <span className="block text-xl font-bold text-primary"><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>R${displayPrice.toFixed(2)}</span>
             {(product as any).stock_quantity != null && (product as any).stock_quantity <= 5 && product.in_stock && (
               <span className="mt-0.5 block text-xs text-yellow-400">Restam {(product as any).stock_quantity}</span>
             )}
@@ -88,7 +88,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
 // ============================================================
 // LIST — linha horizontal (estilo iFood/Anota AI), foto à esquerda
 // ============================================================
-const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtras, displayPrice, displayFrom, onOpenPicker, onOpenDetails }: any) => {
+const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtras, displayPrice, displayFrom, pricePrefix, onOpenPicker, onOpenDetails }: any) => {
   const cta = getItemCTA(product as any, niche);
   const desc = formatDescriptionForDisplay(product.description);
   return (
@@ -112,7 +112,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
         </div>
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-end justify-between mt-auto gap-3 pt-2">
-          <span className="text-lg font-bold text-primary whitespace-nowrap">{displayFrom && <span className="mr-1 text-xs font-medium">A partir de</span>}R${displayPrice.toFixed(2)}</span>
+          <span className="text-lg font-bold text-primary whitespace-nowrap"><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>R${displayPrice.toFixed(2)}</span>
           <div className="flex items-center gap-1.5">
             {isDropshipping && product.supplier_id && (
               <SupplierChatCustomer tenantId={tenantId} productId={product.id} supplierId={product.supplier_id} productName={product.name} />
@@ -135,7 +135,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
 // ============================================================
 // COMPACT — sem foto grande, foco no nome+preço (estilo cardápio impresso)
 // ============================================================
-const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, displayFrom, onOpenPicker, onOpenDetails }: any) => {
+const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, displayFrom, pricePrefix, onOpenPicker, onOpenDetails }: any) => {
   const cta = getItemCTA(product as any, niche);
   const desc = formatDescriptionForDisplay(product.description);
   return (
@@ -144,7 +144,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, displa
         <div className="flex items-baseline justify-between gap-2 mb-0.5">
           <h3 className="font-heading text-base text-foreground">{product.name}{onOpenDetails && <span className="ml-1 text-primary/60">›</span>}</h3>
           <div className="flex-1 border-b border-dashed border-border/60 self-end mb-1.5" />
-          <span className="text-base font-bold text-primary shrink-0">{displayFrom && <span className="mr-1 text-xs font-medium">A partir de</span>}R${displayPrice.toFixed(2)}</span>
+          <span className="text-base font-bold text-primary shrink-0"><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>R${displayPrice.toFixed(2)}</span>
         </div>
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-center gap-2 mt-1.5">
@@ -165,7 +165,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, displa
 // ============================================================
 // MAGAZINE — bento grid: 1 destaque grande + cards menores
 // ============================================================
-const MagazineCard = ({ product, addToCart, niche, hasExtras, displayPrice, displayFrom, onOpenPicker, onOpenDetails, large }: any) => {
+const MagazineCard = ({ product, addToCart, niche, hasExtras, displayPrice, displayFrom, pricePrefix, onOpenPicker, onOpenDetails, large }: any) => {
   const cta = getItemCTA(product as any, niche);
   return (
     <div className={`group relative overflow-hidden rounded-xl border border-border bg-card hover:border-primary/40 transition-all animate-fade-in ${large ? 'md:col-span-2 md:row-span-2' : ''}`}>
@@ -182,7 +182,7 @@ const MagazineCard = ({ product, addToCart, niche, hasExtras, displayPrice, disp
         <span className="text-[10px] font-medium text-white/70 uppercase tracking-wider">{product.category}</span>
         <h3 className={`font-heading text-white ${large ? 'text-xl' : 'text-base'} leading-tight`}>{product.name}</h3>
         <div className="flex items-center justify-between mt-2">
-          <span className={`font-bold text-white ${large ? 'text-2xl' : 'text-lg'}`}>{displayFrom && <span className="mr-1 text-xs font-medium">A partir de</span>}R${displayPrice.toFixed(2)}</span>
+          <span className={`font-bold text-white ${large ? 'text-2xl' : 'text-lg'}`}><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>R${displayPrice.toFixed(2)}</span>
           <button onClick={(e) => {
               e.stopPropagation();
               if (!product.in_stock) return;
@@ -207,7 +207,7 @@ const SkeletonCard = () => (
   </div>
 );
 
-const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid', splashEnabled = true }: { tenantId: string; isDropshipping?: boolean; niche?: string | null; layout?: CatalogLayout; splashEnabled?: boolean }) => {
+const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid', splashEnabled = true, showPixPrice = false }: { tenantId: string; isDropshipping?: boolean; niche?: string | null; layout?: CatalogLayout; splashEnabled?: boolean; showPixPrice?: boolean }) => {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteProducts(tenantId);
   const { addToCart } = useCart();
   const [search, setSearch] = useState('');
@@ -275,13 +275,14 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     const prices = variants
       .map(variant => {
         const raw = Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0)));
-        return raw;
+        return showPixPrice ? grossUpPaymentFee(raw, 0.99) : raw;
       })
       .filter(price => Number.isFinite(price) && price > 0);
     const uniquePrices = Array.from(new Set(prices.map(price => Math.round(price * 100))));
     return {
-      displayPrice: prices.length > 0 ? Math.min(...prices) : Number(product.price) || 0,
+      displayPrice: prices.length > 0 ? Math.min(...prices) : (showPixPrice ? grossUpPaymentFee(Number(product.price) || 0, 0.99) : Number(product.price) || 0),
       displayFrom: uniquePrices.length > 1,
+      pricePrefix: showPixPrice ? 'No Pix, a partir de' : undefined,
     };
   };
   const getDisplayPrice = (product: Product) => getDisplayPriceInfo(product).displayPrice;
