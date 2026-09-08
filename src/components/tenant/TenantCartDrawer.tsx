@@ -282,10 +282,10 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     return () => { cancelled = true; };
   }, [items]);
 
-  const getProductOrigin = (product: any): string => {
+  const getProductOrigin = (product: any, variantSupplierId?: string | null): string => {
     // Prioridade: override explícito > endereço do fornecedor > origem da loja > endereço da loja
     if (product.shipping_origin_override) return product.shipping_origin_override;
-    const supplierId = product.supplier_id || resolvedSupplierIds[productMatchKey(product.name)];
+    const supplierId = variantSupplierId || product.supplier_id || resolvedSupplierIds[productMatchKey(product.name)];
     if (supplierId && supplierShippings[supplierId]?.address) {
       return supplierShippings[supplierId].address;
     }
@@ -512,7 +512,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
               ? await (supabase as any).from('products').select('supplier_id').eq('id', productId).maybeSingle()
               : { data: null };
             const supplierId = supplierProduct
-              ? ((currentProduct as any)?.supplier_id || (supplierProduct.product as any).supplier_id || resolvedSupplierIds[productMatchKey(supplierProduct.product.name)] || fallbackSupplierId)
+              ? (supplierProduct.variantSupplierId || (currentProduct as any)?.supplier_id || (supplierProduct.product as any).supplier_id || resolvedSupplierIds[productMatchKey(supplierProduct.product.name)] || fallbackSupplierId)
               : fallbackSupplierId;
             let supplierConfig = supplierId ? supplierShippings[supplierId] : null;
             if (!supplierConfig && fallbackSupplierConfig && supplierId === fallbackSupplierId) {
@@ -567,7 +567,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         const supplierIds = Array.from(new Set(
           items
             .filter(i => productNeedsShipping(i.product))
-            .map(i => (i.product as any).supplier_id || resolvedSupplierIds[productMatchKey(i.product.name)])
+            .map(i => i.variantSupplierId || (i.product as any).supplier_id || resolvedSupplierIds[productMatchKey(i.product.name)])
             .filter(Boolean)
         ));
         const { data, error } = await unifiedInvoke("delivery-unified", "quote", { tenantId: tenant.id, customerAddress: calculatedAddress, supplierIds });
@@ -655,7 +655,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       }
       // Valida raio de cada fornecedor envolvido
       for (const it of items) {
-        const supId = (it.product as any).supplier_id || resolvedSupplierIds[productMatchKey(it.product.name)];
+        const supId = it.variantSupplierId || (it.product as any).supplier_id || resolvedSupplierIds[productMatchKey(it.product.name)];
         if (!supId) continue;
         const sup = supplierShippings[supId];
         if (!sup) continue;
