@@ -127,10 +127,14 @@ async function createMercadoPago(supabase: any, tenant: any, order: any, items: 
   const token = clean(environment === "production" ? (tenant.mercadopago_production_token || tenant.mercadopago_token) : (tenant.mercadopago_sandbox_token || tenant.mercadopago_token), 500);
   if (tenant.mercadopago_enabled === false || !token) return reply({ provider: "mercadopago", code: "PROVIDER_NOT_CONFIGURED", error: "Mercado Pago está desativado ou sem token configurado." }, 400);
   const storeUrl = `${origin}/loja/${clean(tenant.slug)}`;
+  const selectedMethod = order.metadata?.online_payment_method === 'pix' ? 'pix' : 'card';
   const body = {
     items: reconcileItems(items, order), external_reference: orderId,
     notification_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/mercadopago-webhook`,
-    payment_methods: { installments: 12 }, statement_descriptor: clean(tenant.name || "Loja", 22),
+    payment_methods: selectedMethod === 'pix'
+      ? { excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }], installments: 1 }
+      : { excluded_payment_types: [{ id: 'bank_transfer' }, { id: 'ticket' }], installments: 18 },
+    statement_descriptor: clean(tenant.name || "Loja", 22),
     auto_return: "approved", back_urls: { success: `${storeUrl}/pedido/${orderId}`, failure: storeUrl, pending: `${storeUrl}/pedido/${orderId}` },
   };
   const result = await fetchJson("https://api.mercadopago.com/checkout/preferences", { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body) });

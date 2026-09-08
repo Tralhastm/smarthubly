@@ -3,7 +3,7 @@ import { useProductVariants, useProductAddons, type ProductVariant, type Product
 import { useCart, type CartAddon } from '@/contexts/CartContext';
 import type { Tables } from '@/integrations/supabase/types';
 import { X, Plus, Minus, Check } from 'lucide-react';
-import { hasPositiveFinalProfit, grossUpPaymentFee } from '@/lib/pricing';
+import { hasPositiveFinalProfit } from '@/lib/pricing';
 
 type Product = Tables<'products'>;
 
@@ -20,11 +20,6 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [addonQty, setAddonQty] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
-  const protectedVariantPrice = (variant: ProductVariant) => {
-    const raw = Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0)));
-    const fee = Number((product as any)._online_fee_percent) || 0;
-    return (product as any)._online_price_protected ? grossUpPaymentFee(raw, fee) : raw;
-  };
 
   // Auto-seleciona primeira variante disponível
   useEffect(() => {
@@ -51,7 +46,9 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
 
   // suggested_price é o preço final absoluto da cor; só usamos a diferença
   // em relação ao preço base porque o carrinho soma esse campo ao produto.
-  const selectedVariantPrice = selectedVariant ? protectedVariantPrice(selectedVariant) : Number(product.price);
+  const selectedVariantPrice = selectedVariant
+    ? Number(selectedVariant.suggested_price ?? (product.price + Number(selectedVariant.price_delta || 0)))
+    : Number(product.price);
   const variantDelta = selectedVariant ? selectedVariantPrice - Number(product.price) : 0;
   const addonsTotal = cartAddons.reduce((s, a) => s + a.price * a.quantity, 0);
   const unitTotal = selectedVariantPrice + addonsTotal;
@@ -94,7 +91,7 @@ const ProductOptionsPicker = ({ product, onClose }: Props) => {
               <h4 className="text-sm font-medium text-foreground mb-2">Cores disponíveis e preços</h4>
               <div className="space-y-1.5">
                 {variants.map(v => {
-                  const variantPrice = protectedVariantPrice(v);
+                  const variantPrice = Number(v.suggested_price ?? (product.price + Number(v.price_delta || 0)));
                   const basePrice = Number(product.price) || 0;
                   const displayDelta = basePrice > 0 ? variantPrice - basePrice : 0;
                   const profitable = hasPositiveFinalProfit(variantPrice, v.cost_price ?? (product as any).original_price);

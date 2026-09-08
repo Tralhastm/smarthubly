@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getItemCTA } from '@/lib/niche-labels';
 import { normalizeProductDescription } from '@/lib/product-description';
 import { ExpandableProductDescription } from './ExpandableProductDescription';
-import { calculateFinalProfit, grossUpPaymentFee } from '@/lib/pricing';
+import { calculateFinalProfit } from '@/lib/pricing';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
 
@@ -207,7 +207,7 @@ const SkeletonCard = () => (
   </div>
 );
 
-const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid', splashEnabled = true, paymentFeePassThroughEnabled = false, paymentFeePassThroughPercent = 4.98 }: { tenantId: string; isDropshipping?: boolean; niche?: string | null; layout?: CatalogLayout; splashEnabled?: boolean; paymentFeePassThroughEnabled?: boolean; paymentFeePassThroughPercent?: number }) => {
+const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid', splashEnabled = true }: { tenantId: string; isDropshipping?: boolean; niche?: string | null; layout?: CatalogLayout; splashEnabled?: boolean }) => {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteProducts(tenantId);
   const { addToCart } = useCart();
   const [search, setSearch] = useState('');
@@ -243,7 +243,6 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
   const [extrasIds, setExtrasIds] = useState<Set<string>>(new Set());
   const [variantMap, setVariantMap] = useState<Map<string, ProductVariant[]>>(new Map());
-  const paymentFeeConfig = { enabled: paymentFeePassThroughEnabled, percent: paymentFeePassThroughPercent || 4.98 };
     const [detail, setDetail] = useState<Product | null>(null);
   const allProducts = useMemo(() => data?.pages.flatMap(p => p.data) ?? [], [data]);
   // O bloqueio é calculado no cliente com a mesma regra do Financeiro:
@@ -269,15 +268,14 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     const pricing = calculateFinalProfit(referencePrice, referenceCost);
     if (pricing.isLoss && !(product as any).allow_loss) return { ...product, in_stock: false, pricing_blocked: true };
     if ((product as any).manual_blocked) return { ...product, in_stock: false };
-    if (!paymentFeeConfig.enabled) return product;
-    return { ...product, price: grossUpPaymentFee(product.price, paymentFeeConfig.percent), _online_price_protected: true, _online_fee_percent: paymentFeeConfig.percent } as any;
-  }), [allProducts, variantMap, paymentFeeConfig]);
+    return product;
+  }), [allProducts, variantMap]);
   const getDisplayPriceInfo = (product: Product) => {
     const variants = variantMap.get(product.id) || [];
     const prices = variants
       .map(variant => {
         const raw = Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0)));
-        return (product as any)._online_price_protected ? grossUpPaymentFee(raw, (product as any)._online_fee_percent) : raw;
+        return raw;
       })
       .filter(price => Number.isFinite(price) && price > 0);
     const uniquePrices = Array.from(new Set(prices.map(price => Math.round(price * 100))));

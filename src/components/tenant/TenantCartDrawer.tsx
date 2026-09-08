@@ -63,6 +63,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const [creatingPayment, setCreatingPayment] = useState(false);
   const [distanceError, setDistanceError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('pix');
+  const [onlinePaymentMethod, setOnlinePaymentMethod] = useState<'pix' | 'card'>('card');
   const [changeFor, setChangeFor] = useState('');
   // Pagamento online (MercadoPago ou PagBank) — flag derivada da view pública (não expõe o token).
   const isInfinitePay = (tenant as any)?.payment_provider === 'infinitepay' && (tenant as any)?.infinitepay_enabled !== false;
@@ -355,9 +356,11 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   // gross-up, para que após a taxa estimada reste o total líquido do pedido.
   const paymentFeePassThroughEnabled = (tenant as any).payment_fee_pass_through_enabled === true;
   const paymentFeePassThroughPercent = Math.max(0, Number((tenant as any).payment_fee_pass_through_percent) || 0);
-  const cartPricesAlreadyProtected = items.length > 0 && items.every(item => (item.product as any)._online_price_protected === true);
-  const onlineTotal = paymentFeePassThroughEnabled && !cartPricesAlreadyProtected
-    ? grossUpPaymentFee(finalTotal, paymentFeePassThroughPercent)
+  const onlineFeePercent = onlinePaymentMethod === 'pix' ? 0.99 : paymentFeePassThroughPercent;
+  const pixOnlineTotal = paymentFeePassThroughEnabled ? grossUpPaymentFee(finalTotal, 0.99) : finalTotal;
+  const cardOnlineTotal = paymentFeePassThroughEnabled ? grossUpPaymentFee(finalTotal, paymentFeePassThroughPercent) : finalTotal;
+  const onlineTotal = paymentFeePassThroughEnabled
+    ? grossUpPaymentFee(finalTotal, onlineFeePercent)
     : finalTotal;
   // Em delivery, pagamentos só ficam disponíveis após uma cotação válida.
   // Em dropshipping, a cotação ViaCEP também é a prova de que o endereço está dentro do raio do fornecedor.
@@ -796,7 +799,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             payment_flow: infinitePayTap ? 'delivery_tap' : (payOnline ? 'online' : 'delivery'),
             base_total_before_online_fee: finalTotal,
             online_fee_pass_through_enabled: payOnline && paymentFeePassThroughEnabled,
-            online_fee_pass_through_percent: payOnline ? paymentFeePassThroughPercent : 0,
+            online_fee_pass_through_percent: payOnline ? onlineFeePercent : 0,
+            online_payment_method: payOnline ? onlinePaymentMethod : null,
             online_fee_pass_through_amount: payOnline ? Math.max(0, onlineTotal - finalTotal) : 0
           }
         } as any,
@@ -1267,14 +1271,24 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       qualquer ambiguidade de estado. O usuário escolhe pelo botão clicado. */}
                   {hasOnlinePayment && (
                     <>
-          <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
-                        <strong className="text-foreground">Pagamento online:</strong> {paymentFeePassThroughEnabled && onlineTotal > finalTotal ? `R$${onlineTotal.toFixed(2)} (inclui a taxa estimada do Checkout).` : 'valor mostrado acima.'}<br />
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <button type="button" onClick={() => setOnlinePaymentMethod('pix')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'pix' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}>
+                          <strong className="block text-foreground">Pix</strong>
+                          <span>{paymentFeePassThroughEnabled ? `R$${pixOnlineTotal.toFixed(2)} · taxa 0,99%` : 'valor normal'}</span>
+                        </button>
+                        <button type="button" onClick={() => setOnlinePaymentMethod('card')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'card' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}>
+                          <strong className="block text-foreground">Cartão</strong>
+                          <span>{paymentFeePassThroughEnabled ? `R$${cardOnlineTotal.toFixed(2)} · taxa ${paymentFeePassThroughPercent.toFixed(2)}%` : 'valor normal'}</span>
+                        </button>
+                      </div>
+                      <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3 text-xs text-muted-foreground">
+                        <strong className="text-foreground">Pagamento online:</strong> {paymentFeePassThroughEnabled && onlineTotal > finalTotal ? `R$${onlineTotal.toFixed(2)} (taxa da modalidade selecionada incluída).` : 'valor mostrado acima.'}<br />
                         <strong className="text-foreground">Cartão:</strong> escolha o número de parcelas no checkout do provedor. Qualquer tarifa ou juros será calculado e exibido antes do pagamento.
                       </div>
                       <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
                         className="w-full py-4 rounded-lg font-bold text-base text-primary-foreground gradient-primary hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ring-2 ring-primary/40">
                         {creatingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
-                        {creatingPayment ? 'Gerando pagamento...' : `💳 Pagar R$${onlineTotal.toFixed(2)} (${isAsaasActive ? 'Asaas' : 'Mercado Pago'})`}
+                        {creatingPayment ? 'Gerando pagamento...' : `💳 Pagar R$${onlineTotal.toFixed(2)} (${onlinePaymentMethod === 'pix' ? 'Pix' : 'cartão'} · ${isAsaasActive ? 'Asaas' : 'Mercado Pago'})`}
                       </button>
                       {!!(tenant as any).demo_payment_enabled && (
                         <button onClick={() => submitOrder(false, true, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}
