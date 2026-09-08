@@ -666,7 +666,13 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       const calculatedSale = variantCost > 0 ? (variantCost + shipping) * (1 + margin / 100) : 0;
       const existing = existingByName.get(key);
       const preservedSale = isCost ? Number(existing?.suggested_price || 0) : 0;
-      const variantSale = explicitSale > 0 ? explicitSale : preservedSale > 0 ? preservedSale : calculatedSale > 0 ? calculatedSale : baseSalePrice;
+      const variantSale = explicitSale > 0
+        ? explicitSale
+        : preservedSale > 0
+          ? preservedSale
+          : !isCost && calculatedSale > 0
+            ? calculatedSale
+            : 0;
       const canCreateCostOnlyVariant = isCost && variantCost > 0;
       if (variantSale <= 0 && !canCreateCostOnlyVariant) continue;
 
@@ -677,7 +683,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         price_delta: variantSale > 0 ? variantSale - baseSalePrice : 0,
         cost_price: variantCost > 0 ? variantCost : null,
         suggested_price: variantSale > 0 ? variantSale : null,
-        needs_price_review: variantSale <= 0 || (variantCost > 0 && baseCost > 0 && variantCost > baseCost),
+        needs_price_review: !existing || variantSale <= 0 || (variantCost > 0 && baseCost > 0 && variantCost > baseCost),
         price_source: variantCost > 0 ? 'lista_diaria' : 'lista_diaria_sem_custo',
         in_stock: variant.available !== false,
         sort_order: sortOrder,
@@ -696,7 +702,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       if (!product.variants.some(variant => variant.name.trim().toLocaleLowerCase('pt-BR') === key)) {
         const { error } = await supabase
           .from('product_variants' as any)
-          .update({ in_stock: false })
+          .update({ in_stock: false, needs_price_review: true })
           .eq('id', existing.id);
         if (error) throw error;
       }

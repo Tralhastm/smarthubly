@@ -125,8 +125,9 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
                     </>
                   ) : (
                     <>
-                      <span className="text-primary text-[11px]">Revenda: R${Number(v.suggested_price ?? (basePrice + v.price_delta)).toFixed(2)}{v.cost_price != null && <span className="text-muted-foreground"> · Custo: R${normalizeVariantCost(v.cost_price, v.suggested_price ?? (basePrice + v.price_delta)).toFixed(2)}</span>}</span>
-                      {v.needs_price_review && <span className="text-[10px] text-amber-500 font-bold" title={`Custo: R$${Number(v.cost_price || 0).toFixed(2)} · sugestão: R$${Number(v.suggested_price || (basePrice + v.price_delta)).toFixed(2)}`}>⚠ revisar</span>}
+                      <span className="text-primary text-[11px]">{Number(v.suggested_price ?? 0) > 0 ? `Revenda: R$${Number(v.suggested_price).toFixed(2)}` : 'Revenda pendente'}{v.cost_price != null && <span className="text-muted-foreground"> · Custo: R${normalizeVariantCost(v.cost_price, v.suggested_price ?? 0).toFixed(2)}</span>}</span>
+                      {!v.in_stock && <span className="text-[10px] text-amber-500 font-bold" title="Esta cor não apareceu na última lista do fornecedor">⚠ não está na lista</span>}
+                      {v.in_stock && v.needs_price_review && <span className="text-[10px] text-amber-500 font-bold" title="Defina o preço de revenda desta cor para remover esta pendência">⚠ definir revenda</span>}
                       <button onClick={() => startVariantEdit(v)} className="text-muted-foreground hover:text-primary p-0.5" title="Editar preço"><Pencil className="h-3 w-3" /></button>
                     </>
                   )}
