@@ -63,7 +63,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const [creatingPayment, setCreatingPayment] = useState(false);
   const [distanceError, setDistanceError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('pix');
-  const [onlinePaymentMethod, setOnlinePaymentMethod] = useState<'pix' | 'credit' | 'debit' | null>(null);
+  const [onlinePaymentMethod, setOnlinePaymentMethod] = useState<'pix' | 'credit' | 'debit'>('pix');
   const [changeFor, setChangeFor] = useState('');
   // Pagamento online (MercadoPago ou PagBank) — flag derivada da view pública (não expõe o token).
   const isInfinitePay = (tenant as any)?.payment_provider === 'infinitepay' && (tenant as any)?.infinitepay_enabled !== false;
