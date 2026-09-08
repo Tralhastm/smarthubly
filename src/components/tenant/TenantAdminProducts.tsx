@@ -40,7 +40,7 @@ const parseBrazilianMoney = (value: unknown) => {
 };
 
 type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
-type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; condition?: 'new' | 'grade_a'; variants?: ParsedVariant[]; needs_price_review?: boolean };
+type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; condition?: 'new' | 'grade_a'; variants?: ParsedVariant[]; needs_price_review?: boolean; supplier_id?: string | null; supplier_name?: string };
 
 const getImportedPrices = (product: ParsedProduct, priceType: string) => {
   if (priceType === 'color') return { cost: 0, sale: 0 };
@@ -607,14 +607,36 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         result = { data: await response.json() };
       } else {
         // Fluxo TXT original
-        result = await unifiedInvoke("parse-products-txt", "", { 
-          txtContent: importRawText,
-          supplierName: importSupplierName,
-          priceType: importPriceType,
-          profitMargin: parseFloat(importProfitMargin) || 0,
-          shippingFee: parseFloat(importShippingFee) || 0,
-          tenantId,
-        });
+        const source = importRawText;
+        const activeSuppliers = suppliers.filter(s => s.active && s.name.trim());
+        const blocks: { name: string; text: string }[] = [];
+        if (importPriceType === 'color' && activeSuppliers.length > 1) {
+          const matches = activeSuppliers
+            .map(s => ({ supplier: s, index: source.toLocaleLowerCase('pt-BR').indexOf(s.name.trim().toLocaleLowerCase('pt-BR')) }))
+            .filter(item => item.index >= 0)
+            .sort((a, b) => a.index - b.index);
+          for (let i = 0; i < matches.length; i++) {
+            const start = matches[i].index;
+            const end = i + 1 < matches.length ? matches[i + 1].index : source.length;
+            blocks.push({ name: matches[i].supplier.name, text: source.slice(start, end) });
+          }
+        }
+        const requests = blocks.length ? blocks : [{ name: importSupplierName, text: source }];
+        const parsedResults: any[] = [];
+        for (const block of requests) {
+          const parsed = await unifiedInvoke("parse-products-txt", "", {
+            txtContent: block.text,
+            supplierName: block.name,
+            priceType: importPriceType,
+            profitMargin: parseFloat(importProfitMargin) || 0,
+            shippingFee: parseFloat(importShippingFee) || 0,
+            tenantId,
+          });
+          if (parsed.error) { result = parsed; break; }
+          const supplierId = block.name ? await resolveImportSupplier(block.name) : null;
+          parsedResults.push(...((parsed.data?.products || []).map((p: any) => ({ ...p, supplier_id: supplierId, supplier_name: block.name }))));
+          result = { data: { products: parsedResults } };
+        }
       }
 
       const { data, error } = result;
@@ -648,8 +670,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       // Associa o fornecedor a cada produto parseado para exibição no preview
       const productsWithSupplier = data.products.map((p: any) => ({
         ...p,
-        supplier_id: supplierId,
-        supplier_name: importSupplierName
+        supplier_id: p.supplier_id || supplierId,
+        supplier_name: p.supplier_name || importSupplierName
       }));
 
       setParsedProducts(productsWithSupplier);
@@ -762,6 +784,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         const { cost: importedCost, sale: importedSale } = getImportedPrices(p, importPriceType);
         const isCost = importPriceType === 'cost' || importPriceType === 'both';
         const colorOnly = importPriceType === 'color';
+        const productSupplierId = (p as ParsedProduct).supplier_id || currentSupplierId;
         const original_price = importedCost;
         const calculatedPrice = importedSale > 0
           ? importedSale
@@ -789,16 +812,16 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
                 condition: p.condition || 'new',
                 // O modelo voltou a aparecer na lista atual: reativa o card na vitrine.
                 in_stock: true,
-                supplier_id: currentSupplierId || existing.supplier_id || null,
+                supplier_id: productSupplierId || existing.supplier_id || null,
               };
 
           if (!colorOnly && importedCost > 0 && importedCost !== Number(existing.original_price || 0)) {
             updateData.original_price = original_price;
-            updateData.supplier_id = currentSupplierId;
+            updateData.supplier_id = productSupplierId;
           }
           if (!colorOnly && importedSale > 0 && importedSale !== Number(existing.price || 0)) {
             updateData.price = importedSale;
-            updateData.supplier_id = currentSupplierId;
+            updateData.supplier_id = productSupplierId;
           }
 
           // Em atualização de custo, preserve sempre o preço de venda manual existente,
@@ -806,7 +829,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           // transformar custo do fornecedor em preço de venda automaticamente.
           const { error: updateError } = await supabase.from('products').update(updateData).eq('id', existing.id);
           if (updateError) throw updateError;
-          await saveImportedVariants(existing.id, p, Number(existing.price) || price, Number(existing.original_price) || importedCost, isCost, shipping, margin, currentSupplierId, colorOnly);
+          await saveImportedVariants(existing.id, p, Number(existing.price) || price, Number(existing.original_price) || importedCost, isCost, shipping, margin, productSupplierId, colorOnly);
           insertedIds.push(existing.id);
         } else {
           // A lista diária é uma fonte de atualização de custo, nunca de criação automática.
@@ -814,8 +837,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         }
 
         // Registra sempre na tabela de comparação multi-fornecedor
-        if (!colorOnly && currentSupplierId && Number.isFinite(importedCost || p.price) && (importedCost || p.price) > 0) {
-          await recordSupplierPrice(currentSupplierId, p.name, importedCost || p.price, importPriceType);
+        if (!colorOnly && productSupplierId && Number.isFinite(importedCost || p.price) && (importedCost || p.price) > 0) {
+          await recordSupplierPrice(productSupplierId, p.name, importedCost || p.price, importPriceType);
         }
       } catch (err) {
         console.error('Failed to process', p.name, err);
