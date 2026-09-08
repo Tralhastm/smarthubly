@@ -356,12 +356,18 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   // gross-up, para que após a taxa estimada reste o total líquido do pedido.
   const paymentFeePassThroughEnabled = (tenant as any).payment_fee_pass_through_enabled === true;
   const paymentFeePassThroughPercent = Math.max(0, Number((tenant as any).payment_fee_pass_through_percent) || 0);
-  const onlineFeePercent = onlinePaymentMethod === 'pix' ? 0.99 : paymentFeePassThroughPercent;
-  const pixOnlineTotal = paymentFeePassThroughEnabled ? grossUpPaymentFee(finalTotal, 0.99) : finalTotal;
-  const cardOnlineTotal = paymentFeePassThroughEnabled ? grossUpPaymentFee(finalTotal, paymentFeePassThroughPercent) : finalTotal;
-  const onlineTotal = paymentFeePassThroughEnabled
+  // O preço público da loja deve proteger o valor líquido quando o Mercado Pago
+  // está ativo, mesmo que a view pública antiga ainda não exponha o toggle.
+  const shouldProtectOnlinePrice = paymentFeePassThroughEnabled || (
+    hasOnlinePayment && ((tenant as any).payment_provider === 'mercadopago' || isDropshipping)
+  );
+  const onlineFeePercent = onlinePaymentMethod === 'pix' ? 0.99 : (paymentFeePassThroughPercent || 4.98);
+  const pixOnlineTotal = shouldProtectOnlinePrice ? grossUpPaymentFee(finalTotal, 0.99) : finalTotal;
+  const cardOnlineTotal = shouldProtectOnlinePrice ? grossUpPaymentFee(finalTotal, paymentFeePassThroughPercent || 4.98) : finalTotal;
+  const onlineTotal = shouldProtectOnlinePrice
     ? grossUpPaymentFee(finalTotal, onlineFeePercent)
     : finalTotal;
+  const protectedCartSubtotal = hasOnlinePayment ? grossUpPaymentFee(total, 0.99) : total;
   // Em delivery, pagamentos só ficam disponíveis após uma cotação válida.
   // Em dropshipping, a cotação ViaCEP também é a prova de que o endereço está dentro do raio do fornecedor.
   const deliveryBlocked = deliveryType === 'delivery' && (
@@ -974,6 +980,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     <>
                       {items.map(item => {
                         const unit = getCartLineUnitPrice(item);
+                        const displayedUnit = hasOnlinePayment ? grossUpPaymentFee(unit, 0.99) : unit;
                         return (
                         <div key={item.key} className="flex items-start gap-3 p-3 rounded-lg bg-secondary">
                           <div className="flex-1 min-w-0">
@@ -989,7 +996,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                             {item.notes && (
                               <p className="text-[11px] text-muted-foreground italic truncate">📝 {item.notes}</p>
                             )}
-                            <p className="text-primary text-sm font-bold mt-0.5">R${(unit * item.quantity).toFixed(2)}</p>
+                            <p className="text-primary text-sm font-bold mt-0.5">R${(displayedUnit * item.quantity).toFixed(2)}</p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <button onClick={() => updateQuantity(item.key, item.quantity - 1)} className="rounded-md bg-muted p-1 text-muted-foreground hover:text-foreground"><Minus className="h-3 w-3" /></button>
@@ -1002,7 +1009,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       })}
                       <div className="border-t border-border pt-4">
                         <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                          <span>Subtotal:</span><span>R${total.toFixed(2)}</span>
+                          <span>Subtotal:</span><span>R${protectedCartSubtotal.toFixed(2)}</span>
                         </div>
                         {customerFee > 0 && (
                           <div className="flex justify-between text-sm text-muted-foreground mb-1">
@@ -1010,7 +1017,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                           </div>
                         )}
                         <div className="flex justify-between text-lg font-bold text-foreground">
-                          <span>Total:</span><span className="text-primary">R${(total + customerFee).toFixed(2)}</span>
+                          <span>Total:</span><span className="text-primary">R${(protectedCartSubtotal + customerFee).toFixed(2)}</span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">+ entrega calculada após informar o endereço</p>
                       </div>
