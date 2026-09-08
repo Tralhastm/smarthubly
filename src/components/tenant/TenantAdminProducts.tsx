@@ -43,6 +43,7 @@ type ParsedVariant = { name: string; price: number; cost_price?: number; resale_
 type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; condition?: 'new' | 'grade_a'; variants?: ParsedVariant[]; needs_price_review?: boolean };
 
 const getImportedPrices = (product: ParsedProduct, priceType: string) => {
+  if (priceType === 'color') return { cost: 0, sale: 0 };
   const legacyPrice = Number(product.price || 0) || 0;
   const explicitCost = Number(product.cost_price || 0) || 0;
   const explicitSale = Number(product.resale_price || 0) || 0;
@@ -341,7 +342,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const [importFileName, setImportFileName] = useState('');
   // Configuração do catálogo: fornecedor e tipo de preço (config geral, qualquer loja)
   const [importSupplierName, setImportSupplierName] = useState('');
-  const [importPriceType, setImportPriceType] = useState<'cost' | 'resale' | 'both'>('resale');
+  const [importPriceType, setImportPriceType] = useState<'cost' | 'resale' | 'both' | 'color'>('resale');
   const [importSupplierId, setImportSupplierId] = useState<string | null>(null);
   const [importProfitMargin, setImportProfitMargin] = useState('20');
   const [importShippingFee, setImportShippingFee] = useState('0');
@@ -661,7 +662,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const saveImportedVariants = async (productId: string, product: ParsedProduct, baseSalePrice: number, baseCost: number, isCost: boolean, shipping: number, margin: number, supplierId: string | null) => {
+  const saveImportedVariants = async (productId: string, product: ParsedProduct, baseSalePrice: number, baseCost: number, isCost: boolean, shipping: number, margin: number, supplierId: string | null, colorOnly = false) => {
     // Se a lista trouxe cores, ela passa a ser a fonte de verdade para este modelo.
     // Quando não trouxe variantes, preservamos as existentes para não apagar dados manualmente cadastrados.
     if (!Array.isArray(product.variants) || product.variants.length === 0) return;
@@ -678,8 +679,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       const name = variant.name?.trim();
       if (!name) continue;
       const key = name.toLocaleLowerCase('pt-BR');
-      const variantCost = Number(variant.cost_price || (isCost ? variant.price : 0)) || 0;
-      const explicitSale = Number(variant.resale_price || (!isCost ? variant.price : 0)) || 0;
+      const variantCost = colorOnly ? Number(existing?.cost_price || 0) : Number(variant.cost_price || (isCost ? variant.price : 0)) || 0;
+      const explicitSale = colorOnly ? Number(existing?.suggested_price || 0) : Number(variant.resale_price || (!isCost ? variant.price : 0)) || 0;
       const calculatedSale = variantCost > 0 ? (variantCost + shipping) * (1 + margin / 100) : 0;
       const existing = existingByName.get(key);
       const preservedSale = isCost ? Number(existing?.suggested_price || 0) : 0;
@@ -690,21 +691,21 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           : !isCost && calculatedSale > 0
             ? calculatedSale
             : 0;
-      const canCreateCostOnlyVariant = isCost && variantCost > 0;
+      const canCreateCostOnlyVariant = (isCost || colorOnly) && (colorOnly || variantCost > 0);
       if (variantSale <= 0 && !canCreateCostOnlyVariant) continue;
 
       const payload = {
         product_id: productId,
         tenant_id: tenantId,
         name,
-        price_delta: variantSale > 0 ? variantSale - baseSalePrice : 0,
-        cost_price: variantCost > 0 ? variantCost : null,
-        suggested_price: variantSale > 0 ? variantSale : null,
+        price_delta: colorOnly ? (existing?.price_delta ?? 0) : variantSale > 0 ? variantSale - baseSalePrice : 0,
+        cost_price: colorOnly ? (existing?.cost_price ?? null) : variantCost > 0 ? variantCost : null,
+        suggested_price: colorOnly ? (existing?.suggested_price ?? null) : variantSale > 0 ? variantSale : null,
         // O custo pode variar por cor/capacidade. Isso não significa que a
         // revenda esteja pendente: só sinalizar quando não houver preço de
         // revenda definido para a variante.
-        needs_price_review: variantSale <= 0,
-        price_source: variantCost > 0 ? 'lista_diaria' : 'lista_diaria_sem_custo',
+        needs_price_review: colorOnly ? Boolean(existing?.needs_price_review) : variantSale <= 0,
+        price_source: colorOnly ? (existing?.price_source || 'seletor_por_cor') : variantCost > 0 ? 'lista_diaria' : 'lista_diaria_sem_custo',
         in_stock: variant.available !== false,
         supplier_id: supplierId || existing?.supplier_id || null,
         sort_order: sortOrder,
@@ -723,7 +724,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       if (!product.variants.some(variant => variant.name.trim().toLocaleLowerCase('pt-BR') === key)) {
         const { error } = await supabase
           .from('product_variants' as any)
-          .update({ in_stock: false, needs_price_review: true })
+          .update({ in_stock: false, ...(colorOnly ? {} : { needs_price_review: true }) })
           .eq('id', existing.id);
         if (error) throw error;
       }
@@ -754,6 +755,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         const margin = parseFloat(importProfitMargin) || 0;
         const { cost: importedCost, sale: importedSale } = getImportedPrices(p, importPriceType);
         const isCost = importPriceType === 'cost' || importPriceType === 'both';
+        const colorOnly = importPriceType === 'color';
         const original_price = importedCost;
         const calculatedPrice = importedSale > 0
           ? importedSale
@@ -780,11 +782,11 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             supplier_id: currentSupplierId || existing.supplier_id || null,
           };
 
-          if (importedCost > 0 && importedCost !== Number(existing.original_price || 0)) {
+          if (!colorOnly && importedCost > 0 && importedCost !== Number(existing.original_price || 0)) {
             updateData.original_price = original_price;
             updateData.supplier_id = currentSupplierId;
           }
-          if (importedSale > 0 && importedSale !== Number(existing.price || 0)) {
+          if (!colorOnly && importedSale > 0 && importedSale !== Number(existing.price || 0)) {
             updateData.price = importedSale;
             updateData.supplier_id = currentSupplierId;
           }
@@ -794,7 +796,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           // transformar custo do fornecedor em preço de venda automaticamente.
           const { error: updateError } = await supabase.from('products').update(updateData).eq('id', existing.id);
           if (updateError) throw updateError;
-          await saveImportedVariants(existing.id, p, importedSale || Number(existing.price) || price, Number(updateData.original_price || existing.original_price) || importedCost, isCost, shipping, margin, currentSupplierId);
+          await saveImportedVariants(existing.id, p, Number(existing.price) || price, Number(existing.original_price) || importedCost, isCost, shipping, margin, currentSupplierId, colorOnly);
           insertedIds.push(existing.id);
         } else {
           // A lista diária é uma fonte de atualização de custo, nunca de criação automática.
@@ -802,7 +804,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         }
 
         // Registra sempre na tabela de comparação multi-fornecedor
-        if (currentSupplierId && Number.isFinite(importedCost || p.price) && (importedCost || p.price) > 0) {
+        if (!colorOnly && currentSupplierId && Number.isFinite(importedCost || p.price) && (importedCost || p.price) > 0) {
           await recordSupplierPrice(currentSupplierId, p.name, importedCost || p.price, importPriceType);
         }
       } catch (err) {
@@ -1291,7 +1293,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <FileText className="h-4 w-4 text-primary" /> Configurar importação{importFileName ? ` — ${importFileName}` : ''}
             </h3>
-            <p className="text-xs text-muted-foreground">Os preços deste catálogo pertencem a qual fornecedor e são de custo ou de revenda? Se o fornecedor não existir, ele será cadastrado automaticamente na aba Fornecedores.</p>
+            <p className="text-xs text-muted-foreground">Escolha o fornecedor e o que a lista deve atualizar. O Seletor por cor altera somente as cores/variantes; custos e preços dos dispositivos permanecem intactos.</p>
             <div>
               <label className="block text-xs font-medium text-foreground mb-1">Nome do fornecedor</label>
               <input
@@ -1312,6 +1314,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
                   { v: 'cost', label: 'Preço de custo', hint: '(quanto você paga ao fornecedor)' },
                   { v: 'resale', label: 'Preço de revenda', hint: '(quanto você cobra na loja)' },
                   { v: 'both', label: 'Os dois', hint: '(custo = revenda por enquanto)' },
+                  { v: 'color', label: 'Seletor por cor', hint: '(somente cores e disponibilidade)' },
                 ] as const).map(opt => (
                   <label key={opt.v} className={`flex-1 min-w-[140px] flex items-start gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer transition-colors ${importPriceType === opt.v ? 'border-primary bg-primary/10 text-foreground font-medium' : 'border-border bg-secondary text-muted-foreground'}`}>
                     <input type="radio" name="price-type" checked={importPriceType === opt.v} onChange={() => setImportPriceType(opt.v)} className="accent-primary mt-0.5" />
@@ -1324,6 +1327,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               </div>
             </div>
 
+            {importPriceType === 'color' && (
+              <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+                <p className="font-semibold text-primary">Atualiza somente as cores</p>
+                <p className="mt-1">Custos, preços de revenda e alertas de preço existentes serão preservados. Cores ausentes ficam indisponíveis; dispositivos ausentes continuam sendo marcados como esgotados.</p>
+              </div>
+            )}
             {importPriceType === 'cost' && (
               <div className="grid grid-cols-2 gap-3 p-3 rounded-lg border border-primary/20 bg-primary/5">
                 <div>
@@ -1362,7 +1371,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       {importStep === 'parsing' && (
         <div className="rounded-lg border border-border bg-card p-4 flex items-center gap-3">
           <Loader2 className="h-5 w-5 animate-spin text-primary" />
-          <span className="text-sm text-foreground">Analisando arquivo com IA...{importSupplierName ? ` Fornecedor: ${importSupplierName} · Preço: ${importPriceType === 'cost' ? 'custo' : importPriceType === 'resale' ? 'revenda' : 'custo e revenda'}` : ''}</span>
+          <span className="text-sm text-foreground">Analisando arquivo com IA...{importSupplierName ? ` Fornecedor: ${importSupplierName} · Modo: ${importPriceType === 'cost' ? 'custo' : importPriceType === 'resale' ? 'revenda' : importPriceType === 'color' ? 'seletor por cor' : 'custo e revenda'}` : ''}</span>
         </div>
       )}
 
