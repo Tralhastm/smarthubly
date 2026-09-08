@@ -355,6 +355,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   // do parcelamento mostrados pelo Mercado Pago no checkout seguro.
   const paymentFeePassThroughEnabled = false;
   const onlineTotal = finalTotal;
+  const pixOnlineTotal = finalTotal;
+  const cardOnlineTotal = finalTotal;
   // Em delivery, pagamentos só ficam disponíveis após uma cotação válida.
   // Em dropshipping, a cotação ViaCEP também é a prova de que o endereço está dentro do raio do fornecedor.
   const deliveryBlocked = deliveryType === 'delivery' && (
