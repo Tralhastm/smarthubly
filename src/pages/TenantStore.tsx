@@ -188,7 +188,7 @@ const TenantStore = () => {
         ) : (tenant as any).store_mode === 'affiliate' ? (
           <TenantAffiliateCatalog tenantId={tenant.id} tenantSlug={slug!} />
         ) : (
-          <TenantCatalog tenantId={tenant.id} isDropshipping={tenant.is_dropshipping} niche={tenant.niche} layout={((tenant as any).catalog_layout as any) || 'grid'} splashEnabled={(tenant as any).product_splash_enabled !== false} />
+          <TenantCatalog tenantId={tenant.id} isDropshipping={tenant.is_dropshipping} niche={tenant.niche} layout={((tenant as any).catalog_layout as any) || 'grid'} splashEnabled={(tenant as any).product_splash_enabled !== false} paymentFeePassThroughEnabled={(tenant as any).payment_fee_pass_through_enabled === true} paymentFeePassThroughPercent={Number((tenant as any).payment_fee_pass_through_percent) || 4.98} />
         )}
       </main>
         </>

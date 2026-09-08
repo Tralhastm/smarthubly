@@ -207,7 +207,7 @@ const SkeletonCard = () => (
   </div>
 );
 
-const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid', splashEnabled = true }: { tenantId: string; isDropshipping?: boolean; niche?: string | null; layout?: CatalogLayout; splashEnabled?: boolean }) => {
+const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid', splashEnabled = true, paymentFeePassThroughEnabled = false, paymentFeePassThroughPercent = 4.98 }: { tenantId: string; isDropshipping?: boolean; niche?: string | null; layout?: CatalogLayout; splashEnabled?: boolean; paymentFeePassThroughEnabled?: boolean; paymentFeePassThroughPercent?: number }) => {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteProducts(tenantId);
   const { addToCart } = useCart();
   const [search, setSearch] = useState('');
@@ -243,16 +243,9 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
   const [extrasIds, setExtrasIds] = useState<Set<string>>(new Set());
   const [variantMap, setVariantMap] = useState<Map<string, ProductVariant[]>>(new Map());
-  const [paymentFeeConfig, setPaymentFeeConfig] = useState({ enabled: false, percent: 4.98 });
+  const paymentFeeConfig = { enabled: paymentFeePassThroughEnabled, percent: paymentFeePassThroughPercent || 4.98 };
     const [detail, setDetail] = useState<Product | null>(null);
   const allProducts = useMemo(() => data?.pages.flatMap(p => p.data) ?? [], [data]);
-  useEffect(() => {
-    let cancelled = false;
-    supabase.from('tenants_public').select('payment_fee_pass_through_enabled,payment_fee_pass_through_percent').eq('id', tenantId).maybeSingle().then(({ data }) => {
-      if (!cancelled && data) setPaymentFeeConfig({ enabled: (data as any).payment_fee_pass_through_enabled === true, percent: Number((data as any).payment_fee_pass_through_percent) || 4.98 });
-    });
-    return () => { cancelled = true; };
-  }, [tenantId]);
   // O bloqueio é calculado no cliente com a mesma regra do Financeiro:
   // venda - Asaas 4,6% - frete - desconto - custo - comissão do vendedor.
   // Assim, uma alteração de preço/custo passa a refletir na vitrine sem depender
