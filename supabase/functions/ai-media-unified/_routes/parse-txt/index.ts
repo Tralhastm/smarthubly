@@ -53,6 +53,13 @@ function isHeader(line: string): boolean {
   return /^[A-ZÀ-Ý0-9][A-ZÀ-Ý0-9 /&+.-]*$/u.test(clean) && clean.length <= 45;
 }
 
+// Grade A é uma linha de estoque separado, não uma variação/cor dos produtos
+// novos. A seção mista "APPLE NOVOS, GRADE A e DRONES" não deve ser ignorada;
+// somente o cabeçalho explícito "GRADE A PREMIUM" inicia a seção excluída.
+function isExcludedGradeASection(line: string): boolean {
+  return /\bgrade\s+a\b/i.test(line) && /\bpremium\b/i.test(line);
+}
+
 function extractLabeledPrice(line: string, labels: string[]): number {
   const label = labels.join("|");
   const match = line.match(new RegExp(`(?:${label})\\s*:?\\s*R?\\$?\\s*([\\d.]+(?:,\\d{1,2})?|\\d+(?:\\.\\d{1,2})?)`, "i"));
@@ -194,6 +201,7 @@ function parseCatalog(text: string, priceType: string): ParsedProduct[] {
   const lines = String(text || "").split(/\r?\n/).map(normalize);
   const records: ParsedProduct[] = [];
   let section = "Geral";
+  let skipGradeASection = false;
   let pending: { name: string; section: string; cost: number; resale: number; generic: number } | null = null;
 
   const flushPending = () => {
@@ -208,11 +216,18 @@ function parseCatalog(text: string, priceType: string): ParsedProduct[] {
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) continue;
+    if (isExcludedGradeASection(line)) {
+      flushPending();
+      skipGradeASection = true;
+      continue;
+    }
     if (isHeader(line)) {
       flushPending();
       section = line.replace(/^[-=*_#\s]+|[-=*_#\s]+$/g, "").trim();
+      skipGradeASection = false;
       continue;
     }
+    if (skipGradeASection) continue;
 
     const cost = extractLabeledPrice(line, ["custo", "cost", "preço de custo", "preco de custo"]);
     const resale = extractLabeledPrice(line, ["venda sugerida", "venda", "revenda", "resale", "preço de venda", "preco de venda"]);
