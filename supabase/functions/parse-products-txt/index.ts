@@ -4,6 +4,14 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+type Variant = {
+  name: string;
+  price: number;
+  cost_price: number;
+  resale_price: number;
+  available: boolean;
+};
+
 type Product = {
   name: string;
   price: number;
@@ -11,78 +19,112 @@ type Product = {
   resale_price: number;
   category: string;
   description: string;
+  variants: Variant[];
 };
+
+const COLOR_WORDS = new Set([
+  "azul", "amarelo", "branco", "branca", "camuflada", "cinza", "dourado", "dourada",
+  "gold", "laranja", "marrom", "prata", "preto", "preta", "roxo", "rosa", "verde",
+  "titanium", "storm titanium", "ironman", "iron man", "black", "white",
+]);
 
 function parseMoney(raw: string): number {
   const value = String(raw || "").replace(/R\$|\s/gi, "");
   const normalized = value.includes(",")
     ? value.replace(/\./g, "").replace(",", ".")
-    : value;
+    : /^\d{1,3}(\.\d{3})+$/.test(value) ? value.replace(/\./g, "") : value;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-}
-
-function labeled(line: string, labels: string[]): number {
-  const pattern = labels.join("|");
-  const match = line.match(new RegExp(`(?:${pattern})\\s*[:=\\-]?\\s*R?\\$?\\s*([\\d.]+(?:,\\d{1,2})?)`, "i"));
-  return match ? parseMoney(match[1]) : 0;
 }
 
 function category(name: string, section: string): string {
   if (section && section !== "Geral") return section;
   const value = name.toLocaleLowerCase("pt-BR");
-  if (/redmi|poco|realme|xiaomi|galaxy|moto|iphone|celular|smartphone/.test(value)) return "Celulares";
+  if (/redmi|poco|realme|xiaomi|galaxy|moto|iphone|celular|smartphone|infinix|honor|tecno|oppo/.test(value)) return "Celulares";
   return "Geral";
+}
+
+function normalize(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function cleanName(line: string): string {
   let value = line
     .replace(/[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu, "")
     .split(/\b(?:custo|cost|preço de custo|preco de custo|fornecedor|revenda|venda sugerida|preço de venda|preco de venda)\b/i)[0]
-    .replace(/\s*[-–—:]+\s*$/, "")
+    .replace(/[()]/g, "")
+    .trim()
+    .replace(/\s*[-–—,:()]+\s*$/, "")
     .trim();
   return value.replace(/^[-–—*•\s]+|[-–—*•\s]+$/g, "").trim();
 }
 
-function parseCatalog(text: string, priceType: string): Product[] {
-  const products: Product[] = [];
+function extractColors(raw: string): string[] {
+  const value = raw.replace(/[|*]/g, " ").replace(/\s+/g, " ").trim();
+  if (!value || /conferir disponibilidade|cores?$/i.test(value)) return [];
+  const parts = value.split(/,|\s+e\s+/i).map((part) => part.trim()).filter(Boolean);
+  const colors: string[] = [];
+  for (const part of parts) {
+    if (COLOR_WORDS.has(normalize(part))) colors.push(part);
+  }
+  return [...new Set(colors)];
+}
+
+function parseCatalog(text: string): Product[] {
+  const grouped = new Map<string, Product>();
   let section = "Geral";
   for (const raw of String(text || "").split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
-    const cost = labeled(line, ["custo", "cost", "preço de custo", "preco de custo", "fornecedor"]);
-    const resale = labeled(line, ["revenda", "venda sugerida", "preço de venda", "preco de venda"]);
     const header = line.replace(/^[-=*#\s]+|[-=*#\s]+$/g, "").trim();
-    if (!cost && !resale && !/R\$/.test(line) && /^[A-ZÀ-Ý0-9 /&+.-]{3,45}$/u.test(header)) {
+    if (!/R\$\s*[\d.,]+/i.test(line) && /^[A-ZÀ-Ý0-9 /&+.'-]{3,60}$/u.test(header)) {
       section = header;
       continue;
     }
-    if (!cost && !resale) continue;
-    const name = cleanName(line);
+    const priceMatch = line.match(/\(\s*R\$\s*([\d.,]+)\s*\)|R\$\s*([\d.,]+)/i);
+    if (!priceMatch) continue;
+    const price = parseMoney(priceMatch[1] || priceMatch[2]);
+    if (price <= 0) continue;
+    const beforePrice = line.slice(0, priceMatch.index).trim();
+    const afterPrice = line.slice((priceMatch.index || 0) + priceMatch[0].length).trim();
+    const name = cleanName(beforePrice);
     if (!name) continue;
-    const selected = priceType === "cost" || priceType === "both" ? (resale || cost) : (resale || cost);
-    products.push({
-      name,
-      price: selected,
-      cost_price: cost,
-      resale_price: resale,
-      category: category(name, section),
-      description: "",
-    });
+    const key = normalize(name);
+    let product = grouped.get(key);
+    if (!product) {
+      product = { name, price, cost_price: price, resale_price: 0, category: category(name, section), description: "", variants: [] };
+      grouped.set(key, product);
+    }
+    const colors = extractColors(afterPrice);
+    if (colors.length) {
+      for (const color of colors) {
+        const colorKey = normalize(color);
+        const existing = product.variants.find((variant) => normalize(variant.name) === colorKey);
+        if (existing) {
+          existing.price = price;
+          existing.cost_price = price;
+        } else {
+          product.variants.push({ name: color, price, cost_price: price, resale_price: 0, available: true });
+        }
+      }
+    } else if (!product.variants.length || product.price <= 0) {
+      product.price = price;
+      product.cost_price = price;
+    }
   }
-  const unique = new Map<string, Product>();
-  for (const product of products) {
-    const key = product.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    if (!unique.has(key)) unique.set(key, product);
-  }
-  return [...unique.values()];
+  return [...grouped.values()].map((product) => ({
+    ...product,
+    price: product.variants.length ? Math.min(...product.variants.map((variant) => variant.price)) : product.price,
+    cost_price: product.variants.length ? Math.min(...product.variants.map((variant) => variant.cost_price)) : product.cost_price,
+  }));
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   try {
     const body = await req.json();
-    const products = parseCatalog(body?.txtContent || "", body?.priceType || "resale");
+    const products = parseCatalog(body?.txtContent || "");
     return new Response(JSON.stringify({ products }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });

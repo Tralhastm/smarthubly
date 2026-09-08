@@ -657,18 +657,16 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     ((existingVariants || []) as any[]).forEach(existing => {
       existingByName.set(existing.name.trim().toLocaleLowerCase('pt-BR'), existing);
     });
-    const incomingNames = new Set<string>();
-
     for (const [sortOrder, variant] of product.variants.entries()) {
       const name = variant.name?.trim();
       if (!name) continue;
       const key = name.toLocaleLowerCase('pt-BR');
-      incomingNames.add(key);
-
       const variantCost = Number(variant.cost_price || (isCost ? variant.price : 0)) || 0;
       const explicitSale = Number(variant.resale_price || (!isCost ? variant.price : 0)) || 0;
       const calculatedSale = variantCost > 0 ? (variantCost + shipping) * (1 + margin / 100) : 0;
-      const variantSale = explicitSale > 0 ? explicitSale : calculatedSale > 0 ? calculatedSale : baseSalePrice;
+      const existing = existingByName.get(key);
+      const preservedSale = isCost ? Number(existing?.suggested_price || 0) : 0;
+      const variantSale = explicitSale > 0 ? explicitSale : preservedSale > 0 ? preservedSale : calculatedSale > 0 ? calculatedSale : baseSalePrice;
       if (variantSale <= 0) continue;
 
       const payload = {
@@ -683,21 +681,14 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         in_stock: variant.available !== false,
         sort_order: sortOrder,
       };
-      const existing = existingByName.get(key);
       const result = existing
         ? await supabase.from('product_variants' as any).update(payload).eq('id', existing.id)
         : await supabase.from('product_variants' as any).insert(payload);
       if (result.error) throw result.error;
     }
 
-    // Retira automaticamente cores que deixaram de existir na lista diária.
-    for (const existing of (existingVariants || []) as any[]) {
-      const key = existing.name.trim().toLocaleLowerCase('pt-BR');
-      if (!incomingNames.has(key)) {
-        const { error } = await supabase.from('product_variants' as any).delete().eq('id', existing.id);
-        if (error) throw error;
-      }
-    }
+    // A lista diária pode omitir uma cor temporariamente. Nunca apagamos uma variante
+    // cadastrada manualmente; apenas atualizamos as cores que vieram nesta importação.
   };
 
   const handleImportConfirm = async () => {
@@ -711,11 +702,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     // Resolve o fornecedor novamente para garantir que o ID esteja disponível no escopo da função
     const currentSupplierId = await resolveImportSupplier(importSupplierName);
 
-    // IA Analítica: Filtra duplicatas na lista parseada antes de começar
-    const uniqueParsed = parsedProducts.filter((p, index, self) => 
-      index === self.findIndex((t) => normalizeProductName(t.name) === normalizeProductName(p.name))
-    );
-    
+    // O parser já agrupa linhas do mesmo modelo e preserva custos por cor.
+    // Não deduplicar aqui: isso perderia diferenças de custo entre variantes.
+    const uniqueParsed = parsedProducts;
     setImportTotal(uniqueParsed.length);
 
     for (let i = 0; i < uniqueParsed.length; i++) {
@@ -756,41 +745,16 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             updateData.supplier_id = currentSupplierId;
           }
 
-          await supabase.from('products').update(updateData).eq('id', existing.id);
+          // Em atualização de custo, preserve o preço de venda manual existente.
+          // Só preenche o preço-base quando ele estiver vazio/zero.
+          if (isCost && Number(existing.price || 0) <= 0 && price > 0) updateData.price = price;
+          const { error: updateError } = await supabase.from('products').update(updateData).eq('id', existing.id);
+          if (updateError) throw updateError;
           await saveImportedVariants(existing.id, p, importedSale || Number(existing.price) || price, Number(updateData.original_price || existing.original_price) || importedCost, isCost, shipping, margin);
           insertedIds.push(existing.id);
         } else {
-          // Produto novo: Insere
-          await new Promise<void>((resolve, reject) => {
-            addMutation.mutate({
-              tenant_id: tenantId,
-              name: p.name.trim(),
-              price: price,
-              original_price: original_price,
-              category: p.category || 'Geral',
-              description: p.description || '',
-              image: '',
-              in_stock: true,
-              supplier_id: currentSupplierId || null,
-            } as any, {
-              onSuccess: () => resolve(),
-              onError: (e) => reject(e),
-            });
-          });
-
-          const { data: inserted } = await supabase
-            .from('products')
-            .select('id')
-            .eq('tenant_id', tenantId)
-            .eq('name', p.name.trim())
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
-
-          if (inserted) {
-            await saveImportedVariants(inserted.id, p, price, importedCost, isCost, shipping, margin);
-            insertedIds.push(inserted.id);
-          }
+          // A lista diária é uma fonte de atualização de custo, nunca de criação automática.
+          console.info('[catalog-import] produto não cadastrado ignorado:', p.name);
         }
 
         // Registra sempre na tabela de comparação multi-fornecedor
