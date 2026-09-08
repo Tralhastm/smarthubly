@@ -177,19 +177,37 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
     const supplier = allSuppliers.find((s: any) => s.id === supplierId);
     const phone = String(supplier?.phone || '').replace(/\D/g, '');
     if (!phone) { toast.error(`Cadastre o telefone/WhatsApp do fornecedor ${supplier?.name || ''}`); return; }
-    const itemsText = (items || []).map((item: any) =>
-      `• ${item.quantity}x ${item.product_name}${item.variant_name ? ` — Cor: ${item.variant_name}` : ''}`,
+    const cellphoneItems = (items || []).filter((item: any) =>
+      /iphone|galaxy|redmi|poco|xiaomi|realme|honor|motorola|moto\b|infinix|tecno|oppo|celular|smartphone|pixel|zenfone|oneplus/i.test(String(item.product_name || item.name || '')),
+    );
+    const groups = new Map<string, { quantity: number; unit: number; total: number; colors: string[] }>();
+    cellphoneItems.forEach((item: any) => {
+      const name = String(item.product_name || item.name || 'Produto');
+      const quantity = Number(item.quantity || 1);
+      const unit = Number(item.product_price ?? item.price ?? 0);
+      const key = name;
+      const group = groups.get(key) || { quantity: 0, unit, total: 0, colors: [] };
+      group.quantity += quantity;
+      group.total += unit * quantity;
+      const color = item.variant_name || item.variantName;
+      if (color && !group.colors.includes(color)) group.colors.push(color);
+      groups.set(key, group);
+    });
+    const itemsText = [...groups.entries()].map(([name, group]) =>
+      `• ${group.quantity}x ${name}${group.colors.length ? ` — Cores: ${group.colors.join(', ')}` : ''}\n  Unitário: R$ ${group.unit.toFixed(2).replace('.', ',')} · Total: R$ ${group.total.toFixed(2).replace('.', ',')}`,
     ).join('\n');
+    const supplierTotal = [...groups.values()].reduce((sum, group) => sum + group.total, 0);
+    const courierCode = `MT-${order.id.slice(0, 8).toUpperCase()}`;
     const message = [
-      `Olá ${supplier.name}, novo pedido da ${tenantName}.`,
-      `Pedido #${order.id.slice(0, 8).toUpperCase()}`,
+      `📦 *Separação de pedido — ${tenantName}*`,
+      `Código do motoboy: *${courierCode}*`,
       '',
-      `Cliente: ${order.customer_name || '—'}`,
-      order.customer_phone ? `Telefone: ${order.customer_phone}` : '',
-      '', 'Itens:', itemsText || '• Sem itens', '',
-      `Total: R$ ${Number(order.total || 0).toFixed(2).replace('.', ',')}`,
-      `Entrega: ${order.delivery_type === 'delivery' ? 'entrega' : 'retirada na loja'}`,
-      '', 'O endereço será enviado separadamente pela loja/motoboy.',
+      '*Celulares deste fornecedor:*',
+      itemsText || '• Nenhum celular neste grupo',
+      '',
+      `*Total do grupo: R$ ${supplierTotal.toFixed(2).replace('.', ',')}*`,
+      '',
+      'O motoboy deverá informar o código acima para a conferência da retirada.',
     ].filter(Boolean).join('\n');
     window.open(`https://wa.me/${phone.startsWith('55') ? phone : `55${phone}`}?text=${encodeURIComponent(message)}`, '_blank');
   };
@@ -620,16 +638,13 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
                           <span className="text-[10px] font-bold text-primary uppercase">{supplier?.name || 'Fornecedor Desconhecido'}</span>
                           <button 
                             onClick={() => {
-                              const itemsText = itemNames.map((item: any) => {
-                                const name = typeof item === 'string' ? item : item.name;
-                                const qty = typeof item === 'string' ? '' : ` (${item.quantity}x)`;
-                                const color = typeof item === 'string' ? '' : (item.variant_name ? ` — Cor: ${item.variant_name}` : '');
-                                return `• ${name}${color}${qty}`;
-                              }).join('\n');
-                              const text = `Olá ${supplier?.name}, tenho um novo pedido fragmentado:\n\n` + 
-                                itemsText + 
-                                `\n\nCliente: ${order.customer_name}\nTelefone: ${order.customer_phone || '—'}\n\nO endereço será enviado separadamente pela loja/motoboy.`;
-                              window.open(`https://wa.me/${supplier?.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
+                              const fragmentItems = itemNames.map((item: any) => ({
+                                product_name: typeof item === 'string' ? item : (item.product_name || item.name || item.product?.name || ''),
+                                quantity: typeof item === 'string' ? 1 : (item.quantity || 1),
+                                product_price: typeof item === 'string' ? 0 : (item.product_price || item.product?.price || 0),
+                                variant_name: typeof item === 'string' ? null : (item.variant_name || item.variantName || null),
+                              }));
+                              openSupplierWhatsApp(order, sid, fragmentItems as any);
                             }}
                             className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded hover:bg-primary/30"
                           >
