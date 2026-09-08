@@ -53,11 +53,23 @@ function reconcileItems(items: any[], order: any) {
   if (money(order.platform_fee) > 0) lines.push({ title: "Taxa operacional", quantity: 1, unit_price: money(order.platform_fee), currency_id: "BRL" });
   const target = money(order.total);
   const total = lines.reduce((sum, line) => sum + line.quantity * line.unit_price, 0);
-  const cents = Math.round((target - total) * 100);
-  if (cents !== 0 && lines.length) {
+  let differenceCents = Math.round((target - total) * 100);
+  if (differenceCents < 0) {
+    // Distribui o desconto do cupom entre as linhas, em vez de tentar
+    // descontá-lo apenas do último item (o que falhava quando o cupom era
+    // maior que o total daquela linha).
+    for (let index = lines.length - 1; index >= 0 && differenceCents < 0; index -= 1) {
+      const line = lines[index];
+      const minimumCents = Math.max(1, Math.round(line.quantity));
+      const lineCents = Math.round(line.quantity * line.unit_price * 100);
+      const reducible = Math.max(0, lineCents - minimumCents);
+      const reduction = Math.min(reducible, Math.abs(differenceCents));
+      line.unit_price = Math.max(0.01, Math.round((lineCents - reduction) / line.quantity) / 100);
+      differenceCents += reduction;
+    }
+  } else if (differenceCents > 0 && lines.length) {
     const last = lines[lines.length - 1];
-    last.unit_price = Math.max(0.01, Math.round((last.unit_price + cents / 100 / last.quantity) * 100) / 100);
-    last.title = `${last.title} (ajuste)`;
+    last.unit_price = Math.round((last.unit_price + differenceCents / 100 / last.quantity) * 100) / 100;
   }
   return lines;
 }
