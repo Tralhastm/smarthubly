@@ -25,8 +25,15 @@ type Product = {
 const COLOR_WORDS = new Set([
   "azul", "amarelo", "branco", "branca", "camuflada", "cinza", "dourado", "dourada",
   "gold", "laranja", "marrom", "prata", "preto", "preta", "roxo", "rosa", "verde",
-  "titanium", "storm titanium", "ironman", "iron man", "black", "white",
+  "titanium", "storm titanium", "ironman", "iron man", "black", "white", "blue", "pink",
+  "purple", "orange", "sage", "green", "yellow", "silver", "golden",
 ]);
+
+const COLOR_ALIASES: Record<string, string> = {
+  blue: "Azul", pink: "Rosa", black: "Preto", white: "Branco", purple: "Roxo",
+  orange: "Laranja", sage: "Sálvia", green: "Verde", yellow: "Amarelo",
+  silver: "Prata", golden: "Dourado", gold: "Dourado",
+};
 
 function parseMoney(raw: string): number {
   const value = String(raw || "").replace(/R\$|\s/gi, "");
@@ -66,7 +73,8 @@ function extractColors(raw: string): string[] {
   const parts = value.split(/,|\s+e\s+/i).map((part) => part.trim()).filter(Boolean);
   const colors: string[] = [];
   for (const part of parts) {
-    if (COLOR_WORDS.has(normalize(part))) colors.push(part);
+    const normalized = normalize(part);
+    if (COLOR_WORDS.has(normalized)) colors.push(COLOR_ALIASES[normalized] || part);
   }
   return [...new Set(colors)];
 }
