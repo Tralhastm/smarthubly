@@ -1093,7 +1093,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         }} disabled={importStep !== 'idle'}
           className="flex items-center gap-2 rounded-lg bg-primary/15 text-primary px-4 py-2 text-sm font-medium hover:bg-primary/25 disabled:opacity-50"
           title="Cole a lista diretamente, sem criar ou enviar um arquivo.">
-          <Clipboard className="h-4 w-4" /> Colar lista
+          <FileText className="h-4 w-4" /> Colar lista
         </button>
         <button onClick={() => setShowBulkDescriptions(true)} disabled={!products.length || bulkDescriptionRunning}
           className="flex items-center gap-2 rounded-lg bg-primary/15 text-primary px-4 py-2 text-sm font-medium hover:bg-primary/25 disabled:opacity-50"
