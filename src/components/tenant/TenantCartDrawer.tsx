@@ -1000,6 +1000,16 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                         </div>
                         );
                       })}
+                      {hasOnlinePayment && (
+                        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2 mb-3">
+                          <p className="text-sm font-semibold text-foreground">Como você quer pagar?</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <button type="button" onClick={() => setOnlinePaymentMethod('pix')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'pix' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Pix</strong><span>R${pixOnlineTotal.toFixed(2)}</span></button>
+                            <button type="button" onClick={() => setOnlinePaymentMethod('credit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'credit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Crédito</strong><span>R${cardOnlineTotal.toFixed(2)}</span></button>
+                            <button type="button" onClick={() => setOnlinePaymentMethod('debit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'debit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Débito</strong><span>R${cardOnlineTotal.toFixed(2)}</span></button>
+                          </div>
+                        </div>
+                      )}
                       <div className="border-t border-border pt-4">
                         <div className="flex justify-between text-sm text-muted-foreground mb-1">
                           <span>Subtotal:</span><span>R${total.toFixed(2)}</span>
@@ -1010,7 +1020,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                           </div>
                         )}
                         <div className="flex justify-between text-lg font-bold text-foreground">
-                          <span>Total:</span><span className="text-primary">R${(total + customerFee).toFixed(2)}</span>
+                          <span>{hasOnlinePayment && onlinePaymentMethod === 'pix' ? 'Total Pix:' : hasOnlinePayment && onlinePaymentMethod === 'credit' ? 'Total cartão:' : hasOnlinePayment && onlinePaymentMethod === 'debit' ? 'Total débito:' : 'Total:'}</span><span className="text-primary">R${(hasOnlinePayment ? onlineTotal : total + customerFee).toFixed(2)}</span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">+ entrega calculada após informar o endereço</p>
                       </div>
