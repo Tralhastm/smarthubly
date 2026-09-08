@@ -203,6 +203,7 @@ function parseCatalog(text: string, priceType: string): ParsedProduct[] {
   let section = "Geral";
   let skipGradeASection = false;
   let pending: { name: string; section: string; cost: number; resale: number; generic: number } | null = null;
+  let pendingName = "";
 
   const flushPending = () => {
     if (!pending) return;
@@ -264,7 +265,8 @@ function parseCatalog(text: string, priceType: string): ParsedProduct[] {
 
     if (!/^(?:custo|venda|revenda|resale|preço|preco|conferir disponibilidade)\b/i.test(line)) {
       flushPending();
-      pending = { name: cleanName(line), section, cost: 0, resale: 0, generic: 0 };
+      pendingName = cleanName(line);
+      pending = { name: pendingName, section, cost: 0, resale: 0, generic: 0 };
     }
   }
   flushPending();

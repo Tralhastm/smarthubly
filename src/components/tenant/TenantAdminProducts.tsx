@@ -666,9 +666,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     // Se a lista trouxe cores, ela passa a ser a fonte de verdade para este modelo.
     // Quando não trouxe variantes, preservamos as existentes para não apagar dados manualmente cadastrados.
     if (!Array.isArray(product.variants) || product.variants.length === 0) return;
+    // Cada lista de cores pertence exclusivamente ao fornecedor selecionado.
+    // Sem fornecedor resolvido, não podemos alterar variantes com segurança.
+    if (!supplierId) return;
 
     const { data: existingVariants, error: variantsError } = await supabase.from('product_variants' as any)
-      .select('*').eq('product_id', productId).limit(100);
+      .select('*').eq('product_id', productId).eq('supplier_id', supplierId).limit(100);
     if (variantsError) throw variantsError;
 
     const existingByName = new Map<string, any>();
@@ -679,10 +682,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       const name = variant.name?.trim();
       if (!name) continue;
       const key = name.toLocaleLowerCase('pt-BR');
+      const existing = existingByName.get(key);
       const variantCost = colorOnly ? Number(existing?.cost_price || 0) : Number(variant.cost_price || (isCost ? variant.price : 0)) || 0;
       const explicitSale = colorOnly ? Number(existing?.suggested_price || 0) : Number(variant.resale_price || (!isCost ? variant.price : 0)) || 0;
       const calculatedSale = variantCost > 0 ? (variantCost + shipping) * (1 + margin / 100) : 0;
-      const existing = existingByName.get(key);
       const preservedSale = isCost ? Number(existing?.suggested_price || 0) : 0;
       const variantSale = explicitSale > 0
         ? explicitSale
@@ -691,6 +694,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           : !isCost && calculatedSale > 0
             ? calculatedSale
             : 0;
+      // O Seletor por cor nunca cadastra uma cor nova: ele só atualiza
+      // variantes já existentes deste produto e deste fornecedor.
+      if (colorOnly && !existing) continue;
       const canCreateCostOnlyVariant = (isCost || colorOnly) && (colorOnly || variantCost > 0);
       if (variantSale <= 0 && !canCreateCostOnlyVariant) continue;
 
