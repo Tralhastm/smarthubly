@@ -1240,6 +1240,17 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     {couponMsg && !appliedCoupon && <p className="text-xs text-destructive">{couponMsg}</p>}
                   </div>
 
+                  {hasOnlinePayment && (
+                    <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                      <p className="text-sm font-semibold text-foreground">Como você quer pagar?</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button type="button" onClick={() => setOnlinePaymentMethod('pix')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'pix' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Pix</strong><span>R${pixOnlineTotal.toFixed(2)}</span></button>
+                        <button type="button" onClick={() => setOnlinePaymentMethod('credit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'credit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Crédito</strong><span>R${cardOnlineTotal.toFixed(2)}</span></button>
+                        <button type="button" onClick={() => setOnlinePaymentMethod('debit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'debit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Débito</strong><span>R${cardOnlineTotal.toFixed(2)}</span></button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="border-t border-border pt-3 space-y-1">
                     <div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal:</span><span>R${total.toFixed(2)}</span></div>
                     {customerFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Taxa operacional:</span><span>R${customerFee.toFixed(2)}</span></div>}
@@ -1271,20 +1282,6 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       qualquer ambiguidade de estado. O usuário escolhe pelo botão clicado. */}
                   {hasOnlinePayment && (
                     <>
-                      <div className="grid grid-cols-3 gap-2 mb-2">
-                        <button type="button" onClick={() => setOnlinePaymentMethod('pix')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'pix' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}>
-                          <strong className="block text-foreground">Pix</strong>
-                          <span>R${pixOnlineTotal.toFixed(2)}</span>
-                        </button>
-                        <button type="button" onClick={() => setOnlinePaymentMethod('credit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'credit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}>
-                          <strong className="block text-foreground">Crédito</strong>
-                          <span>R${cardOnlineTotal.toFixed(2)}</span>
-                        </button>
-                        <button type="button" onClick={() => setOnlinePaymentMethod('debit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'debit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}>
-                          <strong className="block text-foreground">Débito</strong>
-                          <span>R${cardOnlineTotal.toFixed(2)}</span>
-                        </button>
-                      </div>
                       <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked || !onlinePaymentMethod}
                         className="w-full py-4 rounded-lg font-bold text-base text-primary-foreground gradient-primary hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ring-2 ring-primary/40">
                         {creatingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
