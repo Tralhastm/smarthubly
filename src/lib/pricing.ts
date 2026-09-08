@@ -17,3 +17,11 @@ export function calculateFinalProfit(salePrice: unknown, costPrice: unknown) {
 export function hasPositiveFinalProfit(salePrice: unknown, costPrice: unknown) {
   return calculateFinalProfit(salePrice, costPrice).finalProfit >= 0;
 }
+
+/** Gross-up em centavos: o preço exibido já inclui a taxa que será descontada. */
+export function grossUpPaymentFee(price: unknown, feePercent: unknown) {
+  const net = Math.max(0, Number(price) || 0);
+  const fee = Math.max(0, Number(feePercent) || 0);
+  if (net <= 0 || fee <= 0 || fee >= 100) return Math.round(net * 100) / 100;
+  return Math.ceil((net / (1 - fee / 100)) * 100) / 100;
+}

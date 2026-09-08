@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getItemCTA } from '@/lib/niche-labels';
 import { normalizeProductDescription } from '@/lib/product-description';
 import { ExpandableProductDescription } from './ExpandableProductDescription';
-import { calculateFinalProfit } from '@/lib/pricing';
+import { calculateFinalProfit, grossUpPaymentFee } from '@/lib/pricing';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
 
@@ -243,8 +243,16 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null);
   const [extrasIds, setExtrasIds] = useState<Set<string>>(new Set());
   const [variantMap, setVariantMap] = useState<Map<string, ProductVariant[]>>(new Map());
+  const [paymentFeeConfig, setPaymentFeeConfig] = useState({ enabled: false, percent: 4.98 });
     const [detail, setDetail] = useState<Product | null>(null);
   const allProducts = useMemo(() => data?.pages.flatMap(p => p.data) ?? [], [data]);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from('tenants_public').select('payment_fee_pass_through_enabled,payment_fee_pass_through_percent').eq('id', tenantId).maybeSingle().then(({ data }) => {
+      if (!cancelled && data) setPaymentFeeConfig({ enabled: (data as any).payment_fee_pass_through_enabled === true, percent: Number((data as any).payment_fee_pass_through_percent) || 4.98 });
+    });
+    return () => { cancelled = true; };
+  }, [tenantId]);
   // O bloqueio é calculado no cliente com a mesma regra do Financeiro:
   // venda - Asaas 4,6% - frete - desconto - custo - comissão do vendedor.
   // Assim, uma alteração de preço/custo passa a refletir na vitrine sem depender
@@ -268,12 +276,16 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     const pricing = calculateFinalProfit(referencePrice, referenceCost);
     if (pricing.isLoss && !(product as any).allow_loss) return { ...product, in_stock: false, pricing_blocked: true };
     if ((product as any).manual_blocked) return { ...product, in_stock: false };
-    return product;
-  }), [allProducts, variantMap]);
+    if (!paymentFeeConfig.enabled) return product;
+    return { ...product, price: grossUpPaymentFee(product.price, paymentFeeConfig.percent), _online_price_protected: true, _online_fee_percent: paymentFeeConfig.percent } as any;
+  }), [allProducts, variantMap, paymentFeeConfig]);
   const getDisplayPriceInfo = (product: Product) => {
     const variants = variantMap.get(product.id) || [];
     const prices = variants
-      .map(variant => Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0))))
+      .map(variant => {
+        const raw = Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0)));
+        return (product as any)._online_price_protected ? grossUpPaymentFee(raw, (product as any)._online_fee_percent) : raw;
+      })
       .filter(price => Number.isFinite(price) && price > 0);
     const uniquePrices = Array.from(new Set(prices.map(price => Math.round(price * 100))));
     return {

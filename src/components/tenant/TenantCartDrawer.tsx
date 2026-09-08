@@ -17,6 +17,7 @@ import type { Tenant } from '@/hooks/useTenants';
 import { ShoppingCart, X, Plus, Minus, Trash2, MessageCircle, CreditCard, MapPin, Loader2, ExternalLink, Tag, CheckCircle2, CalendarClock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
+import { grossUpPaymentFee } from '@/lib/pricing';
 
 type SupplierShipping = {
   id: string;
@@ -354,8 +355,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   // gross-up, para que após a taxa estimada reste o total líquido do pedido.
   const paymentFeePassThroughEnabled = (tenant as any).payment_fee_pass_through_enabled === true;
   const paymentFeePassThroughPercent = Math.max(0, Number((tenant as any).payment_fee_pass_through_percent) || 0);
-  const onlineTotal = paymentFeePassThroughEnabled && paymentFeePassThroughPercent > 0 && paymentFeePassThroughPercent < 100
-    ? Math.ceil((finalTotal / (1 - paymentFeePassThroughPercent / 100)) * 100) / 100
+  const cartPricesAlreadyProtected = items.length > 0 && items.every(item => (item.product as any)._online_price_protected === true);
+  const onlineTotal = paymentFeePassThroughEnabled && !cartPricesAlreadyProtected
+    ? grossUpPaymentFee(finalTotal, paymentFeePassThroughPercent)
     : finalTotal;
   // Em delivery, pagamentos só ficam disponíveis após uma cotação válida.
   // Em dropshipping, a cotação ViaCEP também é a prova de que o endereço está dentro do raio do fornecedor.
