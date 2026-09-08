@@ -173,6 +173,27 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
     }
   };
 
+  const openSupplierWhatsApp = (order: OrderWithItems, supplierId: string, items = order.order_items) => {
+    const supplier = allSuppliers.find((s: any) => s.id === supplierId);
+    const phone = String(supplier?.phone || '').replace(/\D/g, '');
+    if (!phone) { toast.error(`Cadastre o telefone/WhatsApp do fornecedor ${supplier?.name || ''}`); return; }
+    const itemsText = (items || []).map((item: any) =>
+      `• ${item.quantity}x ${item.product_name}${item.variant_name ? ` — Cor: ${item.variant_name}` : ''}`,
+    ).join('\n');
+    const message = [
+      `Olá ${supplier.name}, novo pedido da ${tenantName}.`,
+      `Pedido #${order.id.slice(0, 8).toUpperCase()}`,
+      '',
+      `Cliente: ${order.customer_name || '—'}`,
+      order.customer_phone ? `Telefone: ${order.customer_phone}` : '',
+      '', 'Itens:', itemsText || '• Sem itens', '',
+      `Total: R$ ${Number(order.total || 0).toFixed(2).replace('.', ',')}`,
+      `Entrega: ${order.delivery_type === 'delivery' ? 'entrega' : 'retirada na loja'}`,
+      '', 'O endereço será enviado separadamente pela loja/motoboy.',
+    ].filter(Boolean).join('\n');
+    window.open(`https://wa.me/${phone.startsWith('55') ? phone : `55${phone}`}?text=${encodeURIComponent(message)}`, '_blank');
+  };
+
   const dismissAlert = () => { stopAlert(); setAlertActive(false); };
 
   // Fallback: detect new orders via polling data changes
@@ -510,6 +531,15 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
               </div>
             </div>
 
+            {(order as any).supplier_id && allSuppliers.some((s: any) => s.id === (order as any).supplier_id) && (
+              <button
+                onClick={() => openSupplierWhatsApp(order, (order as any).supplier_id)}
+                className="w-full flex items-center justify-center gap-2 rounded-lg bg-green-600 text-white px-3 py-2 text-xs font-medium hover:bg-green-700"
+              >
+                <MessageCircle className="h-3.5 w-3.5" /> Enviar pedido ao fornecedor
+              </button>
+            )}
+
             {order.status === 'delivered' && (
               <div className="pt-2">
                 <OrderEmitNFCeButton orderId={order.id} tenantId={tenantId} orderStatus={order.status} />
@@ -593,11 +623,12 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
                               const itemsText = itemNames.map((item: any) => {
                                 const name = typeof item === 'string' ? item : item.name;
                                 const qty = typeof item === 'string' ? '' : ` (${item.quantity}x)`;
-                                return `• ${name}${qty}`;
+                                const color = typeof item === 'string' ? '' : (item.variant_name ? ` — Cor: ${item.variant_name}` : '');
+                                return `• ${name}${color}${qty}`;
                               }).join('\n');
                               const text = `Olá ${supplier?.name}, tenho um novo pedido fragmentado:\n\n` + 
                                 itemsText + 
-                                `\n\nCliente: ${order.customer_name}\nEndereço: ${order.customer_address || 'Retirada'}`;
+                                `\n\nCliente: ${order.customer_name}\nTelefone: ${order.customer_phone || '—'}\n\nO endereço será enviado separadamente pela loja/motoboy.`;
                               window.open(`https://wa.me/${supplier?.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
                             }}
                             className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded hover:bg-primary/30"
