@@ -745,9 +745,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             updateData.supplier_id = currentSupplierId;
           }
 
-          // Em atualização de custo, preserve o preço de venda manual existente.
-          // Só preenche o preço-base quando ele estiver vazio/zero.
-          if (isCost && Number(existing.price || 0) <= 0 && price > 0) updateData.price = price;
+          // Em atualização de custo, preserve sempre o preço de venda manual existente,
+          // inclusive quando ele estiver vazio/zero. A opção de preço de custo não deve
+          // transformar custo do fornecedor em preço de venda automaticamente.
           const { error: updateError } = await supabase.from('products').update(updateData).eq('id', existing.id);
           if (updateError) throw updateError;
           await saveImportedVariants(existing.id, p, importedSale || Number(existing.price) || price, Number(updateData.original_price || existing.original_price) || importedCost, isCost, shipping, margin);
