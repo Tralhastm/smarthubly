@@ -667,16 +667,17 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       const existing = existingByName.get(key);
       const preservedSale = isCost ? Number(existing?.suggested_price || 0) : 0;
       const variantSale = explicitSale > 0 ? explicitSale : preservedSale > 0 ? preservedSale : calculatedSale > 0 ? calculatedSale : baseSalePrice;
-      if (variantSale <= 0) continue;
+      const canCreateCostOnlyVariant = isCost && variantCost > 0;
+      if (variantSale <= 0 && !canCreateCostOnlyVariant) continue;
 
       const payload = {
         product_id: productId,
         tenant_id: tenantId,
         name,
-        price_delta: variantSale - baseSalePrice,
+        price_delta: variantSale > 0 ? variantSale - baseSalePrice : 0,
         cost_price: variantCost > 0 ? variantCost : null,
-        suggested_price: variantSale,
-        needs_price_review: variantCost > 0 && baseCost > 0 && variantCost > baseCost,
+        suggested_price: variantSale > 0 ? variantSale : null,
+        needs_price_review: variantSale <= 0 || (variantCost > 0 && baseCost > 0 && variantCost > baseCost),
         price_source: variantCost > 0 ? 'lista_diaria' : 'lista_diaria_sem_custo',
         in_stock: variant.available !== false,
         sort_order: sortOrder,
@@ -687,8 +688,19 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       if (result.error) throw result.error;
     }
 
-    // A lista diária pode omitir uma cor temporariamente. Nunca apagamos uma variante
-    // cadastrada manualmente; apenas atualizamos as cores que vieram nesta importação.
+    // A lista diária representa a disponibilidade atual do fornecedor. Variantes antigas
+    // que não apareceram ficam ocultas, mas permanecem cadastradas para voltar quando
+    // reaparecerem em uma próxima lista.
+    for (const existing of (existingVariants || []) as any[]) {
+      const key = existing.name.trim().toLocaleLowerCase('pt-BR');
+      if (!product.variants.some(variant => variant.name.trim().toLocaleLowerCase('pt-BR') === key)) {
+        const { error } = await supabase
+          .from('product_variants' as any)
+          .update({ in_stock: false })
+          .eq('id', existing.id);
+        if (error) throw error;
+      }
+    }
   };
 
   const handleImportConfirm = async () => {
