@@ -1177,13 +1177,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                   )}
 
                   <div>
-                    <label className="text-sm font-medium text-foreground mb-2 block">Forma de pagamento</label>
-                    {hasOnlinePayment && (
-                      <div className="rounded-lg border-2 border-primary/40 bg-primary/10 p-3 text-xs text-foreground mb-3">
-                        ✅ <strong>Pagamento online disponível.</strong><br/>
-                        O preço exibido é o valor à vista/Pix. Para cartão, use o botão abaixo: no checkout seguro você escolhe em quantas vezes deseja pagar e vê o valor total, os juros e o valor de cada parcela antes de confirmar.
-                      </div>
-                    )}
+                    {!hasOnlinePayment && <label className="text-sm font-medium text-foreground mb-2 block">Forma de pagamento</label>}
                     {!hasOnlinePayment && <>
                       <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-2 mb-2 text-[11px] text-yellow-700 dark:text-yellow-400">
                         ⚠️ Se preferir pagar <strong>{deliveryType === 'pickup' ? 'no balcão ao retirar' : 'na hora da entrega'}</strong>, escolha a forma abaixo:
