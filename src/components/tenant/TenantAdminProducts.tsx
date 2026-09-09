@@ -1727,7 +1727,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
   }));
   const variantSalePrices = variantPrices.map(v => v.salePrice).filter(price => price > 0);
   const unavailableVariants = variantPrices.filter(v => v.in_stock === false);
-  const resaleReviewVariants = variantPrices.filter(v => v.needs_price_review && v.in_stock !== false);
+  const resaleReviewVariants = variantPrices.filter(v => v.in_stock !== false && v.salePrice <= 0);
   const referencePrice = Number(product.price) > 0
     ? Number(product.price)
     : (variantSalePrices.length > 0 ? Math.min(...variantSalePrices) : 0);

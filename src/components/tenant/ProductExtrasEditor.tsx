@@ -23,7 +23,9 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
   const [open, setOpen] = useState(false);
   const { data: variants = [] } = useProductVariants(productId);
   const { data: suppliers = [] } = useSuppliers(tenantId);
-  const variantsToReview = variants.filter(v => v.needs_price_review);
+  // Não confiar em flags antigas: uma variante com revenda salva não está
+  // pendente, mesmo que needs_price_review tenha ficado marcado no passado.
+  const variantsToReview = variants.filter(v => Number(v.suggested_price ?? 0) <= 0);
   const { data: addons = [] } = useProductAddons(open ? productId : undefined);
   const saveVariant = useSaveVariant();
   const deleteVariant = useDeleteVariant(productId);
@@ -127,7 +129,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
                     <>
                       <span className="text-primary text-[11px]">{Number(v.suggested_price ?? 0) > 0 ? `Revenda: R$${Number(v.suggested_price).toFixed(2)}` : 'Revenda pendente'}{v.cost_price != null && <span className="text-muted-foreground"> · Custo: R${normalizeVariantCost(v.cost_price, v.suggested_price ?? 0).toFixed(2)}</span>}</span>
                       {!v.in_stock && <span className="text-[10px] text-amber-500 font-bold" title="Esta cor não apareceu na última lista do fornecedor">⚠ não está na lista</span>}
-                      {v.in_stock && v.needs_price_review && <span className="text-[10px] text-amber-500 font-bold" title="Defina o preço de revenda desta cor para remover esta pendência">⚠ definir revenda</span>}
+                      {v.in_stock && Number(v.suggested_price ?? 0) <= 0 && <span className="text-[10px] text-amber-500 font-bold" title="Defina o preço de revenda desta cor para remover esta pendência">⚠ definir revenda</span>}
                       <button onClick={() => startVariantEdit(v)} className="text-muted-foreground hover:text-primary p-0.5" title="Editar preço"><Pencil className="h-3 w-3" /></button>
                     </>
                   )}
