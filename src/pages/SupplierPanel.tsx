@@ -37,6 +37,7 @@ type Product = {
   id: string; name: string; price: number; original_price?: number | null; in_stock: boolean; category: string; supplier_id: string | null;
   subcategory?: string | null; subcategory_ids?: string[] | null;
   stock_quantity: number | null;
+  supplierVariants?: { id: string; name: string; in_stock: boolean; unit_cost: number | null }[];
 };
 
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
@@ -187,15 +188,28 @@ const SupplierPanel = () => {
     const [{ data: own }, { data: offers }] = await Promise.all([
       supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id),
-      (supabase as any).from('supplier_variant_offers').select('product_id')
-        .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).limit(500),
+      (supabase as any).from('supplier_variant_offers').select('product_id, product_variant_id, unit_cost')
+        .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).eq('available', true).limit(500),
     ]);
     const ids = Array.from(new Set(((offers || []) as any[]).map(o => o.product_id).filter(Boolean)));
-    const { data: offered } = ids.length
-      ? await supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity').in('id', ids)
-      : { data: [] as any[] };
+    const variantIds = Array.from(new Set(((offers || []) as any[]).map(o => o.product_variant_id).filter(Boolean)));
+    const [{ data: offered }, { data: variants }] = await Promise.all([
+      ids.length
+        ? supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity').in('id', ids)
+        : Promise.resolve({ data: [] as any[] } as any),
+      variantIds.length
+        ? (supabase as any).from('product_variants').select('id, product_id, name, in_stock').in('id', variantIds)
+        : Promise.resolve({ data: [] as any[] } as any),
+    ]);
+    const costByVariant = new Map(((offers || []) as any[]).map(o => [o.product_variant_id, Number(o.unit_cost)]));
+    const variantsByProduct = new Map<string, Product['supplierVariants']>();
+    ((variants || []) as any[]).forEach(v => {
+      const list = variantsByProduct.get(v.product_id) || [];
+      list.push({ id: v.id, name: v.name, in_stock: v.in_stock === true || String(v.in_stock) === 'true', unit_cost: costByVariant.get(v.id) ?? null });
+      variantsByProduct.set(v.product_id, list);
+    });
     const merged = new Map<string, Product>();
-    [...((own as any[]) || []), ...((offered as any[]) || [])].forEach(p => merged.set(p.id, p as Product));
+    [...((own as any[]) || []), ...((offered as any[]) || [])].forEach(p => merged.set(p.id, { ...(p as Product), supplierVariants: variantsByProduct.get(p.id) || [] }));
     setProducts([...merged.values()]);
   }, [supplier]);
 
@@ -1110,6 +1124,24 @@ const SupplierPanel = () => {
                     {p.in_stock ? 'Em estoque' : 'Sem estoque'}
                   </button>
                 </div>
+                {(p.supplierVariants?.length ?? 0) > 0 && (
+                  <div className="rounded-md border border-border/60 bg-secondary/30 px-2.5 py-2 space-y-1.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Variações vencedoras deste fornecedor
+                    </p>
+                    {p.supplierVariants!.map(v => (
+                      <div key={v.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-foreground truncate">{v.name}</span>
+                        <span className="flex items-center gap-2 shrink-0">
+                          {v.unit_cost != null && <span className="text-muted-foreground">Custo R${v.unit_cost.toFixed(2)}</span>}
+                          <span className={v.in_stock ? 'text-green-400' : 'text-red-400'}>
+                            {v.in_stock ? 'Disponível' : 'Esgotada'}
+                          </span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {p.stock_quantity != null ? (
                   <div className="flex items-center gap-2 text-sm flex-wrap">
                     <span className="text-muted-foreground">Qtd:</span>
