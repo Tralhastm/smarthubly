@@ -766,25 +766,24 @@ const SupplierPanel = () => {
               if (variantError) warnings.push(`${entry.name} (cor ${color} não atualizada: ${variantError.message})`);
               const variant = old || (await (supabase as any).from('product_variants').select('id').eq('product_id', product.id).eq('name', color).limit(1).maybeSingle()).data;
               if (variant?.id && entry.cost != null && Number(entry.cost) > 0) {
-                const { error: offerError } = await (supabase as any).from('supplier_variant_offers').upsert({
-                  tenant_id: supplier.tenant_id,
-                  product_id: product.id,
-                  product_variant_id: variant.id,
-                  supplier_id: supplier.id,
-                  variant_name: color,
-                  variant_key: normalizedColor,
-                  unit_cost: Number(entry.cost),
-                  available: !unavailable,
-                  source: 'supplier_panel',
-                  last_seen_at: new Date().toISOString(),
-                }, { onConflict: 'supplier_id,product_id,variant_key' });
+                const { error: offerError } = await (supabase as any).rpc('upsert_supplier_variant_offer_by_token', {
+                  _token: token,
+                  _product_id: product.id,
+                  _product_variant_id: variant.id,
+                  _variant_name: color,
+                  _variant_key: normalizedColor,
+                  _unit_cost: Number(entry.cost),
+                  _available: !unavailable,
+                  _source: 'supplier_panel',
+                });
                 if (offerError) warnings.push(`${entry.name} (oferta da cor ${color} não atualizada: ${offerError.message})`);
               }
             }
-            const { error: staleError } = await (supabase as any).from('supplier_variant_offers')
-              .update({ available: false, last_seen_at: new Date().toISOString() })
-              .eq('product_id', product.id).eq('supplier_id', supplier.id)
-              .not('variant_key', 'in', `(${[...incomingNames].map(k => `"${k.replace(/"/g, '""')}"`).join(',') || '"__none__"'})`);
+            const { error: staleError } = await (supabase as any).rpc('hide_stale_supplier_variant_offers_by_token', {
+              _token: token,
+              _product_id: product.id,
+              _incoming_keys: [...incomingNames],
+            });
             if (staleError) {
               warnings.push(`${entry.name} (cores ausentes não ocultadas: ${staleError.message})`);
             }
