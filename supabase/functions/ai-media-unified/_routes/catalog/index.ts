@@ -64,6 +64,31 @@ function positiveNumber(value: unknown): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+/** Grade A nunca entra no catálogo operacional, mesmo se a IA a extrair. */
+function isGradeA(value: unknown): boolean {
+  const text = String(value || '');
+  return /\bgrade\s*[-_]?\s*a(?:\s*\+|\s+premium)?\b/i.test(text)
+    || /\ba\s*grade\b/i.test(text);
+}
+
+/** Remove seções Grade A de listas de texto antes do envio à IA. */
+function removeGradeABlocks(value: string): string {
+  const output: string[] = [];
+  let skipping = false;
+  for (const line of String(value || '').split(/\r?\n/)) {
+    const clean = line.trim();
+    const startsGradeA = /^[-=*_#\s]*(?:grade\s*[-_]?\s*a(?:\s*\+|\s+premium)?|a\s*grade)\b/i.test(clean);
+    const nextSection = /^[A-ZÀ-Ý0-9][A-ZÀ-Ý0-9 /&+._-]{2,45}$/.test(clean) && !isGradeA(clean);
+    if (startsGradeA) {
+      skipping = true;
+      continue;
+    }
+    if (skipping && nextSection) skipping = false;
+    if (!skipping) output.push(line);
+  }
+  return output.join('\n');
+}
+
 export async function catalog(req: Request, body?: any): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   
@@ -173,7 +198,7 @@ export async function catalog(req: Request, body?: any): Promise<Response> {
       }
       imageData = { data: b64, mimeType };
     } else {
-      text = String(content);
+      text = removeGradeABlocks(String(content));
     }
 
     const SYSTEM = `Você é um extrator inteligente de catálogos de fornecedores brasileiros. Extraia produtos, custos, preços de venda e variações sem inventar dados.`;
@@ -185,7 +210,8 @@ Regras:
 3. Se cores, capacidades ou outras opções do mesmo modelo tiverem preços diferentes, use como \"price\" o menor preço explícito e retorne cada opção em \"variants\": [{ \"name\": \"Preto\", \"price\": 1350, \"cost_price\": 1350, \"resale_price\": 0 }].
 4. Se todas as opções tiverem o mesmo preço, também pode retornar as opções, mas não crie diferença de preço. Nunca invente cor ou preço.
 5. Informe cost_price quando o catálogo der custo e resale_price quando der venda sugerida; use 0 quando ausente. Para cada variante, faça o mesmo.
-6. \"variations\" antigo pode ser mantido como complemento, mas \"variants\" deve conter as opções que têm preço próprio.`;
+6. \"variations\" antigo pode ser mantido como complemento, mas \"variants\" deve conter as opções que têm preço próprio.
+7. REGRA OBRIGATÓRIA: ignore completamente qualquer seção, produto ou variação identificada como Grade A, Grade-A, Grade A+, Grade A Premium ou A Grade. Nunca retorne esses itens, mesmo que tenham preço.`;
 
     let items: CatalogItem[] = [];
     let warnings: string[] = [];
@@ -198,7 +224,9 @@ Regras:
           imageData: imageData!,
           temperature: 0.1,
         });
-        items = res?.items || [];
+        items = (res?.items || [])
+          .filter((item: CatalogItem) => !isGradeA(item.name || item.product_name) && !isGradeA(item.category) && !isGradeA(item.description))
+          .map((item: CatalogItem) => ({ ...item, variants: Array.isArray(item.variants) ? item.variants.filter((variant: any) => !isGradeA(variant?.name)) : item.variants }));
         warnings = res?.warnings || [];
       } else {
         const res: any = await _callAiJson(admin, {
@@ -206,7 +234,9 @@ Regras:
           userPrompt: `CONTEÚDO:\n${text.slice(0, 30000)}\n\n${USER}`,
           temperature: 0.1,
         });
-        items = res?.items || [];
+        items = (res?.items || [])
+          .filter((item: CatalogItem) => !isGradeA(item.name || item.product_name) && !isGradeA(item.category) && !isGradeA(item.description))
+          .map((item: CatalogItem) => ({ ...item, variants: Array.isArray(item.variants) ? item.variants.filter((variant: any) => !isGradeA(variant?.name)) : item.variants }));
         warnings = res?.warnings || [];
       }
     } catch (e: any) {
