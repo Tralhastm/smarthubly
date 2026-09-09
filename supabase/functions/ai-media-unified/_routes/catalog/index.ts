@@ -221,6 +221,29 @@ Regras:
       const name = sourceName.toLowerCase();
       const catalogProduct = productsByKey.get(productMatchKey(sourceName));
       if (!catalogProduct) {
+        // Preços de fornecedor precisam ser persistidos mesmo quando o produto
+        // ainda não está no catálogo oficial. Caso contrário, o fornecedor é
+        // cadastrado, mas aparece com zero preços na comparação.
+        const unmatchedVariants = Array.isArray(it.variants) ? it.variants : [];
+        const unmatchedVariantPrices = unmatchedVariants.map((v: any) => positiveNumber(v.price ?? v.cost_price ?? v.resale_price)).filter(Boolean);
+        const unmatchedCost = positiveNumber(it.cost_price);
+        const unmatchedResale = positiveNumber(it.resale_price);
+        const unmatchedGeneric = positiveNumber(it.price ?? it.unit_price ?? it.preco);
+        const unmatchedFallback = unmatchedVariantPrices.length ? Math.min(...unmatchedVariantPrices) : unmatchedGeneric;
+        const unmatchedPrice = priceTypes.includes('cost') ? (unmatchedCost || unmatchedFallback) : (unmatchedResale || unmatchedGeneric || unmatchedFallback);
+        if (sourceName && Number.isFinite(unmatchedPrice) && unmatchedPrice > 0) {
+          const { error: unmatchedPriceError } = await admin.from('supplier_product_prices').upsert({
+            supplier_id: targetSupplierId,
+            product_name: sourceName.toLowerCase(),
+            unit_price: unmatchedPrice,
+            available: it.available ?? it.disponivel ?? true,
+            description: it.description || null,
+            variations: unmatchedVariants.length ? unmatchedVariants : (it.variations || null),
+            price_types: priceTypes,
+            metadata: { cost_price: unmatchedCost || null, resale_price: unmatchedResale || null, source_name: sourceName, unmatched_catalog_product: true },
+          }, { onConflict: 'supplier_id,product_name' });
+          if (unmatchedPriceError) warnings.push(`${sourceName}: falha ao salvar preço do fornecedor (${unmatchedPriceError.message})`);
+        }
         skipped++;
         if (sourceName) skippedProducts.push(sourceName);
         continue;

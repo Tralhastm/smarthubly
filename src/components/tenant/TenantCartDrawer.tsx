@@ -739,30 +739,47 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       const { data: supplierPrices } = supplierIds.length > 0
         ? await supabase
           .from('supplier_product_prices')
-          .select('supplier_id, product_name, unit_price')
+          .select('supplier_id, product_name, unit_price, variations')
           .in('supplier_id', supplierIds)
           .eq('available', true)
         : { data: [] as any[] };
 
+      const normalizeVariant = (value: unknown) => String(value || '').trim().toLocaleLowerCase('pt-BR');
+      const priceForItem = (sp: any, item: any) => {
+        const selectedVariant = normalizeVariant(item.variantName);
+        const variations = Array.isArray(sp.variations) ? sp.variations : [];
+        if (selectedVariant && variations.length > 0) {
+          const match = variations.find((v: any) => normalizeVariant(v?.name) === selectedVariant);
+          const variantPrice = Number(match?.cost_price ?? match?.price ?? match?.resale_price ?? 0);
+          if (Number.isFinite(variantPrice) && variantPrice > 0) return variantPrice;
+        }
+        return Number(sp.unit_price);
+      };
       const bestSuppliers = new Map<string, { supplier_id: string; price: number }>();
       (supplierPrices || []).forEach((sp: any) => {
-        const name = productMatchKey(sp.product_name);
-        // Prioriza menor preço de custo para fragmentação operacional
-        const cur = bestSuppliers.get(name);
-        if (!cur || Number(sp.unit_price) < cur.price) {
-          bestSuppliers.set(name, { supplier_id: sp.supplier_id, price: Number(sp.unit_price) });
-        }
+        items.forEach(item => {
+          const name = `${productMatchKey(sp.product_name)}::${normalizeVariant(item.variantName)}`;
+          const price = priceForItem(sp, item);
+          if (!Number.isFinite(price) || price <= 0) return;
+          // Prioriza menor preço de custo para fragmentação operacional
+          const cur = bestSuppliers.get(name);
+          if (!cur || price < cur.price) {
+            bestSuppliers.set(name, { supplier_id: sp.supplier_id, price });
+          }
+        });
       });
 
       const fragments = new Map<string, typeof items>();
       items.forEach(item => {
-        const best = bestSuppliers.get(productMatchKey(item.product.name));
-        // Variações novas exigem escolha manual: não usar o fornecedor de menor preço
-        // quando a cor ainda não possui supplier_id definido.
+        const bestByNameAndVariant = bestSuppliers.get(`${productMatchKey(item.product.name)}::${normalizeVariant(item.variantName)}`);
         const bestVariant = item.variantId ? bestVariantSuppliers.get(item.variantId) : null;
-        const targetSupplierId = item.variantId
-          ? (bestVariant?.supplier_id || item.variantSupplierId)
-          : (best?.supplier_id || (item.product as any).supplier_id);
+        // Primeiro usa a oferta por variante já cadastrada; se ela ainda não
+        // existir, usa o catálogo do fornecedor por nome + cor; por último,
+        // preserva o fornecedor originalmente vinculado ao produto.
+        const targetSupplierId = bestVariant?.supplier_id
+          || bestByNameAndVariant?.supplier_id
+          || item.variantSupplierId
+          || (item.product as any).supplier_id;
         if (targetSupplierId) {
           const list = fragments.get(targetSupplierId) || [];
           list.push(item);
