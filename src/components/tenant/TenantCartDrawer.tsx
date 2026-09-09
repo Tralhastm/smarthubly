@@ -706,6 +706,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     }
 
     try {
+      const courierCode = `MT-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       // Atribui supplier_id sempre que houver produto vinculado a um fornecedor.
       // Assim o pedido cai no painel do fornecedor responsável.
       // Lógica de Fragmentação Inteligente (Best Price):
@@ -790,6 +791,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           delivery_type: deliveryType,
           delivery_fee: deliveryType === 'delivery' ? (effectiveDeliveryFee + shippingFee) : 0,
           payment_method: infinitePayTap ? 'infinitepay_tap' : payOnline ? (isInfinitePay ? 'infinitepay_pix' : isAsaasActive ? 'asaas_online' : 'mercadopago') : paymentMethod,
+          payment_received: simulateApproved ? true : null,
           customer_name: name,
           customer_phone: phone.replace(/\D/g, ''),
           customer_email: email.trim() || null,
@@ -815,6 +817,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             online_fee_pass_through_enabled: payOnline && paymentFeePassThroughEnabled,
             online_fee_pass_through_percent: 0,
             online_payment_method: payOnline ? onlinePaymentMethod : null,
+            courier_code: courierCode,
             online_fee_pass_through_amount: 0
           }
         } as any,
