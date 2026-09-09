@@ -729,6 +729,7 @@ const SupplierPanel = () => {
     const notFound: string[] = [];
     const invalid: string[] = [];
     const warnings: string[] = [];
+    const incomingByProduct = new Map<string, Set<string>>();
     try {
       for (const entry of entries) {
         const product = entry.aliases.map(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
@@ -782,18 +783,23 @@ const SupplierPanel = () => {
                 if (offerError) warnings.push(`${entry.name} (oferta da cor ${color} não atualizada: ${offerError.message})`);
               }
             }
-            const { error: staleError } = await (supabase as any).rpc('hide_stale_supplier_variant_offers_by_token', {
-              _token: token,
-              _product_id: product.id,
-              _incoming_keys: [...incomingNames],
-            });
-            if (staleError) {
-              warnings.push(`${entry.name} (cores ausentes não ocultadas: ${staleError.message})`);
-            }
+            const allIncoming = incomingByProduct.get(product.id) || new Set<string>();
+            incomingNames.forEach(name => allIncoming.add(name));
+            incomingByProduct.set(product.id, allIncoming);
           }
         }
         updated.push(entry.name);
         Object.assign(product, patch);
+      }
+      for (const [productId, incomingKeys] of incomingByProduct) {
+        const { error: staleError } = await (supabase as any).rpc('hide_stale_supplier_variant_offers_by_token', {
+          _token: token,
+          _product_id: productId,
+          _incoming_keys: [...incomingKeys],
+        });
+        if (staleError) {
+          warnings.push(`Produto ${productId} (cores ausentes não ocultadas: ${staleError.message})`);
+        }
       }
       setProducts([...products]);
       setImportResult({ updated, notFound, invalid, warnings });
