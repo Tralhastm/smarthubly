@@ -58,12 +58,12 @@ BEGIN
            FROM public.supplier_variant_offers svo
           WHERE svo.supplier_id = _supplier_id
             AND svo.available = true
-            AND (svo.product_variant_id = NULLIF(item->>'variantId', '')
+            AND (svo.product_variant_id::text = NULLIF(item->>'variantId', '')
                  OR (svo.product_id = NULLIF(item->'product'->>'id', '')
                      AND svo.variant_key = lower(trim(COALESCE(item->>'variantName', item->>'variant_name', '')))))
-          ORDER BY (svo.product_variant_id = NULLIF(item->>'variantId', '')) DESC, svo.updated_at DESC
+          ORDER BY (svo.product_variant_id::text = NULLIF(item->>'variantId', '')) DESC, svo.updated_at DESC
           LIMIT 1),
-        (SELECT pv.cost_price FROM public.product_variants pv WHERE pv.id = NULLIF(item->>'variantId', '')),
+        (SELECT pv.cost_price FROM public.product_variants pv WHERE pv.id::text = NULLIF(item->>'variantId', '')),
         (item->>'product_price')::numeric,
         0
       )
@@ -83,7 +83,7 @@ BEGIN
       _variant_name := COALESCE(_fragment_item->>'variantName', _fragment_item->>'variant_name', '');
       UPDATE public.order_items
          SET supplier_id = _supplier_id
-       WHERE order_id = _id
+         AND order_id = _id::text
          AND product_name = _product_name
          AND COALESCE(variant_name, '') = _variant_name;
     END LOOP;
