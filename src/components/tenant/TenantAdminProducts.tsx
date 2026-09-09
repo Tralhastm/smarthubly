@@ -70,13 +70,22 @@ const sameProductModel = (left: unknown, right: unknown) => {
   const a = normalizeProductName(left);
   const b = normalizeProductName(right);
   if (a === b) return true;
+  // Fornecedores frequentemente omitem a marca em blocos conhecidos:
+  // “17 PRO 256” precisa casar com “iPhone 17 Pro 256GB”, sem misturar
+  // capacidades ou modelos diferentes.
+  const stripKnownBrand = (value: string) => value
+    .replace(/^(?:iphone|galaxy|samsung)\s+/i, '')
+    .trim();
+  const aWithoutBrand = stripKnownBrand(a);
+  const bWithoutBrand = stripKnownBrand(b);
+  if (aWithoutBrand === bWithoutBrand) return true;
   const aCapacities = productCapacities(left);
   const bCapacities = productCapacities(right);
   // Se os dois lados informam capacidade, ela precisa ser igual para não
   // confundir, por exemplo, um Pro Max 256GB com um Pro Max 512GB.
   if (aCapacities.length && bCapacities.length && aCapacities.join('|') !== bCapacities.join('|')) return false;
   const withoutCapacity = (value: string) => value.replace(/\b\d+\s*(?:gb|tb)\b/g, '').replace(/\s+/g, ' ').trim();
-  return withoutCapacity(a) === withoutCapacity(b);
+  return withoutCapacity(aWithoutBrand) === withoutCapacity(bWithoutBrand);
 };
 
 const DEFAULT_BULK_DESCRIPTION_RULES = `Siga obrigatoriamente este formato editorial, sem alterar a ordem e sem usar marcadores, bullets ou títulos técnicos:
