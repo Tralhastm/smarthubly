@@ -77,8 +77,15 @@ function removeGradeABlocks(value: string): string {
   let skipping = false;
   for (const line of String(value || '').split(/\r?\n/)) {
     const clean = line.trim();
-    const startsGradeA = /^[-=*_#\s]*(?:grade\s*[-_]?\s*a(?:\s*\+|\s+premium)?|a\s*grade)\b/i.test(clean);
-    const nextSection = /^[A-ZÀ-Ý0-9][A-ZÀ-Ý0-9 /&+._-]{2,45}$/.test(clean) && !isGradeA(clean);
+    // Não confundir cabeçalhos mistos como "APPLE NOVOS, GRADE A e DRONES"
+    // com o início do bloco proibido. O bloco operacional é Grade A/Premium.
+    const startsGradeA = /\bgrade\s*[-_]?\s*a\s*(?:\+\s*)?premium\b/i.test(clean)
+      || (/\b(?:grade\s*[-_]?\s*a|a\s*grade)\b/i.test(clean)
+        && !/\b(?:novos?|drones?)\b/i.test(clean));
+    const header = clean.replace(/[^A-Za-zÀ-Ý0-9 /&+._-]/g, ' ').replace(/\s+/g, ' ').trim();
+    const nextSection = header.length >= 3 && header.length <= 45
+      && header === header.toLocaleUpperCase('pt-BR')
+      && !isGradeA(header);
     if (startsGradeA) {
       skipping = true;
       continue;
