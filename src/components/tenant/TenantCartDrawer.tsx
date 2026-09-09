@@ -722,22 +722,38 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         .select('id')
         .eq('tenant_id', tenant.id);
       const supplierIds = (tenantSuppliers || []).map((s: any) => s.id).filter(Boolean);
+      const normalizeVariant = (value: unknown) => String(value || '').trim().toLocaleLowerCase('pt-BR');
       const { data: supplierVariantOffers } = supplierIds.length > 0
         ? await (supabase as any)
           .from('supplier_variant_offers')
-          .select('product_variant_id, supplier_id, unit_cost')
+          .select('product_id, product_variant_id, supplier_id, variant_name, variant_key, unit_cost, products(name)')
           .in('supplier_id', supplierIds)
           .eq('available', true)
         : { data: [] as any[] };
       const bestVariantSuppliers = new Map<string, { supplier_id: string; price: number }>();
+      const bestVariantSuppliersByIdentity = new Map<string, { supplier_id: string; price: number }>();
       (supplierVariantOffers || []).forEach((offer: any) => {
-        if (!offer.product_variant_id) return;
-        const current = bestVariantSuppliers.get(offer.product_variant_id);
-        if (!current || Number(offer.unit_cost) < current.price) {
-          bestVariantSuppliers.set(offer.product_variant_id, {
-            supplier_id: offer.supplier_id,
-            price: Number(offer.unit_cost),
-          });
+        const price = Number(offer.unit_cost);
+        if (!Number.isFinite(price) || price < 0) return;
+        if (offer.product_variant_id) {
+          const current = bestVariantSuppliers.get(offer.product_variant_id);
+          if (!current || price < current.price) {
+            bestVariantSuppliers.set(offer.product_variant_id, {
+              supplier_id: offer.supplier_id,
+              price,
+            });
+          }
+        }
+        const offerProductName = offer.products?.name || offer.product_name || '';
+        const offerIdentity = `${productMatchKey(offerProductName)}::${normalizeVariant(offer.variant_key || offer.variant_name)}`;
+        if (offerProductName && offerIdentity.startsWith('::') === false) {
+          const currentByIdentity = bestVariantSuppliersByIdentity.get(offerIdentity);
+          if (!currentByIdentity || price < currentByIdentity.price) {
+            bestVariantSuppliersByIdentity.set(offerIdentity, {
+              supplier_id: offer.supplier_id,
+              price,
+            });
+          }
         }
       });
       const { data: supplierPrices } = supplierIds.length > 0
@@ -748,7 +764,6 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           .eq('available', true)
         : { data: [] as any[] };
 
-      const normalizeVariant = (value: unknown) => String(value || '').trim().toLocaleLowerCase('pt-BR');
       const priceForItem = (sp: any, item: any) => {
         const selectedVariant = normalizeVariant(item.variantName);
         const variations = Array.isArray(sp.variations) ? sp.variations : [];
@@ -777,10 +792,12 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       items.forEach(item => {
         const bestByNameAndVariant = bestSuppliers.get(`${productMatchKey(item.product.name)}::${normalizeVariant(item.variantName)}`);
         const bestVariant = item.variantId ? bestVariantSuppliers.get(item.variantId) : null;
+        const bestVariantByIdentity = bestVariantSuppliersByIdentity.get(`${productMatchKey(item.product.name)}::${normalizeVariant(item.variantName)}`);
         // Primeiro usa a oferta por variante já cadastrada; se ela ainda não
         // existir, usa o catálogo do fornecedor por nome + cor; por último,
         // preserva o fornecedor originalmente vinculado ao produto.
-        const targetSupplierId = bestVariant?.supplier_id
+        const targetSupplierId = bestVariantByIdentity?.supplier_id
+          || bestVariant?.supplier_id
           || bestByNameAndVariant?.supplier_id
           || item.variantSupplierId
           || (item.product as any).supplier_id;
