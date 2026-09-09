@@ -805,6 +805,13 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           tenant_id: tenant.id,
           total: payOnline ? onlineTotal : finalTotal,
           platform_fee: platformFee,
+          // A tabela orders exige estes campos para todos os pedidos, inclusive
+          // no botão de simulação. O valor real da plataforma continua em
+          // platform_fee; estes campos representam a taxa do gateway quando
+          // houver cobrança online.
+          fee_percent: payOnline ? Number((tenant as any).payment_fee_percent ?? 0) : 0,
+          fee_fixed_amount: 0,
+          fee_total: 0,
           delivery_type: deliveryType,
           delivery_fee: deliveryType === 'delivery' ? (effectiveDeliveryFee + shippingFee) : 0,
           payment_method: infinitePayTap ? 'infinitepay_tap' : payOnline ? (isInfinitePay ? 'infinitepay_pix' : isAsaasActive ? 'asaas_online' : 'mercadopago') : paymentMethod,
