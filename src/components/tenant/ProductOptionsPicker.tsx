@@ -23,7 +23,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   const [notes, setNotes] = useState('');
   const displayPrice = (value: number) => showPixPrice ? grossUpPaymentFee(value, 0.99) : value;
   const availableVariants = variants.filter(v =>
-    Boolean(v.in_stock) &&
+    v.in_stock !== false && v.in_stock !== 'false' &&
     ((v as any).allow_loss || (product as any).allow_loss || hasPositiveFinalProfit(
       v.suggested_price ?? (product.price + Number(v.price_delta || 0)),
       v.cost_price ?? (product as any).original_price,
