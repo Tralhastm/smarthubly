@@ -930,6 +930,30 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       }
     }
 
+    // Depois de cada lista, nenhuma variação sem oferta ativa de qualquer
+    // fornecedor pode continuar vendável na vitrine. Isso evita manter uma
+    // associação antiga quando o item desaparece das duas listas.
+    const { data: tenantVariantRows, error: noOfferReadError } = await supabase
+      .from('product_variants' as any)
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .limit(500);
+    const { data: activeOfferRows } = await supabase
+      .from('supplier_variant_offers' as any)
+      .select('product_variant_id')
+      .eq('tenant_id', tenantId)
+      .eq('available', true)
+      .limit(1000);
+    const activeIds = new Set((activeOfferRows || []).map((row: any) => row.product_variant_id));
+    const ids = (tenantVariantRows || []).map((row: any) => row.id).filter((id: string) => id && !activeIds.has(id));
+    if (!noOfferReadError && ids.length) {
+      const { error: noOfferUpdateError } = await supabase
+        .from('product_variants' as any)
+        .update({ in_stock: false, supplier_id: null, needs_price_review: true, updated_at: new Date().toISOString() })
+        .in('id', ids);
+      if (noOfferUpdateError) throw noOfferUpdateError;
+    }
+
     await queryClient.invalidateQueries({ queryKey: ['product-variants'] });
     await queryClient.invalidateQueries({ queryKey: ['tenant-product-variants', tenantId] });
     await refetch();
