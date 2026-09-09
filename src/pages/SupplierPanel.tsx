@@ -685,7 +685,10 @@ const SupplierPanel = () => {
           const aliases = [name];
           if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
           const colors = extractColors(line);
-          entries.push({ name, cost: null, resale: price, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], aliases });
+          // Em listas de fornecedor no formato “Produto - R$ preço”, o valor
+          // é o custo de compra. Revenda só deve ser preenchida quando vier
+          // explicitamente identificada como venda/revenda.
+          entries.push({ name, cost: price, resale: null, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], aliases });
           nextUnavailable = false;
         }
         continue;
