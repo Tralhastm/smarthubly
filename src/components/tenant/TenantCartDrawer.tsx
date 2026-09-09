@@ -604,12 +604,14 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       ? document.querySelector<HTMLInputElement>('input[placeholder="000.000.000-00"]')
       : null;
     const submittedDocumentNumber = documentNumber || documentInput?.value || '';
-    if (deliveryType === 'delivery' && checkingDelivery) {
+    // O modo demo valida o pedido e o pagamento sem exigir um motoboy online.
+    // O pagamento oficial continua bloqueado até a disponibilidade ser confirmada.
+    if (!simulateApproved && deliveryType === 'delivery' && checkingDelivery) {
       toast({ title: 'Aguarde o cálculo do frete', description: 'Estamos validando a disponibilidade de motoboys para calcular o valor correto.', variant: 'destructive' });
       return;
     }
     const needsDistance = deliveryType === 'delivery' && !isDropshipping;
-    if (deliveryType === 'delivery' && (checkingDelivery || distanceError || (isDropshipping && (!freightEstimate || effectiveDeliveryFee <= 0)))) {
+    if (deliveryType === 'delivery' && (!simulateApproved && checkingDelivery || distanceError || (isDropshipping && (!freightEstimate || effectiveDeliveryFee <= 0)))) {
       toast({ title: 'Frete indisponível para este endereço', description: distanceError || 'Calcule o frete antes de prosseguir.', variant: 'destructive' });
       return;
     }
@@ -679,7 +681,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     // (a menos que o cliente já tenha confirmado mudar pra retirada)
     // Quando o lojista desativa o fallback de retirada (pickup_as_delivery_fallback=false),
     // o pedido segue como delivery mesmo sem motoboy — cliente organiza a própria retirada.
-    if (pickupAsFallback && deliveryType === 'delivery' && deliveryCheck && !deliveryCheck.has_delivery && !pickupOnlyConfirmed) {
+    if (!simulateApproved && pickupAsFallback && deliveryType === 'delivery' && deliveryCheck && !deliveryCheck.has_delivery && !pickupOnlyConfirmed) {
       setShowPickupOnlyModal(true);
       return;
     }
