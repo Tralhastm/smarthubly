@@ -232,7 +232,9 @@ const SupplierPanel = () => {
         return;
       }
 
-      // Filter seguro: pedido direto deste fornecedor ou fragmento destinado a ele.
+      // Filter seguro: pedido direto deste fornecedor, fragmento destinado a ele
+      // ou item individual roteado para ele. Em pedidos mistos, cada item já
+      // carrega o fornecedor vencedor mesmo quando o fragmento ainda não existe.
       // O endereço continua visível aqui no painel autenticado pelo token; ele não
       // é usado na mensagem de WhatsApp.
       const allOrders = (data as any[]) || [];
@@ -240,12 +242,22 @@ const SupplierPanel = () => {
         .select('order_id, items').eq('supplier_id', supplier.id).limit(500);
       const fragmentByOrder = new Map<string, any>();
       ((fragments || []) as any[]).forEach(f => fragmentByOrder.set(f.order_id, f));
-      const relevantOrders = allOrders.filter(o => o.supplier_id === supplier.id || fragmentByOrder.has(o.id))
+      const relevantOrders = allOrders.filter(o =>
+        o.supplier_id === supplier.id ||
+        fragmentByOrder.has(o.id) ||
+        (o.order_items || []).some((i: any) => i.supplier_id === supplier.id)
+      )
         .map(o => {
           const fragment = fragmentByOrder.get(o.id);
-          if (!fragment?.items) return o;
-          const allowed = new Set((fragment.items || []).map((i: any) => `${i.product_name}::${i.variant_name || ''}`));
-          return { ...o, order_items: (o.order_items || []).filter((i: any) => allowed.has(`${i.product_name}::${i.variant_name || ''}`)) };
+          if (fragment?.items) {
+            const allowed = new Set((fragment.items || []).map((i: any) => `${i.product_name}::${i.variant_name || ''}`));
+            return { ...o, order_items: (o.order_items || []).filter((i: any) => allowed.has(`${i.product_name}::${i.variant_name || ''}`)) };
+          }
+          const hasRoutedItems = (o.order_items || []).some((i: any) => i.supplier_id);
+          if (hasRoutedItems) {
+            return { ...o, order_items: (o.order_items || []).filter((i: any) => i.supplier_id === supplier.id) };
+          }
+          return o;
         }) as OrderWithItems[];
 
       console.log('[SupplierPanel] fetched', allOrders.length, 'total orders,', relevantOrders.length, 'relevant for supplier', supplier.id);
