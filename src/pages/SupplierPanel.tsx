@@ -704,6 +704,9 @@ const SupplierPanel = () => {
       const aliases = [...entry.aliases];
       const compact = normalizeSupplierProductName(entry.name);
       if (/^\d/.test(compact)) aliases.push(`iphone ${entry.name}`);
+      // Alguns cadastros antigos guardam “IPHONE 17E” sem capacidade,
+      // enquanto a lista do fornecedor informa “17E 256GB”.
+      if (/^17e\b/i.test(compact)) aliases.push('iphone 17e');
       if (/^(?:se\b|serie\b|s[eé]rie\b)/i.test(compact)) aliases.push(`apple watch ${entry.name}`);
       return { ...entry, aliases: [...new Set(aliases)] };
     });
