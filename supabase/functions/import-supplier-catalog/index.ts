@@ -493,6 +493,13 @@ interface CatalogItem {
   variants?: Array<{ name?: string; price?: number; cost_price?: number; resale_price?: number; available?: boolean }>;
 }
 
+const normalizeMatch = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/\s+/g, ' ')
+  .trim();
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -575,6 +582,22 @@ Deno.serve(async (req) => {
       return json({ error: "forbidden" }, 403);
     }
 
+    // Cada lista representa o estado atual do fornecedor. Itens que não
+    // aparecem na nova lista deixam de ser ofertas ativas antes do recálculo.
+    // Isso evita manter associações antigas e impede que um único fornecedor
+    // fique majoritariamente preso aos produtos da loja.
+    if (merge) {
+      await admin.from("supplier_product_prices")
+        .update({ available: false })
+        .eq("supplier_id", supplierId);
+    }
+    {
+      await admin.from("supplier_variant_offers")
+        .update({ available: false, last_seen_at: new Date().toISOString() })
+        .eq("supplier_id", supplierId)
+        .eq("tenant_id", supplier.tenant_id);
+    }
+
     let text = "";
     let imageData: { data: string; mimeType: string } | undefined;
 
@@ -652,6 +675,46 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
 
     let skipped = 0;
 
+    const { data: catalogProducts } = await admin
+      .from("products")
+      .select("id, name")
+      .eq("tenant_id", supplier.tenant_id);
+    const { data: catalogVariants } = await admin
+      .from("product_variants")
+      .select("id, product_id, name")
+      .eq("tenant_id", supplier.tenant_id);
+    const productsByName = new Map((catalogProducts || []).map((p: any) => [normalizeMatch(p.name), p]));
+    const variantsByProduct = new Map<string, Map<string, any>>();
+    for (const v of catalogVariants || []) {
+      if (!variantsByProduct.has(v.product_id)) variantsByProduct.set(v.product_id, new Map());
+      variantsByProduct.get(v.product_id)!.set(normalizeMatch(v.name), v);
+    }
+
+    const saveVariantOffers = async (it: CatalogItem, itemName: string) => {
+      if (!Array.isArray(it.variants) || it.variants.length === 0) return;
+      const product = productsByName.get(normalizeMatch(itemName));
+      if (!product) return;
+      const productVariants = variantsByProduct.get(product.id) || new Map();
+      for (const rawVariant of it.variants) {
+        const variantName = String(rawVariant.name || '').trim();
+        const variant = productVariants.get(normalizeMatch(variantName));
+        const cost = Number(rawVariant.cost_price ?? rawVariant.price ?? NaN);
+        if (!variant || !variantName || !Number.isFinite(cost) || cost <= 0) continue;
+        await admin.from("supplier_variant_offers").upsert({
+          tenant_id: supplier.tenant_id,
+          product_id: product.id,
+          product_variant_id: variant.id,
+          supplier_id: supplierId,
+          variant_name: variantName,
+          variant_key: normalizeMatch(variantName),
+          unit_cost: cost,
+          available: rawVariant.available !== false,
+          source: 'supplier_list',
+          last_seen_at: new Date().toISOString(),
+        }, { onConflict: 'supplier_id,product_id,variant_key' });
+      }
+    };
+
     if (!merge) {
       await admin.from("supplier_product_prices").delete().eq("supplier_id", supplierId);
       for (const it of items) {
@@ -671,8 +734,15 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           price_types: priceType === 'both' ? ['cost', 'resale'] : [priceType],
           metadata: { profit_margin: profitMargin, shipping_fee: shippingFee, resale_price: Number.isFinite(resale) && resale > 0 ? resale : null, category: it.category ?? it.categoria ?? null, variants: Array.isArray(it.variants) ? it.variants : [] }
         });
+        await saveVariantOffers(it, name);
       }
-      return json({ total: items.length, skipped, warnings, items: items.slice(0, 100) });
+      const { data: reconciliation, error: reconciliationError } = await admin
+        .rpc('reconcile_supplier_catalog', { p_supplier_id: supplierId });
+      if (reconciliationError) {
+        console.error('[import-supplier-catalog] reconciliação erro:', reconciliationError);
+        return json({ error: 'supplier_reconciliation_failed', detail: reconciliationError.message }, 500);
+      }
+      return json({ total: items.length, skipped, reconciliation, warnings, items: items.slice(0, 100) });
     }
 
     // merge=true: upsert (conflito supplier_id,product_name) — preserva preços manuais
@@ -701,6 +771,14 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
         console.error("[import-supplier-catalog] upsert erro:", error);
         skipped++;
       }
+      await saveVariantOffers(it, name);
+    }
+
+    const { data: reconciliation, error: reconciliationError } = await admin
+      .rpc('reconcile_supplier_catalog', { p_supplier_id: supplierId });
+    if (reconciliationError) {
+      console.error('[import-supplier-catalog] reconciliação erro:', reconciliationError);
+      return json({ error: 'supplier_reconciliation_failed', detail: reconciliationError.message }, 500);
     }
 
     const { count: saved, error: cErr } = await admin
@@ -709,12 +787,10 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
       .eq("supplier_id", supplierId);
     if (cErr) console.error("[import-supplier-catalog] count erro:", cErr);
 
-    return json({ total: items.length, saved: saved || 0, skipped, warnings, items: items.slice(0, 100) });
+    return json({ total: items.length, saved: saved || 0, skipped, reconciliation, warnings, items: items.slice(0, 100) });
   } catch (e: any) {
     console.error("[import-supplier-catalog] erro:", e);
     return json({ error: String(e?.message || e) }, 500);
   }
 });
-
-
 
