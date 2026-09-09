@@ -82,11 +82,11 @@ export const useAddProduct = () => {
       if (product.tenant_id) {
         const { data: candidates, error: lookupError } = await supabase
           .from('products')
-          .select('id,name,category,item_type,condition')
+          .select('id,name,category,item_type,condition,manual_blocked')
           .eq('tenant_id', product.tenant_id)
           .limit(1000);
         if (lookupError) throw lookupError;
-        const duplicate = (candidates || []).find((candidate: any) => sameCatalogIdentity(candidate, product));
+        const duplicate = (candidates || []).find((candidate: any) => !candidate.manual_blocked && sameCatalogIdentity(candidate, product));
         if (duplicate) {
           throw new Error('Já existe um produto com o mesmo nome, categoria, tipo e condição nesta loja. Edite o cadastro existente ou altere esses dados.');
         }
