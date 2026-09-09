@@ -22,14 +22,21 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   const [addonQty, setAddonQty] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const displayPrice = (value: number) => showPixPrice ? grossUpPaymentFee(value, 0.99) : value;
+  const availableVariants = variants.filter(v =>
+    Boolean(v.in_stock) &&
+    ((v as any).allow_loss || (product as any).allow_loss || hasPositiveFinalProfit(
+      v.suggested_price ?? (product.price + Number(v.price_delta || 0)),
+      v.cost_price ?? (product as any).original_price,
+    ))
+  );
 
   // Auto-seleciona primeira variante disponível
   useEffect(() => {
-    if (variants.length > 0 && !selectedVariant) {
-      const first = variants.find(v => v.in_stock && ((v as any).allow_loss || (product as any).allow_loss || hasPositiveFinalProfit(v.suggested_price ?? (product.price + Number(v.price_delta || 0)), v.cost_price ?? (product as any).original_price)));
+    if (availableVariants.length > 0 && !selectedVariant) {
+      const first = availableVariants[0];
       if (first) setSelectedVariant(first);
     }
-  }, [variants, selectedVariant, product]);
+  }, [availableVariants, selectedVariant, product]);
 
   const updateAddon = (id: string, delta: number, max: number) => {
     setAddonQty(prev => {
@@ -88,25 +95,20 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
         {/* Conteúdo */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Variantes */}
-          {variants.length > 0 && (
+          {availableVariants.length > 0 && (
             <div>
               <h4 className="text-sm font-medium text-foreground mb-2">Cores disponíveis e preços</h4>
               <div className="space-y-1.5">
-                {variants.map(v => {
+                {availableVariants.map(v => {
                   const variantPrice = Number(v.suggested_price ?? (product.price + Number(v.price_delta || 0)));
-                  const profitable = hasPositiveFinalProfit(variantPrice, v.cost_price ?? (product as any).original_price);
-                  const available = Boolean(v.in_stock) && ((v as any).allow_loss || (product as any).allow_loss || profitable);
                   return (
                   <button
                     key={v.id}
-                    onClick={() => available && setSelectedVariant(v)}
-                    disabled={!available}
+                    onClick={() => setSelectedVariant(v)}
                     className={`w-full flex items-center justify-between rounded-lg border px-3 py-2.5 text-sm transition ${
                       selectedVariant?.id === v.id
                         ? 'border-primary bg-primary/10 text-foreground'
-                            : available
-                          ? 'border-border bg-secondary text-foreground hover:border-primary/40'
-                          : 'border-border bg-secondary opacity-50 cursor-not-allowed'
+                            : 'border-border bg-secondary text-foreground hover:border-primary/40'
                     }`}
                   >
                     <span className="flex items-center gap-2">
@@ -116,7 +118,6 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
                         {selectedVariant?.id === v.id && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                       </span>
                       <span>{v.name}</span>
-                          {!available && <span className="text-[10px] text-muted-foreground">({profitable ? 'esgotado' : 'indisponível por prejuízo'})</span>}
                     </span>
                     <span className="text-xs font-medium text-primary">
                       R${displayPrice(variantPrice).toFixed(2)}
