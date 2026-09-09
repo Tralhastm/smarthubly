@@ -123,6 +123,16 @@ export async function catalog(req: Request, body?: any): Promise<Response> {
       return json({ error: "forbidden" }, 403);
     }
 
+    // A lista enviada substitui o estado anterior deste fornecedor. Ofertas
+    // ausentes deixam de participar da escolha do menor custo.
+    await admin.from('supplier_product_prices')
+      .update({ available: false })
+      .eq('supplier_id', targetSupplierId);
+    await admin.from('supplier_variant_offers')
+      .update({ available: false, last_seen_at: new Date().toISOString() })
+      .eq('supplier_id', targetSupplierId)
+      .eq('tenant_id', supplier.tenant_id);
+
     let text = "";
     let imageData: { data: string; mimeType: string } | undefined;
 
@@ -322,6 +332,27 @@ Regras:
             };
             if (old) await admin.from('product_variants').update(row).eq('id', old.id);
             else await admin.from('product_variants').insert(row);
+
+            const savedVariant = old || (await admin.from('product_variants')
+              .select('id')
+              .eq('product_id', catalogProduct.id)
+              .eq('tenant_id', targetTenantId)
+              .ilike('name', variantName)
+              .maybeSingle()).data;
+            if (savedVariant?.id && variantCost > 0) {
+              await admin.from('supplier_variant_offers').upsert({
+                tenant_id: targetTenantId,
+                product_id: catalogProduct.id,
+                product_variant_id: savedVariant.id,
+                supplier_id: targetSupplierId,
+                variant_name: variantName,
+                variant_key: productMatchKey(variantName),
+                unit_cost: variantCost,
+                available: incoming.available ?? incoming.disponivel ?? true,
+                source: 'supplier_list',
+                last_seen_at: new Date().toISOString(),
+              }, { onConflict: 'supplier_id,product_id,variant_key' });
+            }
           }
           const staleIds = current
             .filter((v: any) => !incomingNames.has(String(v.name).trim().toLocaleLowerCase('pt-BR')))
@@ -332,7 +363,13 @@ Regras:
       }
     }
 
-    return json({ total: items.length, updated: matchedProducts.length, skipped, skippedProducts: skippedProducts.slice(0, 100), matchedProducts: matchedProducts.slice(0, 100), warnings, alerts: results.slice(0, 20), items: items.slice(0, 100), products: items.slice(0, 100) });
+    const { data: reconciliation, error: reconciliationError } = await admin
+      .rpc('reconcile_supplier_catalog', { p_supplier_id: targetSupplierId });
+    if (reconciliationError) {
+      warnings.push(`Falha ao recalcular fornecedores e estoque: ${reconciliationError.message}`);
+    }
+
+    return json({ total: items.length, updated: matchedProducts.length, skipped, reconciliation, skippedProducts: skippedProducts.slice(0, 100), matchedProducts: matchedProducts.slice(0, 100), warnings, alerts: results.slice(0, 20), items: items.slice(0, 100), products: items.slice(0, 100) });
 
   } catch (e) {
     console.error("[catalog] error", e);
