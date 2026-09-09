@@ -597,6 +597,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   }, [items, tenant, isDropshipping]);
 
   const submitOrder = async (viaWhatsApp: boolean, payOnline = false, simulateApproved = false, waAlreadySent = false) => {
+    if (creatingPayment || addOrderMutation.isPending) return;
     // Alguns autofills/navegadores alteram o input controlado sem disparar o evento React.
     // Leia o campo no envio para garantir que o CPF/CNPJ seja persistido no pedido.
     const documentInput = typeof document !== 'undefined'
@@ -705,6 +706,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       return;
     }
 
+    setCreatingPayment(true);
     try {
       const courierCode = `MT-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       // Atribui supplier_id sempre que houver produto vinculado a um fornecedor.
@@ -815,6 +817,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           delivery_type: deliveryType,
           delivery_fee: deliveryType === 'delivery' ? (effectiveDeliveryFee + shippingFee) : 0,
           payment_method: infinitePayTap ? 'infinitepay_tap' : payOnline ? (isInfinitePay ? 'infinitepay_pix' : isAsaasActive ? 'asaas_online' : 'mercadopago') : paymentMethod,
+          payment_provider: simulateApproved ? 'demo' : (payOnline ? (isInfinitePay ? 'infinitepay' : isAsaasActive ? 'asaas' : ((tenant as any).payment_provider || 'mercadopago')) : null),
+          payment_external_id: simulateApproved ? `demo:${courierCode}` : null,
+          payment_flow: simulateApproved ? 'online_demo' : (infinitePayTap ? 'delivery_tap' : (payOnline ? 'online' : 'delivery')),
           payment_received: simulateApproved ? true : null,
           customer_name: name,
           customer_phone: phone.replace(/\D/g, ''),
@@ -836,7 +841,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             supplier_ids: supplierIdsInCart,
             fragmentation_map: Object.fromEntries(fragments.entries()),
             payment_provider: isInfinitePay ? 'infinitepay' : isAsaasActive ? 'asaas' : ((tenant as any).payment_provider || 'mercadopago'),
-            payment_flow: infinitePayTap ? 'delivery_tap' : (payOnline ? 'online' : 'delivery'),
+            payment_flow: simulateApproved ? 'online_demo' : (infinitePayTap ? 'delivery_tap' : (payOnline ? 'online' : 'delivery')),
+            demo_payment: simulateApproved,
             base_total_before_online_fee: finalTotal,
             online_fee_pass_through_enabled: payOnline && paymentFeePassThroughEnabled,
             online_fee_pass_through_percent: 0,
@@ -961,8 +967,11 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         toast({ title: '✅ Pedido realizado!', description: 'Acompanhe o status em tempo real.' });
         navigate(`/loja/${tenant.slug}/pedido/${orderResult.id}`);
       }
-    } catch {
+    } catch (error: any) {
+      console.error('order submit failed', error);
       toast({ title: 'Erro ao registrar pedido', variant: 'destructive' });
+    } finally {
+      setCreatingPayment(false);
     }
 
   };

@@ -42,6 +42,24 @@ function errorFromProvider(provider: string, data: any, fallback: string) {
   return reply({ provider, code: "PROVIDER_ERROR", error: fallback, details }, 502);
 }
 
+async function existingPayment(supabase: any, provider: string, tenantId: string, orderId: string) {
+  const result = await supabase
+    .from("payment_transactions")
+    .select("status,external_id,checkout_url,pix_qr_code,pix_qr_image")
+    .eq("provider", provider)
+    .eq("tenant_id", tenantId)
+    .eq("order_id", orderId)
+    .in("status", ["pending", "paid"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return result.data || null;
+}
+
+function existingReply(provider: string, transaction: any) {
+  return reply({ provider, payment_id: transaction.external_id, status: transaction.status, init_point: transaction.checkout_url || null, pix_qr_code: transaction.pix_qr_code || null, pix_qr_image: transaction.pix_qr_image || null, reused: true });
+}
+
 function reconcileItems(items: any[], order: any) {
   const lines = (items || []).map((item: any) => ({
     title: clean(item.product_name || "Produto", 120),
@@ -75,6 +93,8 @@ function reconcileItems(items: any[], order: any) {
 }
 
 async function createAsaas(supabase: any, tenant: any, order: any, tenantId: string, orderId: string, origin: string) {
+  const previous = await existingPayment(supabase, "asaas", tenantId, orderId);
+  if (previous) return existingReply("asaas", previous);
   const environment = tenant.asaas_environment === "production" ? "production" : "sandbox";
   const token = environment === "production" ? tenant.asaas_production_token : tenant.asaas_sandbox_token;
   if (tenant.asaas_enabled !== true || !token) return reply({ provider: "asaas", code: "ASAAS_NOT_CONFIGURED", error: "Asaas está selecionado, mas não há token ativo no ambiente escolhido." }, 400);
@@ -123,6 +143,8 @@ async function createAsaas(supabase: any, tenant: any, order: any, tenantId: str
 }
 
 async function createMercadoPago(supabase: any, tenant: any, order: any, items: any[], tenantId: string, orderId: string, origin: string) {
+  const previous = await existingPayment(supabase, "mercadopago", tenantId, orderId);
+  if (previous) return existingReply("mercadopago", previous);
   const environment = tenant.mercadopago_environment === "production" ? "production" : "sandbox";
   const token = clean(environment === "production" ? (tenant.mercadopago_production_token || tenant.mercadopago_token) : (tenant.mercadopago_sandbox_token || tenant.mercadopago_token), 500);
   if (tenant.mercadopago_enabled === false || !token) return reply({ provider: "mercadopago", code: "PROVIDER_NOT_CONFIGURED", error: "Mercado Pago está desativado ou sem token configurado." }, 400);
@@ -147,6 +169,8 @@ async function createMercadoPago(supabase: any, tenant: any, order: any, items: 
 }
 
 async function createPagBank(supabase: any, tenant: any, order: any, items: any[], tenantId: string, orderId: string, origin: string) {
+  const previous = await existingPayment(supabase, "pagbank", tenantId, orderId);
+  if (previous) return existingReply("pagbank", previous);
   const token = clean(tenant.pagbank_token, 500);
   if (!token) return reply({ provider: "pagbank", code: "PROVIDER_NOT_CONFIGURED", error: "Loja sem token PagBank configurado." }, 400);
   const base = tenant.pagbank_env === "production" ? "https://api.pagseguro.com" : "https://sandbox.api.pagseguro.com";

@@ -48,6 +48,9 @@ Deno.serve(async (request) => {
     const paymentStatus = String(payment.status || payment.order_status || "pending").toLowerCase();
     const nextStatus = approved.has(paymentStatus) ? "received" : cancelled.has(paymentStatus) ? "cancelled" : "pending_payment";
     const update: Record<string, unknown> = { payment_provider: "mercadopago", payment_external_id: String(payment.id || body?.data?.id || ""), payment_method: "mercadopago", metadata: { mercadopago_event_id: eventId, mercadopago_status: paymentStatus } };
+    // Só uma confirmação aprovada pode promover o pedido pendente. Estados
+    // cancelados/reembolsados também devem refletir no pedido para evitar que
+    // o painel trate uma cobrança estornada como venda concluída.
     if (order.status === "pending_payment" || nextStatus === "cancelled") update.status = nextStatus;
     if (nextStatus === "received") update.payment_confirmed_at = new Date().toISOString();
     const saved = await db.from("orders").update(update).eq("id", order.id);

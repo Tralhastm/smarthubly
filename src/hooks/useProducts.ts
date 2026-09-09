@@ -5,6 +5,19 @@ import { triggerSync } from '@/hooks/useIntegration';
 
 export type Product = Tables<'products'>;
 
+const normalizeCatalogText = (value: unknown) => String(value ?? '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLocaleLowerCase('pt-BR')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const sameCatalogIdentity = (left: any, right: any) =>
+  normalizeCatalogText(left.name) === normalizeCatalogText(right.name)
+  && normalizeCatalogText(left.category || 'Geral') === normalizeCatalogText(right.category || 'Geral')
+  && String(left.item_type || 'product') === String(right.item_type || 'product')
+  && String(left.condition || 'new') === String(right.condition || 'new');
+
 const PAGE_SIZE = 200;
 
 export const useProducts = (tenantId?: string) => {
@@ -66,6 +79,18 @@ export const useAddProduct = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (product: Omit<TablesInsert<'products'>, 'id'>) => {
+      if (product.tenant_id) {
+        const { data: candidates, error: lookupError } = await supabase
+          .from('products')
+          .select('id,name,category,item_type,condition')
+          .eq('tenant_id', product.tenant_id)
+          .limit(1000);
+        if (lookupError) throw lookupError;
+        const duplicate = (candidates || []).find((candidate: any) => sameCatalogIdentity(candidate, product));
+        if (duplicate) {
+          throw new Error('Já existe um produto com o mesmo nome, categoria, tipo e condição nesta loja. Edite o cadastro existente ou altere esses dados.');
+        }
+      }
       const { data, error } = await supabase.from('products').insert(product).select().single();
       if (error) throw error;
       if (product.tenant_id) triggerSync(product.tenant_id, 'product_upsert', data);

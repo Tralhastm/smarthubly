@@ -841,10 +841,19 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         // A lista exportada pode ter numeração, asteriscos ou `|` no nome
         // (ex.: `19. Mi 17T... |`). Compare os nomes normalizados localmente
         // para não criar um produto novo quando o modelo já existe no catálogo.
-        const existing = products.find((candidate) =>
+        const matchingProducts = products.filter((candidate) =>
           candidate.tenant_id === tenantId && sameProductModel(candidate.name, p.name) &&
           String((candidate as any).condition || 'new') === String(p.condition || 'new')
-        ) || null;
+        );
+        const sameCategory = matchingProducts.filter((candidate) =>
+          normalizeProductName((candidate as any).category || 'Geral') === normalizeProductName(p.category || 'Geral')
+        );
+        // Uma loja pode ter o mesmo nome comercial em categorias distintas ou
+        // em fornecedores diferentes. Quando a lista identifica o fornecedor,
+        // esse vínculo tem prioridade absoluta para não atualizar o produto errado.
+        const existing = (productSupplierId
+          ? matchingProducts.find((candidate) => (candidate as any).supplier_id === productSupplierId)
+          : null) || sameCategory[0] || matchingProducts[0] || null;
 
         if (existing) {
           // O Seletor por cor não é uma lista de dispositivos: não pode
