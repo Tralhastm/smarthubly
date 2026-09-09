@@ -96,6 +96,29 @@ function removeGradeABlocks(value: string): string {
   return output.join('\n');
 }
 
+/** Converte cores enviadas como emojis em linhas separadas pelo fornecedor. */
+function normalizeEmojiColorLines(value: string): string {
+  const colors: Array<[RegExp, string]> = [
+    [/🖤|⚫/gu, 'Preto'], [/🤍|⚪/gu, 'Branco'], [/💙|🔵/gu, 'Azul'],
+    [/💚|🟢/gu, 'Verde'], [/💜|🟣/gu, 'Roxo'], [/🩷|💗|🌸/gu, 'Rosa'],
+    [/🧡|🟠/gu, 'Laranja'], [/💛|🟡/gu, 'Amarelo'], [/🤎|🟤/gu, 'Marrom'],
+    [/🌕|🟨/gu, 'Dourado'], [/🩶|⚙️/gu, 'Cinza'],
+  ];
+  const emojiOnly = /^[\s*_~`•·–—-]*(?:[🖤🤍💙💚💜🩷💗🌸🧡💛🤎🌕🩶⚫⚪🔵🟢🟣🟠🟡🟤🟨⚙️]+)[\s*_~`•·–—-]*$/u;
+  const lines = String(value || '').split(/\r?\n/);
+  const output: string[] = [];
+  for (const line of lines) {
+    if (!emojiOnly.test(line)) {
+      output.push(line);
+      continue;
+    }
+    const found: string[] = [];
+    for (const [pattern, color] of colors) if (pattern.test(line) && !found.includes(color)) found.push(color);
+    if (found.length && output.length) output[output.length - 1] += ` Cores: ${found.join(', ')}`;
+  }
+  return output.join('\n');
+}
+
 export async function catalog(req: Request, body?: any): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   
@@ -205,7 +228,7 @@ export async function catalog(req: Request, body?: any): Promise<Response> {
       }
       imageData = { data: b64, mimeType };
     } else {
-      text = removeGradeABlocks(String(content));
+      text = normalizeEmojiColorLines(removeGradeABlocks(String(content)));
     }
 
     const SYSTEM = `Você é um extrator inteligente de catálogos de fornecedores brasileiros. Extraia produtos, custos, preços de venda e variações sem inventar dados.`;
