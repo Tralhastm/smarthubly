@@ -848,33 +848,10 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         })),
       });
 
+      // A RPC place_order materializa os fragmentos no servidor, em contexto
+      // SECURITY DEFINER. O navegador anônimo não tenta mais inserir diretamente
+      // em order_fragments, evitando bloqueio por RLS e perda do encaminhamento.
       // Cria appointments pra cada item de serviço (sequencial dentro do horário escolhido)
-      // Cria fragmentos operacionais se o pedido for fragmentado (#4)
-      if (orderResult?.id && needsFragmentation) {
-        try {
-          for (const [supplierId, fragmentItems] of fragments.entries()) {
-            const fragmentTotal = fragmentItems.reduce((sum, i) => sum + (getCartLineUnitPrice(i) * i.quantity), 0);
-            
-            await supabase.from('order_fragments').insert({
-              order_id: orderResult.id,
-              tenant_id: tenant.id,
-              supplier_id: supplierId,
-              status: initialStatus,
-              total: fragmentTotal,
-              items: fragmentItems.map(i => ({
-                product_name: i.product.name,
-                product_price: getCartLineUnitPrice(i),
-                quantity: i.quantity,
-                variant_name: i.variantName || null,
-                addons: i.addons || null,
-                notes: i.notes || null
-              }))
-            });
-          }
-        } catch (e) {
-          console.error('Erro ao criar fragmentos operacionais:', e);
-        }
-      }
 
       if (orderResult?.id && needsScheduling && scheduledStart) {
         let cursor = new Date(scheduledStart);
