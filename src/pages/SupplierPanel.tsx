@@ -579,15 +579,16 @@ const SupplierPanel = () => {
   };
 
   const parseImportedEntries = (text: string) => {
-    const entries: { name: string; cost: number | null; resale: number | null; colors: string[]; aliases: string[] }[] = [];
+    const entries: { name: string; cost: number | null; resale: number | null; colors: string[]; unavailableColors: string[]; aliases: string[] }[] = [];
     let brand = '';
-    let current: { name: string; cost: number | null; resale: number | null; colors: string[]; generic: number | null } | null = null;
+    let nextUnavailable = false;
+    let current: { name: string; cost: number | null; resale: number | null; colors: string[]; unavailableColors: string[]; generic: number | null } | null = null;
     const flush = () => {
       if (!current) return;
       if (current.name && (current.cost != null || current.resale != null || current.generic != null)) {
         const aliases = [current.name];
         if (brand && !new RegExp(`^${brand}\\b`, 'i').test(current.name)) aliases.push(`${brand} ${current.name}`);
-        entries.push({ name: current.name, cost: current.cost ?? current.generic, resale: current.resale, colors: current.colors, aliases });
+        entries.push({ name: current.name, cost: current.cost ?? current.generic, resale: current.resale, colors: current.colors, unavailableColors: current.unavailableColors, aliases });
       }
       current = null;
     };
@@ -599,14 +600,34 @@ const SupplierPanel = () => {
     const genericMatch = (line: string) => line.match(/^(.*?)(?:\s*[-–—:]\s*|\s+)(?:R?\$\s*)?([\d.]+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*$/i);
 
     for (const rawLine of text.split(/\r?\n/)) {
-      const line = rawLine.trim();
+      let line = rawLine.trim().replace(/\*/g, '').trim();
+      line = line.replace(/R\$\s*R\$/gi, 'R$');
       if (!line) continue;
       if (/^\*?\s*crit[eé]rio\s*:/i.test(line)) continue;
       const emojiOnly = line.replace(/[\s*🔵💙⚫️🖤🩷💗🟣💜⚪️🤍🟢💚🟠🧡🩶🩵🌕🟡]/gu, '') === '' && /[🔵💙⚫️🖤🩷💗🟣💜⚪️🤍🟢💚🟠🧡🩶🩵🌕🟡]/u.test(line);
       if (emojiOnly) {
         const colors = extractColors(line);
-        if (current) current.colors = [...new Set([...current.colors, ...colors])];
-        else if (entries.length) entries[entries.length - 1].colors = [...new Set([...entries[entries.length - 1].colors, ...colors])];
+        if (current) {
+          current.colors = [...new Set([...current.colors, ...colors])];
+          if (nextUnavailable || current.unavailableColors.includes('__all__')) current.unavailableColors = [...new Set([...current.unavailableColors.filter(c => c !== '__all__'), ...colors])];
+        } else if (entries.length) {
+          entries[entries.length - 1].colors = [...new Set([...entries[entries.length - 1].colors, ...colors])];
+          if (nextUnavailable || entries[entries.length - 1].unavailableColors.includes('__all__')) entries[entries.length - 1].unavailableColors = [...new Set([...entries[entries.length - 1].unavailableColors.filter(c => c !== '__all__'), ...colors])];
+        }
+        nextUnavailable = false;
+        continue;
+      }
+      const availabilityMarker = /\b(?:falta|verificar\s+disponibilidade|indispon[ií]vel)\b/gi;
+      const hasAvailabilityMarker = availabilityMarker.test(line);
+      if (hasAvailabilityMarker) line = line.replace(availabilityMarker, ' ').replace(/\s+/g, ' ').trim();
+      if (!line) {
+        nextUnavailable = true;
+        continue;
+      }
+      if (hasAvailabilityMarker) nextUnavailable = true;
+      if (/^(?:🔥?\s*)?(?:promo[cç][aã]o\s+apple|apple|ipad|airpods?|apple\s+watch|macbooks?|airtag|apple\s+pencil)\s*:?\s*$/i.test(line.replace(/[🔥🎧⌚️💻]/gu, '').trim())) {
+        flush();
+        brand = line.toLocaleUpperCase('pt-BR').includes('APPLE') ? 'Apple' : '';
         continue;
       }
       const detectedBrand = sectionBrand(line);
@@ -621,7 +642,11 @@ const SupplierPanel = () => {
         const vendorResale = numberFromLine(remainder, ['venda sugerida', 'venda', 'revenda', 'resale', 'preço de venda', 'preco de venda']);
         const aliases = [name];
         if (brand && name && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
-        if (name && vendorCost != null) entries.push({ name, cost: vendorCost, resale: vendorResale, colors: extractColors(remainder), aliases });
+        if (name && vendorCost != null) {
+          const colors = extractColors(remainder);
+          entries.push({ name, cost: vendorCost, resale: vendorResale, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], aliases });
+          nextUnavailable = false;
+        }
         continue;
       }
 
@@ -639,30 +664,46 @@ const SupplierPanel = () => {
         if (name && !/^(?:custo|venda|revenda|resale|preço|preco)$/i.test(name)) {
           const aliases = [name];
           if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
-          entries.push({ name, cost, resale, colors: extractColors(line), aliases });
+          const colors = extractColors(line);
+          entries.push({ name, cost, resale, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], aliases });
+          nextUnavailable = false;
         }
         continue;
       }
 
       const oneLine = genericMatch(line);
       if (oneLine) {
+        if (current) {
+          current.generic = parsePrice(oneLine[2]);
+          current.colors = [...new Set([...current.colors, ...extractColors(line)])];
+          continue;
+        }
         flush();
         const name = cleanImportedName(oneLine[1]);
         const price = parsePrice(oneLine[2]);
         if (name && price > 0) {
           const aliases = [name];
           if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
-          entries.push({ name, cost: null, resale: price, colors: extractColors(line), aliases });
+          const colors = extractColors(line);
+          entries.push({ name, cost: null, resale: price, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], aliases });
+          nextUnavailable = false;
         }
         continue;
       }
 
       if (/^(?:custo|venda|revenda|resale|preço|preco)\b/i.test(line)) continue;
       flush();
-      current = { name: cleanImportedName(line), cost: null, resale: null, colors: extractColors(line), generic: null };
+      current = { name: cleanImportedName(line), cost: null, resale: null, colors: extractColors(line), unavailableColors: nextUnavailable ? ['__all__'] : [], generic: null };
+      nextUnavailable = false;
     }
     flush();
-    return entries;
+    return entries.map(entry => {
+      const aliases = [...entry.aliases];
+      const compact = normalizeSupplierProductName(entry.name);
+      if (/^\d/.test(compact)) aliases.push(`iphone ${entry.name}`);
+      if (/^(?:se\b|serie\b|s[eé]rie\b)/i.test(compact)) aliases.push(`apple watch ${entry.name}`);
+      return { ...entry, aliases: [...new Set(aliases)] };
+    });
   };
 
   const importPrices = async () => {
@@ -708,9 +749,10 @@ const SupplierPanel = () => {
             const incomingNames = new Set<string>();
             for (const color of entry.colors) {
               const normalizedColor = normalizeProductName(color);
+              const unavailable = entry.unavailableColors.some(c => normalizeProductName(c) === normalizedColor);
               incomingNames.add(normalizedColor);
               const old = (existingVariants || []).find((variant: any) => normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, '')) === normalizedColor);
-              const variantPatch: Record<string, any> = { in_stock: true };
+              const variantPatch: Record<string, any> = { in_stock: !unavailable };
               if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) {
                 variantPatch.suggested_price = entry.resale;
                 variantPatch.price_delta = entry.resale - Number(product.price || 0);
@@ -729,7 +771,7 @@ const SupplierPanel = () => {
                   variant_name: color,
                   variant_key: normalizedColor,
                   unit_cost: Number(entry.cost),
-                  available: true,
+                  available: !unavailable,
                   source: 'supplier_panel',
                   last_seen_at: new Date().toISOString(),
                 }, { onConflict: 'supplier_id,product_id,variant_key' });
