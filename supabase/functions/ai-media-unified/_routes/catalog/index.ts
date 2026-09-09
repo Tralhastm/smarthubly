@@ -39,6 +39,26 @@ function productMatchKey(value: string | null | undefined): string {
   return normalized.split(/\s+/).filter(Boolean).sort().join(' ');
 }
 
+/** Normaliza cores/variações em português e inglês para uma chave canônica. */
+function variantMatchKey(value: string | null | undefined): string {
+  let normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  const aliases: Record<string, string> = {
+    black: 'preto', white: 'branco', blue: 'azul', red: 'vermelho',
+    green: 'verde', purple: 'roxo', violet: 'roxo', pink: 'rosa',
+    gold: 'dourado', golden: 'dourado', silver: 'prata', gray: 'cinza',
+    grey: 'cinza', yellow: 'amarelo', orange: 'laranja', brown: 'marrom',
+    beige: 'bege', navy: 'azul marinho', midnight: 'meia noite',
+    graphite: 'grafite', titanium: 'titanio', natural: 'natural',
+  };
+  normalized = normalized.split(/\s+/).map((token) => aliases[token] || token).join(' ');
+  return normalized.split(/\s+/).filter(Boolean).sort().join(' ');
+}
+
 function positiveNumber(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
@@ -312,12 +332,12 @@ Regras:
             const incoming: any = variants[i];
             const variantName = String(incoming.name || '').trim();
             if (!variantName) continue;
-            const variantKey = variantName.toLocaleLowerCase('pt-BR');
+            const variantKey = variantMatchKey(variantName);
             incomingNames.add(variantKey);
             const variantCost = positiveNumber(incoming.cost_price) || effectiveCost || positiveNumber(incoming.price);
             const variantResale = positiveNumber(incoming.resale_price) || effectiveResale || positiveNumber(incoming.price);
             const selectedVariantPrice = priceTypes.includes('cost') ? variantCost : variantResale;
-            const old = current.find((v: any) => String(v.name).trim().toLocaleLowerCase('pt-BR') === variantKey);
+            const old = current.find((v: any) => variantMatchKey(v.name) === variantKey);
             const row = {
               product_id: catalogProduct.id,
               tenant_id: targetTenantId,
@@ -346,7 +366,7 @@ Regras:
                 product_variant_id: savedVariant.id,
                 supplier_id: targetSupplierId,
                 variant_name: variantName,
-                variant_key: productMatchKey(variantName),
+                variant_key: variantKey,
                 unit_cost: variantCost,
                 available: incoming.available ?? incoming.disponivel ?? true,
                 source: 'supplier_list',
@@ -355,7 +375,7 @@ Regras:
             }
           }
           const staleIds = current
-            .filter((v: any) => !incomingNames.has(String(v.name).trim().toLocaleLowerCase('pt-BR')))
+            .filter((v: any) => !incomingNames.has(variantMatchKey(v.name)))
             .map((v: any) => v.id);
           if (staleIds.length) await admin.from('product_variants').delete().in('id', staleIds);
         }

@@ -722,7 +722,21 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         .select('id')
         .eq('tenant_id', tenant.id);
       const supplierIds = (tenantSuppliers || []).map((s: any) => s.id).filter(Boolean);
-      const normalizeVariant = (value: unknown) => String(value || '').trim().toLocaleLowerCase('pt-BR');
+      const normalizeVariant = (value: unknown) => {
+        const aliases: Record<string, string> = {
+          black: 'preto', white: 'branco', blue: 'azul', red: 'vermelho',
+          green: 'verde', purple: 'roxo', violet: 'roxo', pink: 'rosa',
+          gold: 'dourado', golden: 'dourado', silver: 'prata', gray: 'cinza',
+          grey: 'cinza', yellow: 'amarelo', orange: 'laranja', brown: 'marrom',
+          beige: 'bege', navy: 'azul marinho', midnight: 'meia noite',
+          graphite: 'grafite', titanium: 'titanio', natural: 'natural',
+        };
+        return String(value || '')
+          .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .toLocaleLowerCase('pt-BR').replace(/[^a-z0-9]+/g, ' ').trim()
+          .split(/\s+/).map((token) => aliases[token] || token).join(' ')
+          .split(/\s+/).filter(Boolean).sort().join(' ');
+      };
       const { data: supplierVariantOffers } = supplierIds.length > 0
         ? await (supabase as any)
           .from('supplier_variant_offers')
