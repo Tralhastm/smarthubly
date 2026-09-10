@@ -633,6 +633,11 @@ const SupplierPanel = () => {
     .replace(/\s*\+\s*/g, '+')
     .replace(/\s+/g, ' ')
     .trim();
+  const variantMatchKey = (value: string) => {
+    const aliases: Record<string, string> = { black: 'preto', white: 'branco', blue: 'azul', green: 'verde', purple: 'roxo', violet: 'roxo', pink: 'rosa', gold: 'dourado', silver: 'prata', gray: 'cinza', grey: 'cinza', orange: 'laranja', brown: 'marrom', titanium: 'titanio' };
+    return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
+      .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).map(token => aliases[token] || token).filter(Boolean).sort().join(' ');
+  };
   const extractColors = (value: string) => {
     const colorPattern = /\b(preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|black|white|camuflada)\b/giu;
     const emojiColors: Array<[RegExp, string]> = [
@@ -842,6 +847,10 @@ const SupplierPanel = () => {
     const warnings: string[] = [];
     const incomingByProduct = new Map<string, Set<string>>();
     try {
+      // O upload do fornecedor é um snapshot: o que não voltar neste
+      // catálogo deixa de ser uma oferta ativa, sem apagar o histórico.
+      await (supabase as any).from('supplier_product_prices').update({ available: false }).eq('supplier_id', supplier.id);
+      await (supabase as any).from('supplier_variant_offers').update({ available: false }).eq('supplier_id', supplier.id);
       for (const entry of entries) {
         const product = entry.aliases.map(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
         if (!product) { notFound.push(entry.name); continue; }
@@ -866,10 +875,10 @@ const SupplierPanel = () => {
           } else {
             const incomingNames = new Set<string>();
             for (const color of entry.colors) {
-              const normalizedColor = normalizeProductName(color);
-              const unavailable = entry.unavailableColors.some(c => normalizeProductName(c) === normalizedColor);
+              const normalizedColor = variantMatchKey(color);
+              const unavailable = entry.unavailableColors.some(c => variantMatchKey(c) === normalizedColor);
               incomingNames.add(normalizedColor);
-              const old = (existingVariants || []).find((variant: any) => normalizeProductName(String(variant.name).replace(/^cor\s*:\s*/i, '')) === normalizedColor);
+              const old = (existingVariants || []).find((variant: any) => variantMatchKey(String(variant.name).replace(/^cor\s*:\s*/i, '')) === normalizedColor);
               const variantPatch: Record<string, any> = { in_stock: !unavailable };
               if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) {
                 variantPatch.suggested_price = entry.resale;
@@ -899,6 +908,16 @@ const SupplierPanel = () => {
             incomingByProduct.set(product.id, allIncoming);
           }
         }
+        if (entry.cost != null && Number(entry.cost) > 0 && priceUpdateMode !== 'color') {
+          const { error: productOfferError } = await (supabase as any).from('supplier_product_prices').upsert({
+            supplier_id: supplier.id,
+            product_name: product.name.toLowerCase(),
+            unit_price: Number(entry.cost),
+            price_types: ['cost'],
+            available: true,
+          }, { onConflict: 'supplier_id,product_name' });
+          if (productOfferError) warnings.push(`${entry.name} (preço do produto não atualizado: ${productOfferError.message})`);
+        }
         updated.push(entry.name);
         Object.assign(product, patch);
       }
@@ -912,6 +931,9 @@ const SupplierPanel = () => {
           warnings.push(`Produto ${productId} (cores ausentes não ocultadas: ${staleError.message})`);
         }
       }
+      const { error: reconcileError } = await (supabase as any).rpc('reconcile_supplier_catalog', { p_supplier_id: supplier.id });
+      if (reconcileError) warnings.push(`Reconciliação não executada: ${reconcileError.message}`);
+      await fetchProducts();
       setProducts([...products]);
       setImportResult({ updated, notFound, invalid, warnings });
       if (updated.length) toast.success(`${updated.length} produto(s) atualizado(s)`);
