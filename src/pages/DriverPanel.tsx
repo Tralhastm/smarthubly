@@ -129,7 +129,7 @@ const DriverPanel = () => {
       .from('orders').select('*, order_items(*)')
       .eq('tenant_id', driver.tenant_id)
       .eq('driver_id', driver.id)
-      .in('status', ['out-for-delivery', 'delivered'])
+      .in('status', ['received', 'preparing', 'out-for-delivery', 'delivered'])
       .order('created_at', { ascending: false })
       .limit(50);
     const newOrders = (data as OrderWithItems[]) || [];
@@ -208,7 +208,7 @@ const DriverPanel = () => {
   };
 
   // Active deliveries (calc precoce para tracking GPS)
-  const active = orders.filter(o => o.status === 'out-for-delivery');
+  const active = orders.filter(o => ['received', 'preparing', 'out-for-delivery'].includes(o.status));
 
   // Habilita rastreamento GPS sempre que online — assim cliente/lojista vê
   // posição em tempo real mesmo sem entrega ativa (motoboy circulando, base etc.).
@@ -395,11 +395,14 @@ const DriverPanel = () => {
                 <p className="text-xs text-yellow-400 flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> {order.delivery_status_note}</p>
               )}
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => setStatus(order.id, 'delivered')} className="rounded-lg gradient-primary text-primary-foreground py-2 text-sm font-medium hover:opacity-90">
-                  <CheckCircle className="h-4 w-4 inline mr-1" /> Entregue
+                <button
+                  onClick={() => setStatus(order.id, order.status === 'out-for-delivery' ? 'delivered' : 'out-for-delivery')}
+                  className="rounded-lg gradient-primary text-primary-foreground py-2 text-sm font-medium hover:opacity-90"
+                >
+                  {order.status === 'out-for-delivery' ? <><CheckCircle className="h-4 w-4 inline mr-1" /> Entregue</> : <><Truck className="h-4 w-4 inline mr-1" /> Saiu para entrega</>}
                 </button>
-                <button onClick={() => setStatus(order.id, 'out-for-delivery', 'Vou atrasar')} className="rounded-lg bg-yellow-500/20 text-yellow-400 py-2 text-sm font-medium hover:bg-yellow-500/30">
-                  <Clock className="h-4 w-4 inline mr-1" /> Atrasar
+                <button onClick={() => setStatus(order.id, order.status === 'out-for-delivery' ? 'out-for-delivery' : order.status, 'Vou atrasar')} className="rounded-lg bg-yellow-500/20 text-yellow-400 py-2 text-sm font-medium hover:bg-yellow-500/30">
+                  <Clock className="h-4 w-4 inline mr-1" /> {order.status === 'out-for-delivery' ? 'Atrasar' : 'Aguardar'}
                 </button>
               </div>
               <div className="flex gap-2">

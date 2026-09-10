@@ -496,12 +496,12 @@ const SupplierPanel = () => {
 
   const assignDriverAndDispatch = async (orderId: string, driverId: string) => {
     setSelectingDriver(null);
-    const wasOutForDelivery = orders.find(o => o.id === orderId)?.status === 'out-for-delivery';
+    const currentOrder = orders.find(o => o.id === orderId);
+    const wasOutForDelivery = currentOrder?.status === 'out-for-delivery';
     // Atualização otimista
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'out-for-delivery', driver_id: driverId, lalamove_order_id: null } : o));
-    toast.success(wasOutForDelivery ? 'Motoboy trocado!' : 'Pedido despachado com motoboy!');
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, driver_id: driverId, lalamove_order_id: null } : o));
+    toast.success(wasOutForDelivery ? 'Motoboy trocado!' : 'Pedido enviado ao painel do motoboy!');
     await supabase.from('orders').update({
-      status: 'out-for-delivery',
       driver_id: driverId,
       lalamove_order_id: null,
       lalamove_status: null,
@@ -514,8 +514,8 @@ const SupplierPanel = () => {
     try {
       await unifiedInvoke("notify-unified", "push", {
         driverId,
-        title: "🏍️ Nova entrega!",
-        body: `Pedido #${orderId.slice(0, 6)} - ${order?.customer_name || "Cliente"} - ${order?.customer_address || ""}`,
+        title: "🏍️ Novo pedido atribuído!",
+        body: `Pedido #${orderId.slice(0, 6)} disponível para sua rota.`,
       });
     } catch (e) { console.error('Push falhou:', e); }
   };
@@ -546,6 +546,10 @@ const SupplierPanel = () => {
 
     // Antes de despachar para entrega, perguntar Lalamove vs motoboy próprio
     if (next === 'out-for-delivery') {
+      if (orders.find(o => o.id === id)?.driver_id) {
+        toast.info('Pedido já foi enviado ao motoboy. Ele deve marcar "Saiu para entrega" no próprio painel.');
+        return;
+      }
       // Tem as duas opções → modal de escolha
       if (activeDrivers.length > 0 && lalamoveAvailable) {
         setChoosingDispatch(id);
