@@ -140,25 +140,6 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     enabled: !!tenantId,
     staleTime: 30000,
   });
-  // `needs_price_review` não é suficiente para descobrir o motivo do
-  // bloqueio: uma cor nova pode estar na lista, mas ainda sem revenda. A
-  // oferta marcada como available=false é a evidência de que ela sumiu da
-  // última lista do fornecedor.
-  const { data: unavailableVariantOfferIds = [] } = useQuery({
-    queryKey: ['tenant-unavailable-variant-offers', tenantId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('supplier_variant_offers' as any)
-        .select('product_variant_id')
-        .eq('tenant_id', tenantId)
-        .eq('available', false)
-        .limit(1000);
-      if (error) throw error;
-      return (data || []).map((row: any) => row.product_variant_id).filter(Boolean) as string[];
-    },
-    enabled: !!tenantId,
-    staleTime: 30000,
-  });
   const queryClient = useQueryClient();
   const { data: suppliers = [] } = useSuppliers(tenantId);
   const { data: feeRequests = [] } = useFeeRequests(tenantId);
@@ -978,7 +959,6 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
     await queryClient.invalidateQueries({ queryKey: ['product-variants'] });
     await queryClient.invalidateQueries({ queryKey: ['tenant-product-variants', tenantId] });
-    await queryClient.invalidateQueries({ queryKey: ['tenant-unavailable-variant-offers', tenantId] });
     await refetch();
 
     const msg = importCancelled
@@ -1188,7 +1168,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   // obrigar o administrador a abrir produto por produto.
   const productNames = new Map(products.map(product => [product.id, product.name]));
   const soldOutColorVariants = allVariants
-    .filter(variant => variant.in_stock === false && unavailableVariantOfferIds.includes(variant.id))
+    .filter(variant => variant.in_stock === false)
     .map(variant => ({
       ...variant,
       productName: productNames.get(variant.product_id) || 'Produto sem nome',
@@ -1786,7 +1766,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       {visibleProducts.map(p => (
         <EditableProduct key={p.id} product={p} isEditing={editing === p.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate}
           suppliers={suppliers.filter(s => s.active)} tenantId={tenantId}
-          soldOutVariantIds={unavailableVariantOfferIds}
+          soldOutVariantIds={allVariants.filter(variant => variant.in_stock === false).map(variant => variant.id)}
           feeRequests={feeRequests.filter(r => r.product_id === p.id)}
           onRequestFee={(productId, percent) => {
             createFeeReq.mutate({ tenant_id: tenantId, product_id: productId, requested_percent: percent }, {
