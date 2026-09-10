@@ -25,8 +25,8 @@ const parseRow = (line: string): InputRow | null => {
     return { name: parts[0].replace(/^\s*\d+[.)-]\s*/, '').trim(), supplier: values[0], base: values[1], color: values[2] || null, baseColor: values[3] || null };
   }
   // Formato de ficha/WhatsApp: Nome — Preço venda R$ 7.579,00 — Preço custo R$ 6.100,00
-  // O preço de venda é tratado como preço-base de mercado; a regra da calculadora
-  // ainda desconta automaticamente R$ 20 para chegar ao preço sugerido.
+  // O preço de venda informado é usado como preço desejado; as despesas são
+  // descontadas separadamente no cálculo.
   const saleMatch = text.match(new RegExp(`(?:pre[cç]o\\s*(?:de\\s*)?(?:venda|revenda)|valor\\s*(?:de\\s*)?venda)\\s*[:=-]?\\s*(${moneyPattern})`, 'i'));
   const costMatch = text.match(new RegExp(`(?:pre[cç]o\\s*(?:de\\s*)?(?:custo|fornecedor)|valor\\s*(?:do\\s*)?fornecedor)\\s*[:=-]?\\s*(${moneyPattern})`, 'i'));
   if (saleMatch && costMatch) {
@@ -68,7 +68,8 @@ const FinancialCalculator = () => {
 
   const rows = useMemo(() => text.split(/\r?\n/).map(parseRow).filter(Boolean) as InputRow[], [text]);
   const results = useMemo<ResultRow[]>(() => rows.map(row => {
-    const suggested = Math.max(0, row.base - 20);
+    // Usar exatamente o preço de venda informado, sem desconto oculto.
+    const suggested = Math.max(0, row.base);
     const fixed = expenseValue(Number(freight) || 0, freightUnit, suggested) + expenseValue(Number(discount) || 0, discountUnit, suggested) + expenseValue(Number(other) || 0, otherUnit, suggested);
     const rate = asaasUnit === 'percent' ? (Number(asaas) || 0) / 100 : 0;
     const asaasValue = expenseValue(Number(asaas) || 0, asaasUnit, suggested);
@@ -81,7 +82,7 @@ const FinancialCalculator = () => {
     const fixedExpenses = (asaasUnit === 'brl' ? Number(asaas) || 0 : 0) + (freightUnit === 'brl' ? Number(freight) || 0 : 0) + (discountUnit === 'brl' ? Number(discount) || 0 : 0) + (otherUnit === 'brl' ? Number(other) || 0 : 0);
     const denominator = (1 - variableRate) * (1 - (Number(sellerPercent) || 0) / 100) - target / 100;
     const targetPrice = denominator > 0 ? (row.supplier + fixedExpenses) / denominator : 0;
-    const colorSuggested = row.baseColor ? Math.max(0, row.baseColor - 20) : row.color ? Math.max(0, row.color - 20) : null;
+    const colorSuggested = row.baseColor || row.color || null;
     const colorNet = colorSuggested == null ? null : colorSuggested - row.supplier - expenseValue(Number(asaas) || 0, asaasUnit, colorSuggested) - expenseValue(Number(freight) || 0, freightUnit, colorSuggested) - expenseValue(Number(discount) || 0, discountUnit, colorSuggested) - expenseValue(Number(other) || 0, otherUnit, colorSuggested);
     return { ...row, suggested, profitBeforeSeller: before, seller, netProfit: net, netMargin: margin, targetPrice, colorSuggested, colorNetProfit: colorNet };
   }), [rows, asaas, asaasUnit, freight, freightUnit, discount, discountUnit, other, otherUnit, sellerPercent, targetMargin]);
@@ -112,7 +113,7 @@ const FinancialCalculator = () => {
       <textarea value={text} onChange={e => setText(e.target.value)} rows={8} placeholder={'Exemplo 1:\nRealme C100x | 1.000,00 | 1.259,90 | 1.050,00 | 1.309,90\n\nExemplo 2:\nGalaxy S26 Ultra — Preço venda R$ 7.579,00 — Preço custo R$ 6.100,00'} className="w-full rounded-lg border border-border bg-background p-3 font-mono text-xs" />
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4"><Field label="Taxa Asaas/checkout" value={asaas} setValue={setAsaas} unit={asaasUnit} setUnit={setAsaasUnit} /><Field label="Frete" value={freight} setValue={setFreight} unit={freightUnit} setUnit={setFreightUnit} /><Field label="Desconto cliente" value={discount} setValue={setDiscount} unit={discountUnit} setUnit={setDiscountUnit} /><Field label="Outros gastos" value={other} setValue={setOther} unit={otherUnit} setUnit={setOtherUnit} /></div>
       <div className="grid grid-cols-2 gap-2"><label className="rounded-lg border border-border bg-secondary/40 p-2 text-xs text-muted-foreground">Comissão vendedor sobre lucro (%)<input value={sellerPercent} onChange={e => setSellerPercent(e.target.value)} inputMode="decimal" className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm" /></label><label className="rounded-lg border border-border bg-secondary/40 p-2 text-xs text-muted-foreground">Margem líquida desejada (%)<input value={targetMargin} onChange={e => setTargetMargin(e.target.value)} inputMode="decimal" className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm" /></label></div>
-      <p className="text-xs text-muted-foreground">Preço sugerido automático = preço base − R$ 20. O vendedor recebe somente a porcentagem configurada sobre o lucro positivo. A coluna “Preço para meta” mostra quanto cobrar para atingir a margem líquida desejada.</p>
+      <p className="text-xs text-muted-foreground">O preço informado é o valor de venda. O sistema desconta Asaas/checkout, frete, desconto, outros gastos e a comissão do vendedor. A coluna “Preço para meta” mostra quanto cobrar para atingir a margem líquida desejada.</p>
     </div>
     {results.length > 0 && <>
       <div className="grid grid-cols-3 gap-2"><div className="rounded-lg bg-secondary p-3"><div className="text-xs text-muted-foreground">Produtos</div><strong>{results.length}</strong></div><div className="rounded-lg bg-green-500/10 p-3"><div className="text-xs text-muted-foreground">Positivos</div><strong className="text-green-400">{summary.positive}</strong></div><div className="rounded-lg bg-primary/10 p-3"><div className="text-xs text-muted-foreground">Lucro líquido total</div><strong className={summary.net >= 0 ? 'text-green-400' : 'text-red-400'}>{money(summary.net)}</strong></div></div>
