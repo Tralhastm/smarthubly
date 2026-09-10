@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 import { calculateFinalProfit } from '@/lib/pricing';
+import { getVariantSalePrice } from '@/lib/variant-pricing';
 
 const parseBrazilianMoney = (value: unknown) => {
   const raw = String(value ?? '')
@@ -209,7 +210,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     .filter(variant => variant.product_id === product.id)
     .map(variant => ({
       name: String(variant.name || '').trim(),
-      price: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0))) || 0,
+      price: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
       cost: Number(variant.cost_price ?? (product as any).original_price) || 0,
       inStock: variant.in_stock !== false,
     }))
@@ -1151,7 +1152,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     .map(product => {
       const variants = allVariants.filter(variant => variant.product_id === product.id);
       const pricedVariants = variants.map(variant => ({
-        price: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0))),
+        price: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
         cost: Number(variant.cost_price ?? (product as any).original_price) || 0,
       })).filter(item => Number.isFinite(item.price) && item.price > 0);
       const lowestVariant = pricedVariants.length > 0 ? pricedVariants.reduce((lowest, item) => item.price < lowest.price ? item : lowest) : null;
@@ -1764,7 +1765,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
   const { data: variants = [] } = useProductVariants(product.id);
   const variantPrices = variants.map(variant => ({
     ...variant,
-    salePrice: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta))) || 0,
+    salePrice: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
     costPrice: Number(variant.cost_price ?? (product as any).original_price) || 0,
   }));
   const variantSalePrices = variantPrices.map(v => v.salePrice).filter(price => price > 0);

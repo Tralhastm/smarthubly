@@ -25,7 +25,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   const availableVariants = variants.filter(v =>
     v.in_stock !== false && v.in_stock !== 'false' &&
     ((v as any).allow_loss || (product as any).allow_loss || hasPositiveFinalProfit(
-      v.suggested_price ?? (product.price + Number(v.price_delta || 0)),
+      getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: v.suggested_price, priceDelta: v.price_delta, variantCost: v.cost_price }),
       v.cost_price ?? (product as any).original_price,
     ))
   );
@@ -56,7 +56,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   // suggested_price é o preço final absoluto da cor; só usamos a diferença
   // em relação ao preço base porque o carrinho soma esse campo ao produto.
   const selectedVariantPrice = selectedVariant
-    ? Number(selectedVariant.suggested_price ?? (product.price + Number(selectedVariant.price_delta || 0)))
+    ? getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: selectedVariant.suggested_price, priceDelta: selectedVariant.price_delta, variantCost: selectedVariant.cost_price })
     : Number(product.price);
   const variantDelta = selectedVariant ? selectedVariantPrice - Number(product.price) : 0;
   const addonsTotal = cartAddons.reduce((s, a) => s + a.price * a.quantity, 0);
@@ -100,7 +100,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
               <h4 className="text-sm font-medium text-foreground mb-2">Cores disponíveis e preços</h4>
               <div className="space-y-1.5">
                 {availableVariants.map(v => {
-                  const variantPrice = Number(v.suggested_price ?? (product.price + Number(v.price_delta || 0)));
+                  const variantPrice = getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: v.suggested_price, priceDelta: v.price_delta, variantCost: v.cost_price });
                   return (
                   <button
                     key={v.id}
@@ -216,3 +216,4 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
 };
 
 export default ProductOptionsPicker;
+import { getVariantSalePrice } from '@/lib/variant-pricing';

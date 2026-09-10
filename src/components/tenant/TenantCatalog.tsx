@@ -12,6 +12,7 @@ import { getItemCTA } from '@/lib/niche-labels';
 import { normalizeProductDescription } from '@/lib/product-description';
 import { ExpandableProductDescription } from './ExpandableProductDescription';
 import { calculateFinalProfit } from '@/lib/pricing';
+import { getVariantSalePrice } from '@/lib/variant-pricing';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
 
@@ -252,7 +253,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const storefrontProducts = useMemo(() => allProducts.map(product => {
     const variants = variantMap.get(product.id) || [];
     const pricedVariants = variants.map(variant => ({
-      sale: Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0))),
+      sale: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
       cost: Number(variant.cost_price ?? (product as any).original_price) || 0,
     })).filter(item => Number.isFinite(item.sale) && item.sale > 0);
     const lowestVariant = pricedVariants.length > 0
@@ -274,7 +275,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     const variants = variantMap.get(product.id) || [];
     const prices = variants
       .map(variant => {
-        const raw = Number(variant.suggested_price ?? (Number(product.price) + Number(variant.price_delta || 0)));
+        const raw = getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price });
         return raw;
       })
       .filter(price => Number.isFinite(price) && price > 0);
