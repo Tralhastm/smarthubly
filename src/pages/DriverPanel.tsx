@@ -291,7 +291,9 @@ const DriverPanel = () => {
               <Radar className={`h-3.5 w-3.5 ${tracking.lastUpdate ? 'animate-pulse' : ''}`} />
               {tracking.permission === 'denied'
                 ? 'Permissão GPS negada — cliente não verá sua posição'
-                : tracking.lastUpdate
+                : tracking.error
+                  ? `Falha ao compartilhar GPS: ${tracking.error}`
+                  : tracking.lastUpdate
                   ? `Compartilhando localização · atualizado ${new Date(tracking.lastUpdate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
                   : 'Aguardando GPS...'}
             </div>
