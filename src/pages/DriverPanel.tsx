@@ -42,6 +42,7 @@ const DriverPanel = () => {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [isOnline, setIsOnline] = useState(false);
   const [togglingOnline, setTogglingOnline] = useState(false);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [navAddress, setNavAddress] = useState<string | null>(null); // endereço aberto no iframe
   const prevCountRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -134,8 +135,9 @@ const DriverPanel = () => {
       .limit(50);
     const newOrders = (data as OrderWithItems[]) || [];
     
-    // Notify on new active deliveries
-    const activeCount = newOrders.filter(o => o.status === 'out-for-delivery').length;
+    // Pedido atribuído pode ainda estar em "preparing"; ele só passa a
+    // "out-for-delivery" quando o próprio motoboy inicia a rota.
+    const activeCount = newOrders.filter(o => ['received', 'preparing', 'out-for-delivery'].includes(o.status)).length;
     if (activeCount > prevCountRef.current && prevCountRef.current > 0) {
       try { audioRef.current?.play(); } catch {}
       toast.success('🔔 Nova entrega atribuída!', { duration: 8000 });
@@ -176,35 +178,60 @@ const DriverPanel = () => {
   }, [driver, fetchOrders]);
 
   const setStatus = async (id: string, status: string, note?: string) => {
-    if (status === 'delivered' && !confirm('Confirmar entrega?')) return;
-    const noteValue = note || '';
-    const kds = (await import('@/hooks/useOrders')).kdsPatchForStatus(status) || {};
-    await supabase.from('orders').update({ status, delivery_status_note: noteValue, ...kds }).eq('id', id);
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status, delivery_status_note: noteValue } : o));
+    const currentOrder = orders.find(o => o.id === id);
+    if (!currentOrder || !driver) return;
 
-    // Register a timeline event so the customer sees driver notes in the
-    // status page even after subsequent updates overwrite the field.
-    if (driver) {
+    // Impede concluir antes de iniciar a rota ou alterar um pedido que já
+    // saiu. O fornecedor apenas atribui; a saída é responsabilidade do motoboy.
+    if (status === 'out-for-delivery' && !['received', 'preparing'].includes(currentOrder.status)) {
+      toast.error('Este pedido já está em rota ou não está pronto para sair.');
+      return;
+    }
+    if (status === 'delivered' && currentOrder.status !== 'out-for-delivery') {
+      toast.error('Primeiro marque "Iniciar rota" antes de concluir a entrega.');
+      return;
+    }
+    if (status === 'delivered' && !confirm('Confirmar entrega?')) return;
+
+    setUpdatingOrderId(id);
+    const noteValue = note || '';
+    try {
+      const kds = (await import('@/hooks/useOrders')).kdsPatchForStatus(status) || {};
+      const { error } = await supabase
+        .from('orders')
+        .update({ status, delivery_status_note: noteValue, ...kds })
+        .eq('id', id)
+        .eq('driver_id', driver.id);
+      if (error) throw error;
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, status, delivery_status_note: noteValue } : o));
+
+      // Mantém uma linha do tempo confiável para cliente e loja.
       try {
         const description = status === 'delivered'
           ? `Motoboy ${driver.name} confirmou entrega`
           : noteValue
             ? `Motoboy ${driver.name}: ${noteValue}`
-            : `Motoboy ${driver.name} atualizou o pedido`;
+            : `Motoboy ${driver.name} iniciou a rota`;
         await (supabase as any).from('order_events').insert({
           order_id: id,
           tenant_id: driver.tenant_id,
-          event_type: status === 'delivered' ? 'delivered' : 'driver_note',
+          event_type: status === 'delivered' ? 'delivered' : 'driver_started_route',
+          from_status: currentOrder.status,
           to_status: status,
           actor: 'driver',
           actor_id: driver.id,
           description,
           metadata: { note: noteValue, driver_name: driver.name },
         });
-      } catch { /* non-blocking */ }
-    }
+      } catch { /* auditoria não bloqueia a entrega */ }
 
-    toast.success(`Status atualizado: ${status === 'delivered' ? 'Entregue' : note || status}`);
+      toast.success(status === 'delivered' ? '✅ Entrega confirmada' : '🏍️ Rota iniciada — cliente avisado');
+    } catch (e) {
+      console.error(e);
+      toast.error('Não foi possível atualizar este pedido. Tente novamente.');
+    } finally {
+      setUpdatingOrderId(null);
+    }
   };
 
   // Active deliveries (calc precoce para tracking GPS)
@@ -289,8 +316,9 @@ const DriverPanel = () => {
                 <div className="flex items-center gap-2">
                   <Package className="h-4 w-4 text-primary" />
                   <span className="font-medium text-foreground text-sm">#{order.id.slice(0, 6)}</span>
-                  <span className="flex items-center gap-1 text-xs text-primary animate-pulse">
+                  <span className={`flex items-center gap-1 text-xs ${order.status === 'out-for-delivery' ? 'text-blue-400' : 'text-amber-400'}`}>
                     <Bell className="h-3 w-3" />
+                    {order.status === 'out-for-delivery' ? 'Em rota' : 'Aguardando saída'}
                   </span>
                 </div>
                 <span className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleString('pt-BR')}</span>
@@ -397,18 +425,19 @@ const DriverPanel = () => {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => setStatus(order.id, order.status === 'out-for-delivery' ? 'delivered' : 'out-for-delivery')}
-                  className="rounded-lg gradient-primary text-primary-foreground py-2 text-sm font-medium hover:opacity-90"
+                  disabled={updatingOrderId === order.id}
+                  className="rounded-lg gradient-primary text-primary-foreground py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
                 >
-                  {order.status === 'out-for-delivery' ? <><CheckCircle className="h-4 w-4 inline mr-1" /> Entregue</> : <><Truck className="h-4 w-4 inline mr-1" /> Saiu para entrega</>}
+                  {updatingOrderId === order.id ? 'Atualizando...' : order.status === 'out-for-delivery' ? <><CheckCircle className="h-4 w-4 inline mr-1" /> Entregue</> : <><Truck className="h-4 w-4 inline mr-1" /> Iniciar rota</>}
                 </button>
-                <button onClick={() => setStatus(order.id, order.status === 'out-for-delivery' ? 'out-for-delivery' : order.status, 'Vou atrasar')} className="rounded-lg bg-yellow-500/20 text-yellow-400 py-2 text-sm font-medium hover:bg-yellow-500/30">
+                <button onClick={() => setStatus(order.id, order.status, 'Vou atrasar')} disabled={updatingOrderId === order.id} className="rounded-lg bg-yellow-500/20 text-yellow-400 py-2 text-sm font-medium hover:bg-yellow-500/30 disabled:opacity-50">
                   <Clock className="h-4 w-4 inline mr-1" /> {order.status === 'out-for-delivery' ? 'Atrasar' : 'Aguardar'}
                 </button>
               </div>
               <div className="flex gap-2">
                 <input value={customNote[order.id] || ''} onChange={e => setCustomNote(prev => ({ ...prev, [order.id]: e.target.value }))}
                   placeholder="Nota personalizada (ex: acidente)" className="flex-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none" />
-                <button onClick={() => { if (customNote[order.id]) setStatus(order.id, 'out-for-delivery', customNote[order.id]); }}
+                <button onClick={() => { if (customNote[order.id]) setStatus(order.id, order.status, customNote[order.id]); }} disabled={updatingOrderId === order.id}
                   className="rounded-lg bg-secondary text-foreground px-3 py-2 text-sm hover:bg-secondary/80">Enviar</button>
               </div>
             </div>
