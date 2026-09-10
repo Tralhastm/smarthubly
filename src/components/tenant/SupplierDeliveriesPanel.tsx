@@ -33,12 +33,13 @@ type SupplierLalamove = {
 };
 
 type Props = {
+  token: string;
   supplierId: string;
   tenantId: string;
   supplierName: string;
 };
 
-const SupplierDeliveriesPanel = ({ supplierId, tenantId, supplierName }: Props) => {
+const SupplierDeliveriesPanel = ({ token, supplierId, tenantId, supplierName }: Props) => {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [tenantHasLalamove, setTenantHasLalamove] = useState(false);
@@ -115,21 +116,26 @@ const SupplierDeliveriesPanel = ({ supplierId, tenantId, supplierName }: Props) 
   };
 
   const assignDriver = async (orderId: string, driverId: string) => {
-    await supabase.from('orders').update({
-      driver_id: driverId,
-      status: 'out-for-delivery',
-      lalamove_order_id: null, lalamove_status: null, lalamove_share_link: null,
-      lalamove_driver_name: null, lalamove_driver_phone: null, lalamove_driver_plate: null,
-    } as any).eq('id', orderId);
-    const driver = drivers.find(d => d.id === driverId);
-    await logOrderEvent({
-      order_id: orderId, tenant_id: tenantId,
-      event_type: 'driver_assigned_by_supplier',
-      to_status: 'out-for-delivery', actor: 'supplier', actor_id: supplierId,
-      description: `Fornecedor "${supplierName}" atribuiu motoboy "${driver?.name || ''}"`,
-    });
-    toast.success(`Motoboy ${driver?.name} atribuído!`);
-    fetchData();
+    try {
+      const { error } = await supabase.rpc('assign_order_driver_by_supplier_token', {
+        _supplier_token: token,
+        _order_id: orderId,
+        _driver_id: driverId,
+      });
+      if (error) throw error;
+      const driver = drivers.find(d => d.id === driverId);
+      await logOrderEvent({
+        order_id: orderId, tenant_id: tenantId,
+        event_type: 'driver_assigned_by_supplier',
+        from_status: 'preparing', to_status: 'preparing', actor: 'supplier', actor_id: supplierId,
+        description: `Fornecedor "${supplierName}" atribuiu o motoboy da loja "${driver?.name || ''}"`,
+      });
+      toast.success(`Motoboy da loja ${driver?.name} atribuído! Ele deve iniciar a rota no próprio painel.`);
+      fetchData();
+    } catch (e) {
+      console.error('Falha ao associar motoboy da loja:', e);
+      toast.error('Não foi possível associar este motoboy. Tente novamente.');
+    }
   };
 
   const refreshLalamove = async (orderId: string) => {
@@ -222,7 +228,7 @@ const SupplierDeliveriesPanel = ({ supplierId, tenantId, supplierName }: Props) 
 
             {drivers.length > 0 && (
               <div className="space-y-1">
-                <p className="text-xs text-muted-foreground flex items-center gap-1"><Bike className="h-3 w-3" /> Motoboy próprio:</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><Bike className="h-3 w-3" /> Motoboy da loja:</p>
                 <div className="flex flex-wrap gap-1">
                   {drivers.map(d => (
                     <button key={d.id} onClick={() => assignDriver(o.id, d.id)}
@@ -257,7 +263,7 @@ const SupplierDeliveriesPanel = ({ supplierId, tenantId, supplierName }: Props) 
         <div>
           <h3 className="font-heading text-foreground mb-2 flex items-center gap-2">
             <Bike className="h-4 w-4 text-primary" />
-            Em entrega — Motoboy próprio ({driverActive.length})
+            Em entrega — Motoboy da loja ({driverActive.length})
           </h3>
           {driverActive.map(o => {
             const driver = drivers.find(d => d.id === o.driver_id);
@@ -350,7 +356,7 @@ const SupplierDeliveriesPanel = ({ supplierId, tenantId, supplierName }: Props) 
             </div>
             {drivers.length > 0 && (
               <div className="rounded-md bg-card border border-border p-2 mt-2 space-y-1">
-                <p className="text-xs text-muted-foreground flex items-center gap-1"><ArrowLeftRight className="h-3 w-3" /> Trocar para motoboy próprio:</p>
+                <p className="text-xs text-muted-foreground flex items-center gap-1"><ArrowLeftRight className="h-3 w-3" /> Trocar para motoboy da loja:</p>
                 <div className="flex flex-wrap gap-1">
                   {drivers.map(d => (
                     <button key={d.id} onClick={() => assignDriver(o.id, d.id)}

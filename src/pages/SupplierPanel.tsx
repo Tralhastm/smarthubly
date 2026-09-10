@@ -452,7 +452,9 @@ const SupplierPanel = () => {
     };
   }, [supplier, fetchProducts]);
 
-  // Carrega motoboys ativos + disponibilidade Lalamove (própria do fornecedor OU da loja aprovada)
+  // Carrega os motoboys ativos da loja + disponibilidade Lalamove.
+  // O fornecedor pode despachar para um motoboy cadastrado pela própria loja;
+  // eles não são motoboys particulares do fornecedor.
   useEffect(() => {
     if (!supplier) return;
     let cancelled = false;
@@ -549,7 +551,7 @@ const SupplierPanel = () => {
     const next = getNextStatus(current, deliveryType);
     if (!next || !supplier) return;
 
-    // Antes de despachar para entrega, perguntar Lalamove vs motoboy próprio
+    // Antes de despachar para entrega, perguntar Lalamove vs motoboy da loja
     if (next === 'out-for-delivery') {
       if (orders.find(o => o.id === id)?.driver_id) {
         toast.info('Pedido já foi enviado ao motoboy. Ele deve marcar "Saiu para entrega" no próprio painel.');
@@ -560,7 +562,7 @@ const SupplierPanel = () => {
         setChoosingDispatch(id);
         return;
       }
-      // Só motoboy próprio
+      // Só motoboy da loja
       if (activeDrivers.length > 0) {
         if (activeDrivers.length === 1) {
           await assignDriverAndDispatch(id, activeDrivers[0].id);
@@ -571,7 +573,7 @@ const SupplierPanel = () => {
       }
       // Só Lalamove
       if (lalamoveAvailable) {
-        if (!confirm('Sem motoboy próprio cadastrado. Chamar Lalamove agora?')) return;
+        if (!confirm('Nenhum motoboy da loja está disponível. Chamar Lalamove agora?')) return;
         await dispatchLalamove(id);
         return;
       }
@@ -1165,7 +1167,7 @@ const SupplierPanel = () => {
                       <button onClick={() => { setChoosingDispatch(null); if (activeDrivers.length === 1) { assignDriverAndDispatch(order.id, activeDrivers[0].id); } else { setSelectingDriver(order.id); } }}
                         className="w-full flex items-center gap-2 rounded-lg bg-card border border-border p-2 text-sm text-foreground hover:border-primary transition-colors">
                         <User className="h-4 w-4 text-primary" />
-                        <span>Motoboy próprio</span>
+                        <span>Motoboy da loja</span>
                         <span className="text-xs text-muted-foreground ml-auto">{activeDrivers.length} disponível(is)</span>
                       </button>
                       <button onClick={() => dispatchLalamove(order.id)}
@@ -1181,7 +1183,7 @@ const SupplierPanel = () => {
 
                   {selectingDriver === order.id && (
                     <div className="rounded-lg border border-primary/30 bg-secondary p-3 space-y-2">
-                      <p className="text-sm font-medium text-foreground">Escolha o motoboy:</p>
+                          <p className="text-sm font-medium text-foreground">Escolha o motoboy da loja:</p>
                       {activeDrivers.map(d => (
                         <button type="button" key={d.id} onClick={() => assignDriverAndDispatch(order.id, d.id)} disabled={advancingId === order.id}
                           aria-label={`Selecionar motoboy ${d.name}`}
@@ -1369,7 +1371,7 @@ const SupplierPanel = () => {
         )}
 
         {tab === 'deliveries' && (
-          <SupplierDeliveriesPanel supplierId={supplier.id} tenantId={supplier.tenant_id} supplierName={supplier.name} />
+          <SupplierDeliveriesPanel token={token || ''} supplierId={supplier.id} tenantId={supplier.tenant_id} supplierName={supplier.name} />
         )}
 
         {tab === 'drivers' && (
