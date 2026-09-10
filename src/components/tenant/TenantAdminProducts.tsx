@@ -103,6 +103,9 @@ Use somente especificações confirmadas por pesquisa ou fornecidas no cadastro.
 
 const COMPLETE_GUARANTEE = 'Garantia de 30 dias contra defeitos de funcionamento. Não cobre quedas, quebras, mau uso, danos físicos, contato inadequado com líquidos ou alterações no aparelho.';
 
+const isVariantSoldOut = (variant: { in_stock?: unknown }) =>
+  variant.in_stock === false || String(variant.in_stock).toLowerCase() === 'false';
+
 // Alguns provedores podem devolver a última linha com reticências mesmo quando
 // o restante da descrição está completo. Nunca deixa esse texto truncado chegar
 // ao formulário ou ao banco: recompõe a garantia padronizada do catálogo.
@@ -1168,7 +1171,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   // obrigar o administrador a abrir produto por produto.
   const productNames = new Map(products.map(product => [product.id, product.name]));
   const soldOutColorVariants = allVariants
-    .filter(variant => variant.in_stock === false)
+    .filter(variant => isVariantSoldOut(variant))
     .map(variant => ({
       ...variant,
       productName: productNames.get(variant.product_id) || 'Produto sem nome',
@@ -1766,7 +1769,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       {visibleProducts.map(p => (
         <EditableProduct key={p.id} product={p} isEditing={editing === p.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate}
           suppliers={suppliers.filter(s => s.active)} tenantId={tenantId}
-          soldOutVariantIds={allVariants.filter(variant => variant.in_stock === false).map(variant => variant.id)}
+          soldOutVariantIds={allVariants.filter(variant => isVariantSoldOut(variant)).map(variant => variant.id)}
           feeRequests={feeRequests.filter(r => r.product_id === p.id)}
           onRequestFee={(productId, percent) => {
             createFeeReq.mutate({ tenant_id: tenantId, product_id: productId, requested_percent: percent }, {
@@ -1815,8 +1818,8 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
     .filter(variant => hasExplicitVariantSale(variant) && variant.salePrice > 0)
     .map(v => v.salePrice)
     .filter(price => price > 0);
-  const unavailableVariants = variantPrices.filter(v => v.in_stock === false && soldOutVariantIds.includes(v.id));
-  const resaleReviewVariants = variantPrices.filter(v => !hasExplicitVariantSale(v) && !soldOutVariantIds.includes(v.id));
+  const unavailableVariants = variantPrices.filter(v => isVariantSoldOut(v) && soldOutVariantIds.includes(v.id));
+  const resaleReviewVariants = variantPrices.filter(v => !hasExplicitVariantSale(v) && !isVariantSoldOut(v));
   const referencePrice = Number(product.price) > 0
     ? Number(product.price)
     : (variantSalePrices.length > 0 ? Math.min(...variantSalePrices) : 0);
@@ -2159,7 +2162,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
               {variantPrices.map(variant => (
                 <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
                   <span className="font-medium text-foreground">{variant.name}</span>
-                  {!variant.in_stock && soldOutVariantIds.includes(variant.id) && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">Esgotada</span>}
+                  {isVariantSoldOut(variant) && soldOutVariantIds.includes(variant.id) && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">Esgotada</span>}
                   <span>Custo: {variant.costPrice > 0 ? `R$${variant.costPrice.toFixed(2)}` : '—'}</span>
                   <span className="text-primary">Revenda: {hasExplicitVariantSale(variant) ? `R$${variant.salePrice.toFixed(2)}` : 'Pendente'}</span>
                 </p>
