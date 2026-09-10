@@ -493,29 +493,36 @@ const SupplierPanel = () => {
   };
 
   const assignDriverAndDispatch = async (orderId: string, driverId: string) => {
+    if (!supplier || !token) return;
     setSelectingDriver(null);
     const currentOrder = orders.find(o => o.id === orderId);
     const wasOutForDelivery = currentOrder?.status === 'out-for-delivery';
-    // Atualização otimista
+    setAdvancingId(orderId);
+    // Atualização otimista; revertida se a associação for rejeitada.
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, driver_id: driverId, lalamove_order_id: null } : o));
-    toast.success(wasOutForDelivery ? 'Motoboy trocado!' : 'Pedido enviado ao painel do motoboy!');
-    await supabase.from('orders').update({
-      driver_id: driverId,
-      lalamove_order_id: null,
-      lalamove_status: null,
-      lalamove_share_link: null,
-      lalamove_driver_name: null,
-      lalamove_driver_phone: null,
-      lalamove_driver_plate: null,
-    } as any).eq('id', orderId);
-    const order = orders.find(o => o.id === orderId);
     try {
-      await unifiedInvoke("notify-unified", "push", {
-        driverId,
-        title: "🏍️ Novo pedido atribuído!",
-        body: `Pedido #${orderId.slice(0, 6)} disponível para sua rota.`,
+      const { error } = await supabase.rpc('assign_order_driver_by_supplier_token', {
+        _supplier_token: token,
+        _order_id: orderId,
+        _driver_id: driverId,
       });
-    } catch (e) { console.error('Push falhou:', e); }
+      if (error) throw error;
+
+      toast.success(wasOutForDelivery ? 'Motoboy trocado!' : 'Pedido enviado ao painel do motoboy!');
+      try {
+        await unifiedInvoke("notify-unified", "push", {
+          driverId,
+          title: "🏍️ Novo pedido atribuído!",
+          body: `Pedido #${orderId.slice(0, 6)} disponível para sua rota.`,
+        });
+      } catch (e) { console.error('Push falhou:', e); }
+    } catch (e) {
+      console.error('Falha ao associar motoboy:', e);
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, driver_id: currentOrder?.driver_id ?? null } : o));
+      toast.error('Não foi possível associar este motoboy. Tente novamente.');
+    } finally {
+      setAdvancingId(null);
+    }
   };
 
   const switchToLalamove = async (orderId: string) => {
@@ -1176,10 +1183,11 @@ const SupplierPanel = () => {
                     <div className="rounded-lg border border-primary/30 bg-secondary p-3 space-y-2">
                       <p className="text-sm font-medium text-foreground">Escolha o motoboy:</p>
                       {activeDrivers.map(d => (
-                        <button key={d.id} onClick={() => assignDriverAndDispatch(order.id, d.id)}
+                        <button type="button" key={d.id} onClick={() => assignDriverAndDispatch(order.id, d.id)} disabled={advancingId === order.id}
+                          aria-label={`Selecionar motoboy ${d.name}`}
                           className="w-full flex items-center gap-2 rounded-lg bg-card border border-border p-2 text-sm text-foreground hover:border-primary transition-colors">
                           <Truck className="h-4 w-4 text-primary" />
-                          <span>{d.name}</span>
+                          <span>{advancingId === order.id ? 'Associando...' : d.name}</span>
                           <span className="text-xs text-muted-foreground">· {d.phone}</span>
                         </button>
                       ))}
