@@ -51,6 +51,7 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
   const driverMarkerRef = useRef<L.Marker | null>(null);
   const destMarkerRef = useRef<L.Marker | null>(null);
   const routeLineRef = useRef<L.Polyline | null>(null);
+  const routeRequestRef = useRef<AbortController | null>(null);
 
   const [destCoords, setDestCoords] = useState<LatLng | null>(null);
   const [currentPos, setCurrentPos] = useState<LatLng | null>(null);
@@ -234,19 +235,26 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
   useEffect(() => {
     if (!currentPos || !destCoords) return;
 
-    // Não recalcula se moveu < 50m e faz menos de 30s
+    // Recalcula cedo, mas evita chamadas excessivas ao OSRM público.
+    // O GPS continua chegando em tempo real; a linha só muda quando há uma nova rota pelas ruas.
     const last = lastRouteFetchRef.current;
     if (last) {
       const distM = L.latLng(last.pos).distanceTo(currentPos);
       const ageMs = Date.now() - last.ts;
-      if (distM < 50 && ageMs < 30_000) return;
+      if (distM < 25 && ageMs < 10_000) return;
     }
     lastRouteFetchRef.current = { pos: currentPos, ts: Date.now() };
 
-    const url = `https://router.project-osrm.org/route/v1/driving/${currentPos[1]},${currentPos[0]};${destCoords[1]},${destCoords[0]}?overview=full&geometries=geojson`;
+    routeRequestRef.current?.abort();
+    const controller = new AbortController();
+    routeRequestRef.current = controller;
+    const url = `https://router.project-osrm.org/route/v1/driving/${currentPos[1]},${currentPos[0]};${destCoords[1]},${destCoords[0]}?overview=full&geometries=geojson&steps=false`;
     let cancelled = false;
-    fetch(url)
-      .then(r => r.json())
+    fetch(url, { signal: controller.signal })
+      .then(r => {
+        if (!r.ok) throw new Error(`OSRM HTTP ${r.status}`);
+        return r.json();
+      })
       .then(data => {
         if (cancelled || !data?.routes?.[0]) return;
         const route = data.routes[0];
@@ -254,7 +262,13 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
         const map = mapRef.current;
         if (!map) return;
 
-        if (routeLineRef.current) routeLineRef.current.remove();
+        // Só troca a linha depois que a nova rota chegou. Assim a linha anterior
+        // continua visível durante o cálculo, sem desenhar uma linha reta provisória.
+        if (routeLineRef.current) {
+          const previous = routeLineRef.current as any;
+          previous._outline?.remove();
+          previous.remove();
+        }
         // Linha base mais grossa pra criar contorno branco
         const outline = L.polyline(coords, { color: '#ffffff', weight: 8, opacity: 0.9 }).addTo(map);
         const line = L.polyline(coords, { color: '#3b82f6', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round' }).addTo(map);
@@ -268,9 +282,17 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
           durationMin: route.duration / 60,
         });
       })
-      .catch(() => { /* silencioso, o usuário ainda vê os marcadores */ });
+      .catch((error) => {
+        if (error?.name !== 'AbortError') {
+          // Permite tentar de novo no próximo update do GPS se o OSRM público falhar.
+          lastRouteFetchRef.current = null;
+        }
+      });
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [currentPos, destCoords]);
 
   // Cleanup outline ao trocar rota
