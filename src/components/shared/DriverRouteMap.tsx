@@ -339,17 +339,17 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
       {/* Overlay de info da rota (top) */}
       {routeInfo && (
         <div className="absolute top-3 left-3 right-3 z-[400] rounded-2xl bg-card/95 backdrop-blur-md border border-border shadow-xl px-4 py-2.5 flex items-center justify-around gap-2">
-          <div className="flex items-center gap-1.5 text-foreground">
+          <div className="flex items-center gap-1.5 text-slate-900">
             <Navigation2 className="h-4 w-4 text-primary" />
             <div><span className="block text-[10px] uppercase tracking-wide text-slate-500">Rota da entrega</span><span className="font-semibold text-sm">{routeInfo.distanceKm.toFixed(1)} km</span></div>
           </div>
           <div className="w-px h-5 bg-border" />
-          <div className="flex items-center gap-1.5 text-foreground">
+          <div className="flex items-center gap-1.5 text-slate-900">
             <Clock className="h-4 w-4 text-primary" />
             <span className="font-semibold text-sm">{Math.max(1, Math.round(routeInfo.durationMin))} min</span>
           </div>
           <div className="w-px h-5 bg-border" />
-          <div className="flex items-center gap-1.5 text-muted-foreground">
+          <div className="flex items-center gap-1.5 text-slate-700">
             <MapPin className="h-4 w-4 text-red-500" />
             <span className="text-xs">Destino</span>
           </div>
