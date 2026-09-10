@@ -361,22 +361,18 @@ const SupplierPanel = () => {
       const money = (n: number) => `R$ ${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       let totalDue = 0;
       let totalUnits = 0;
-      const lines = [`LOTE DIÁRIO — ${supplier.name.toUpperCase()}`, `Data: ${start.toLocaleDateString('pt-BR')}`, '', 'RESUMO', `Pedidos: ${orders.length}`, ''];
-      orders.forEach(({ order, items }, index) => {
-        let orderTotal = 0;
-        lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', `PEDIDO ${index + 1} — #${String(order.id).slice(0, 6).toUpperCase()}`, `Cliente: ${order.customer_name || 'Não informado'}`, `Data/hora: ${new Date(order.created_at).toLocaleString('pt-BR')}`, '');
+      const lines = [`LOTE DIÁRIO — ${supplier.name.toUpperCase()}`, `Data: ${start.toLocaleDateString('pt-BR')}`, ''];
+      orders.forEach(({ items }) => {
         items.forEach((item: any) => {
           const qty = Number(item.quantity || 0);
           const cost = costs.get(item.variantId) ?? Number(item.product?.original_price ?? 0);
           const subtotal = cost * qty;
-          totalUnits += qty; orderTotal += subtotal;
-          lines.push(`Quantidade: ${qty} unidade(s)`, `Produto: ${item.product?.name || 'Não identificado'}`, `Variação: ${item.variantName || 'Única'}`, `Custo unitário: ${cost > 0 ? money(cost) : 'NÃO LOCALIZADO'}`, `Subtotal: ${cost > 0 ? money(subtotal) : 'CONFERIR'}`, '');
+          totalUnits += qty; totalDue += subtotal;
+          lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', `Quantidade: ${qty} unidade(s)`, `Produto: ${item.product?.name || 'Não identificado'}`, `Variação: ${item.variantName || 'Única'}`, `Custo unitário: ${cost > 0 ? money(cost) : 'NÃO LOCALIZADO'}`, `Subtotal: ${cost > 0 ? money(subtotal) : 'CONFERIR'}`, '');
         });
-        totalDue += orderTotal;
-        lines.push(`TOTAL DESTE PEDIDO: ${money(orderTotal)}`, '');
       });
-      const codes = Array.from(new Set(orders.map(x => x.order.metadata?.courier_code).filter(Boolean)));
-      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'TOTAL DO LOTE', `Pedidos: ${orders.length}`, `Quantidade total: ${totalUnits} unidade(s)`, `VALOR TOTAL DEVIDO AO FORNECEDOR: ${money(totalDue)}`, '', 'CÓDIGO(S) DO MOTOBOY', codes.length ? codes.map(c => `- ${c}`).join('\n') : '- Não informado no pedido', '', 'Conferir quantidade, variação, custo unitário e total antes de separar.');
+      const batchCode = `LOTE-${start.toISOString().slice(0, 10).replace(/-/g, '')}-${String(supplier.id).slice(0, 6).toUpperCase()}`;
+      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'TOTAL DO LOTE', `Quantidade total: ${totalUnits} unidade(s)`, `VALOR TOTAL DEVIDO AO FORNECEDOR: ${money(totalDue)}`, '', `CÓDIGO DO LOTE / MOTOBOY: ${batchCode}`, '', 'Conferir quantidade, variação, custo unitário e total antes de separar.');
       const text = lines.join('\n');
       await navigator.clipboard?.writeText(text);
       const phone = String((supplier as any).phone || '').replace(/\D/g, '');
