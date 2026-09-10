@@ -726,9 +726,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           : !isCost && calculatedSale > 0
             ? calculatedSale
             : 0;
-      // O Seletor por cor nunca cadastra uma cor nova: ele só atualiza
-      // variantes já existentes deste produto e deste fornecedor.
-      if (colorOnly && !existing) continue;
+      // Uma cor nova precisa entrar no catálogo para ser revisada, mas não
+      // pode ficar disponível ao cliente enquanto não tiver preço de revenda.
       const canCreateCostOnlyVariant = (isCost || colorOnly) && (colorOnly || variantCost > 0);
       if (variantSale <= 0 && !canCreateCostOnlyVariant) continue;
 
@@ -742,9 +741,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         // O custo pode variar por cor/capacidade. Isso não significa que a
         // revenda esteja pendente: só sinalizar quando não houver preço de
         // revenda definido para a variante.
-        needs_price_review: colorOnly ? Boolean(existing?.needs_price_review) : variantSale <= 0,
+        needs_price_review: variantSale <= 0,
         price_source: colorOnly ? (existing?.price_source || 'seletor_por_cor') : variantCost > 0 ? 'lista_diaria' : 'lista_diaria_sem_custo',
-        in_stock: variant.available !== false,
+        in_stock: variant.available !== false && variantSale > 0,
         supplier_id: supplierId || existing?.supplier_id || null,
         sort_order: sortOrder,
       };
@@ -1481,7 +1480,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             {importPriceType === 'color' && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
                 <p className="font-semibold text-primary">Atualiza somente as cores</p>
-                <p className="mt-1">Custos, preços de revenda e alertas de preço existentes serão preservados. Cores ausentes ficam indisponíveis; dispositivos ausentes continuam sendo marcados como esgotados.</p>
+                <p className="mt-1">Cores antigas que não vierem ficam indisponíveis. Cores novas entram bloqueadas e sinalizadas para definição do preço de revenda; nada é publicado ao cliente sem preço definido.</p>
               </div>
             )}
             {importPriceType === 'cost' && (
@@ -1769,8 +1768,8 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
     costPrice: Number(variant.cost_price ?? (product as any).original_price) || 0,
   }));
   const variantSalePrices = variantPrices.map(v => v.salePrice).filter(price => price > 0);
-  const unavailableVariants = variantPrices.filter(v => v.in_stock === false);
-  const resaleReviewVariants = variantPrices.filter(v => v.in_stock !== false && v.salePrice <= 0);
+  const unavailableVariants = variantPrices.filter(v => v.in_stock === false && !v.needs_price_review);
+  const resaleReviewVariants = variantPrices.filter(v => Boolean(v.needs_price_review) || (v.in_stock !== false && v.salePrice <= 0));
   const referencePrice = Number(product.price) > 0
     ? Number(product.price)
     : (variantSalePrices.length > 0 ? Math.min(...variantSalePrices) : 0);
