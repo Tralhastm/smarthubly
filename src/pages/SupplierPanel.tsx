@@ -482,10 +482,8 @@ const SupplierPanel = () => {
         throw new Error((data as { error?: string })?.error || error?.message || 'Erro Lalamove');
       }
       const d = data as { price?: number; payer?: string };
-      await supabase.from('orders').update({ status: 'out-for-delivery' }).eq('id', orderId);
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'out-for-delivery' } : o));
       const payer = d.payer === 'supplier' ? 'fornecedor' : 'loja';
-      toast.success(`✅ Lalamove acionada! R$${d.price || '?'} (paga: ${payer})`, { id: toastId, duration: 6000 });
+      toast.success(`✅ Lalamove acionada; aguardando início da rota. R$${d.price || '?'} (paga: ${payer})`, { id: toastId, duration: 6000 });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`Falha Lalamove: ${msg}`, { id: toastId, duration: 8000 });
@@ -570,7 +568,11 @@ const SupplierPanel = () => {
         await dispatchLalamove(id);
         return;
       }
-      // Nenhuma das duas: avança o status mesmo assim (loja sem entrega configurada)
+      // Nunca avance para "Saiu p/ Entrega" pelo painel do fornecedor.
+      // Sem motoboy ou Lalamove, o pedido permanece visível ao cliente como
+      // recebido/em preparo até que um entregador possa iniciar a rota.
+      toast.error('Cadastre ou ative um motoboy para despachar este pedido.');
+      return;
     }
 
     // Atualização otimista — UI muda na hora, banco em background
@@ -1209,7 +1211,11 @@ const SupplierPanel = () => {
                     <button onClick={() => advanceStatus(order.id, order.status, order.delivery_type)}
                       disabled={advancingId === order.id}
                       className="w-full rounded-lg gradient-primary text-primary-foreground py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50">
-                      {advancingId === order.id ? 'Avançando...' : `Avançar → ${statusConfig[getNextStatus(order.status, order.delivery_type)!]?.label}`}
+                      {advancingId === order.id
+                        ? 'Despachando...'
+                        : getNextStatus(order.status, order.delivery_type) === 'out-for-delivery'
+                          ? 'Despachar motoboy'
+                          : `Avançar → ${statusConfig[getNextStatus(order.status, order.delivery_type)!]?.label}`}
                     </button>
                   )}
                 </div>
