@@ -272,8 +272,8 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
           previous.remove();
         }
         // Linha base mais grossa pra criar contorno branco
-        const outline = L.polyline(coords, { color: '#ffffff', weight: 10, opacity: 0.92, lineCap: 'round', lineJoin: 'round' }).addTo(map);
-        const line = L.polyline(coords, { color: '#2563eb', weight: 6, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+        const outline = L.polyline(coords, { color: '#ffffff', weight: 8, opacity: 0.9 }).addTo(map);
+        const line = L.polyline(coords, { color: '#3b82f6', weight: 5, opacity: 1 }).addTo(map);
         // Salva grupo via outra estratégia: armazena só a linha, mas adiciona outline antes
         routeLineRef.current = line;
         // Hack: ao remover routeLineRef, remove também outline
@@ -307,8 +307,8 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
   }, []);
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-slate-100 customer-route-map">
-      <div ref={containerRef} className="w-full h-full" style={{ background: '#e8eef3' }} />
+    <div className="relative w-full h-full overflow-hidden customer-route-map">
+      <div ref={containerRef} className="w-full h-full" style={{ background: '#ffffff' }} />
 
       <style>{`
         .customer-route-map .leaflet-control-zoom {
@@ -338,7 +338,7 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
 
       {/* Overlay de info da rota (top) */}
       {routeInfo && (
-        <div className="absolute top-3 left-3 right-3 z-[400] rounded-2xl bg-white/95 backdrop-blur-md border border-white/80 shadow-xl px-4 py-2.5 flex items-center justify-around gap-2">
+        <div className="absolute top-3 left-3 right-3 z-[400] rounded-2xl bg-card/95 backdrop-blur-md border border-border shadow-xl px-4 py-2.5 flex items-center justify-around gap-2">
           <div className="flex items-center gap-1.5 text-foreground">
             <Navigation2 className="h-4 w-4 text-primary" />
             <div><span className="block text-[10px] uppercase tracking-wide text-slate-500">Rota da entrega</span><span className="font-semibold text-sm">{routeInfo.distanceKm.toFixed(1)} km</span></div>
