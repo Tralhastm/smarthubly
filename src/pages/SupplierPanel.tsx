@@ -30,6 +30,7 @@ type OrderWithItems = {
   change_for?: number;
   driver_id?: string | null;
   lalamove_order_id?: string | null;
+  metadata?: any;
   order_items: { id: string; product_name: string; product_price: number; quantity: number }[];
 };
 
@@ -81,6 +82,7 @@ const SupplierPanel = () => {
   const [selectingDriver, setSelectingDriver] = useState<string | null>(null);
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
+  const [batchSending, setBatchSending] = useState(false);
   const [priceText, setPriceText] = useState('');
   const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both' | 'color'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
@@ -329,6 +331,63 @@ const SupplierPanel = () => {
       console.error('[SupplierPanel] fetchOrders error (will retry):', err);
     }
   }, [supplier]);
+
+  const sendDailySupplierBatch = async () => {
+    if (!supplier || batchSending) return;
+    setBatchSending(true);
+    try {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const { data, error } = await supabase.from('orders')
+        .select('id, created_at, customer_name, metadata')
+        .eq('tenant_id', supplier.tenant_id)
+        .gte('created_at', start.toISOString())
+        .not('status', 'in', '(cancelled,canceled)')
+        .order('created_at', { ascending: true }).limit(500);
+      if (error) throw error;
+      const orders = ((data || []) as any[]).map(order => ({
+        order,
+        items: order.metadata?.fragmentation_map?.[supplier.id] || [],
+      })).filter(x => Array.isArray(x.items) && x.items.length > 0);
+      if (!orders.length) { toast.info('Nenhum pedido deste fornecedor hoje.'); return; }
+
+      const variantIds = Array.from(new Set(orders.flatMap(x => x.items.map((i: any) => i.variantId).filter(Boolean))));
+      const { data: offers } = variantIds.length
+        ? await (supabase as any).from('supplier_variant_offers').select('product_variant_id, unit_cost')
+          .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id)
+          .in('product_variant_id', variantIds).limit(500)
+        : { data: [] as any[] };
+      const costs = new Map(((offers || []) as any[]).map(o => [o.product_variant_id, Number(o.unit_cost)]));
+      const money = (n: number) => `R$ ${n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      let totalDue = 0;
+      let totalUnits = 0;
+      const lines = [`LOTE DIÁRIO — ${supplier.name.toUpperCase()}`, `Data: ${start.toLocaleDateString('pt-BR')}`, '', 'RESUMO', `Pedidos: ${orders.length}`, ''];
+      orders.forEach(({ order, items }, index) => {
+        let orderTotal = 0;
+        lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', `PEDIDO ${index + 1} — #${String(order.id).slice(0, 6).toUpperCase()}`, `Cliente: ${order.customer_name || 'Não informado'}`, `Data/hora: ${new Date(order.created_at).toLocaleString('pt-BR')}`, '');
+        items.forEach((item: any) => {
+          const qty = Number(item.quantity || 0);
+          const cost = costs.get(item.variantId) ?? Number(item.product?.original_price ?? 0);
+          const subtotal = cost * qty;
+          totalUnits += qty; orderTotal += subtotal;
+          lines.push(`Quantidade: ${qty} unidade(s)`, `Produto: ${item.product?.name || 'Não identificado'}`, `Variação: ${item.variantName || 'Única'}`, `Custo unitário: ${cost > 0 ? money(cost) : 'NÃO LOCALIZADO'}`, `Subtotal: ${cost > 0 ? money(subtotal) : 'CONFERIR'}`, '');
+        });
+        totalDue += orderTotal;
+        lines.push(`TOTAL DESTE PEDIDO: ${money(orderTotal)}`, '');
+      });
+      const codes = Array.from(new Set(orders.map(x => x.order.metadata?.courier_code).filter(Boolean)));
+      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'TOTAL DO LOTE', `Pedidos: ${orders.length}`, `Quantidade total: ${totalUnits} unidade(s)`, `VALOR TOTAL DEVIDO AO FORNECEDOR: ${money(totalDue)}`, '', 'CÓDIGO(S) DO MOTOBOY', codes.length ? codes.map(c => `- ${c}`).join('\n') : '- Não informado no pedido', '', 'Conferir quantidade, variação, custo unitário e total antes de separar.');
+      const text = lines.join('\n');
+      await navigator.clipboard?.writeText(text);
+      const phone = String((supplier as any).phone || '').replace(/\D/g, '');
+      if (!phone) { toast.success('Lote copiado. Cadastre o telefone do fornecedor para abrir o WhatsApp.'); return; }
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+      toast.success('Lote diário preparado e copiado para o WhatsApp.');
+    } catch (e) {
+      console.error('[SupplierPanel] daily batch error:', e);
+      toast.error('Não foi possível gerar o lote diário.');
+    } finally { setBatchSending(false); }
+  };
 
   // Keep ref pointing at latest fetchOrders so subscriptions/intervals never go stale
   useEffect(() => { fetchOrdersRef.current = fetchOrders; }, [fetchOrders]);
@@ -988,6 +1047,13 @@ const SupplierPanel = () => {
 
         {tab === 'orders' && (
           <div className="space-y-4">
+            <button
+              onClick={sendDailySupplierBatch}
+              disabled={batchSending}
+              className="w-full rounded-lg border border-green-500/40 bg-green-500/10 text-green-400 py-2.5 text-sm font-semibold hover:bg-green-500/20 disabled:opacity-50"
+            >
+              {batchSending ? 'Montando lote diário...' : '📲 Enviar lote do dia pelo WhatsApp'}
+            </button>
             {orders.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhum pedido ativo.</p>}
             {orders.map(order => {
               const cfg = statusConfig[order.status] || statusConfig.received;
