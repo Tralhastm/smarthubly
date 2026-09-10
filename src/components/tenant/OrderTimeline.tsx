@@ -20,6 +20,22 @@ const actorIcons: Record<string, React.ReactNode> = {
   driver: <Truck className="h-3.5 w-3.5 text-orange-400" />,
 };
 
+// A linha do tempo do cliente não deve revelar a identidade dos fornecedores.
+// Os eventos completos continuam disponíveis nos painéis internos; aqui usamos
+// mensagens neutras mesmo que o registro antigo contenha o nome do fornecedor.
+const publicDescription = (event: OrderEvent) => {
+  switch (event.event_type) {
+    case 'auto_assign_supplier':
+      return 'Pedido encaminhado para preparação';
+    case 'auto_advance':
+      return 'Pedido recebido e em preparação';
+    case 'driver_assigned_by_supplier':
+      return 'Motoboy designado para a entrega';
+    default:
+      return event.description.replace(/Fornecedor\s+"[^"]+"/gi, 'a operação de entrega');
+  }
+};
+
 const OrderTimeline = ({ orderId }: { orderId: string }) => {
   const [events, setEvents] = useState<OrderEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +60,7 @@ const OrderTimeline = ({ orderId }: { orderId: string }) => {
           <div className="absolute -left-[18px] top-0.5 rounded-full bg-card p-0.5 border border-border">
             {actorIcons[ev.actor] || <Clock className="h-3.5 w-3.5 text-muted-foreground" />}
           </div>
-          <p className="text-xs text-foreground leading-tight">{ev.description}</p>
+          <p className="text-xs text-foreground leading-tight">{publicDescription(ev)}</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
             {new Date(ev.created_at).toLocaleString('pt-BR')}
             {ev.from_status && ev.to_status && ` · ${ev.from_status} → ${ev.to_status}`}
