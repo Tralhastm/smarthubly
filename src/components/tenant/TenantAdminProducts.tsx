@@ -1160,9 +1160,43 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       return { product, pricing: calculateFinalProfit(referencePrice, referenceCost) };
     })
     .filter(item => item.pricing.isLoss);
+  // Uma variante marcada como indisponível e sem pendência de preço foi
+  // retirada da última lista do fornecedor. O aviso fica no topo para não
+  // obrigar o administrador a abrir produto por produto.
+  const productNames = new Map(products.map(product => [product.id, product.name]));
+  const soldOutColorVariants = allVariants
+    .filter(variant => variant.in_stock === false && !variant.needs_price_review)
+    .map(variant => ({
+      ...variant,
+      productName: productNames.get(variant.product_id) || 'Produto sem nome',
+    }))
+    .sort((a, b) => `${a.productName} ${a.name}`.localeCompare(`${b.productName} ${b.name}`, 'pt-BR', { sensitivity: 'base' }));
 
   return (
     <div className="space-y-4">
+      {soldOutColorVariants.length > 0 && (
+        <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-amber-700 dark:text-amber-400">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">Atenção: {soldOutColorVariants.length} cor(es) esgotada(s)</p>
+              <p className="mt-1 text-xs opacity-90">Estas cores não apareceram na última lista do fornecedor e foram retiradas da disponibilidade da vitrine.</p>
+              <div className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                {soldOutColorVariants.slice(0, 12).map(variant => (
+                  <div key={variant.id} className="flex min-w-0 items-center gap-1.5 rounded-md bg-amber-500/10 px-2 py-1">
+                    <span className="truncate font-semibold">{variant.productName}</span>
+                    <span className="shrink-0">· {variant.name}</span>
+                    <span className="ml-auto shrink-0 text-[10px] font-bold uppercase">Esgotada</span>
+                  </div>
+                ))}
+              </div>
+              {soldOutColorVariants.length > 12 && (
+                <p className="mt-2 text-[11px] opacity-80">+ {soldOutColorVariants.length - 12} outra(s) cor(es) esgotada(s) listadas nos respectivos produtos.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {lossProducts.length > 0 && (
         <div role="alert" className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-destructive">
           <div className="flex items-start gap-2">
@@ -1767,9 +1801,17 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
     salePrice: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
     costPrice: Number(variant.cost_price ?? (product as any).original_price) || 0,
   }));
-  const variantSalePrices = variantPrices.map(v => v.salePrice).filter(price => price > 0);
+  // Nunca usar o preço-base como se fosse revenda da cor quando a variante
+  // ainda não recebeu um preço explícito. O helper de preço mantém um
+  // fallback útil para a vitrine, mas no painel isso mascarava a pendência.
+  const hasExplicitVariantSale = (variant: typeof variantPrices[number]) =>
+    Number(variant.suggested_price ?? 0) > 0 || Number(variant.price_delta ?? 0) !== 0;
+  const variantSalePrices = variantPrices
+    .filter(variant => hasExplicitVariantSale(variant) && variant.salePrice > 0)
+    .map(v => v.salePrice)
+    .filter(price => price > 0);
   const unavailableVariants = variantPrices.filter(v => v.in_stock === false && !v.needs_price_review);
-  const resaleReviewVariants = variantPrices.filter(v => Boolean(v.needs_price_review) || (v.in_stock !== false && v.salePrice <= 0));
+  const resaleReviewVariants = variantPrices.filter(v => !hasExplicitVariantSale(v) && v.in_stock !== false);
   const referencePrice = Number(product.price) > 0
     ? Number(product.price)
     : (variantSalePrices.length > 0 ? Math.min(...variantSalePrices) : 0);
@@ -2112,8 +2154,9 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
               {variantPrices.map(variant => (
                 <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
                   <span className="font-medium text-foreground">{variant.name}</span>
+                  {!variant.in_stock && !variant.needs_price_review && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">Esgotada</span>}
                   <span>Custo: {variant.costPrice > 0 ? `R$${variant.costPrice.toFixed(2)}` : '—'}</span>
-                  <span className="text-primary">Revenda: R${variant.salePrice.toFixed(2)}</span>
+                  <span className="text-primary">Revenda: {hasExplicitVariantSale(variant) ? `R$${variant.salePrice.toFixed(2)}` : 'Pendente'}</span>
                 </p>
               ))}
             </div>
@@ -2121,7 +2164,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
           {(unavailableVariants.length > 0 || resaleReviewVariants.length > 0) && (
             <div className="mt-2 space-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-600">
               {unavailableVariants.map(variant => (
-                <p key={`missing-${variant.id}`}>⚠ {variant.name} do {product.name} não está na lista do fornecedor.</p>
+                <p key={`missing-${variant.id}`}>⚠ A cor {variant.name} do {product.name} está esgotada — não apareceu na última lista do fornecedor.</p>
               ))}
               {resaleReviewVariants.map(variant => (
                 <p key={`review-${variant.id}`}>⚠ {variant.name} do {product.name}: defina o preço de revenda.</p>
