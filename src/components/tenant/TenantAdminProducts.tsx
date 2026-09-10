@@ -106,6 +106,19 @@ const COMPLETE_GUARANTEE = 'Garantia de 30 dias contra defeitos de funcionamento
 const isVariantSoldOut = (variant: { in_stock?: unknown }) =>
   variant.in_stock === false || String(variant.in_stock).toLowerCase() === 'false';
 
+const variantMatchKey = (value: unknown) => {
+  const aliases: Record<string, string> = {
+    black: 'preto', white: 'branco', blue: 'azul', red: 'vermelho', green: 'verde',
+    purple: 'roxo', violet: 'roxo', pink: 'rosa', gold: 'dourado', golden: 'dourado',
+    silver: 'prata', gray: 'cinza', grey: 'cinza', yellow: 'amarelo', orange: 'laranja',
+    brown: 'marrom', titanium: 'titanio',
+  };
+  return String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/)
+    .map(token => aliases[token] || token).filter(Boolean).sort().join(' ');
+};
+
 // Alguns provedores podem devolver a última linha com reticências mesmo quando
 // o restante da descrição está completo. Nunca deixa esse texto truncado chegar
 // ao formulário ou ao banco: recompõe a garantia padronizada do catálogo.
@@ -711,12 +724,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
     const existingByName = new Map<string, any>();
     ((existingVariants || []) as any[]).forEach(existing => {
-      existingByName.set(existing.name.trim().toLocaleLowerCase('pt-BR'), existing);
+      existingByName.set(variantMatchKey(existing.name), existing);
     });
     for (const [sortOrder, variant] of product.variants.entries()) {
       const name = variant.name?.trim();
       if (!name) continue;
-      const key = name.toLocaleLowerCase('pt-BR');
+      const key = variantMatchKey(name);
       const existing = existingByName.get(key);
       const variantCost = colorOnly ? Number(existing?.cost_price || 0) : Number(variant.cost_price || (isCost ? variant.price : 0)) || 0;
       const explicitSale = colorOnly ? Number(existing?.suggested_price || 0) : Number(variant.resale_price || (!isCost ? variant.price : 0)) || 0;
@@ -784,7 +797,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
     // A lista por cor é fonte de verdade somente para as cores deste produto
     // e fornecedor: cores ausentes ficam indisponíveis, sem apagar ofertas.
-    const importedKeys = new Set(product.variants.map(v => v.name.trim().toLocaleLowerCase('pt-BR')));
+    const importedKeys = new Set(product.variants.map(v => variantMatchKey(v.name)));
     const { data: supplierOffers, error: offersError } = await supabase
       .from('supplier_variant_offers' as any)
       .select('id, variant_key')
@@ -793,7 +806,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       .limit(100);
     if (offersError) throw offersError;
     for (const offer of (supplierOffers || []) as any[]) {
-      if (!importedKeys.has(String(offer.variant_key).toLocaleLowerCase('pt-BR'))) {
+      if (!importedKeys.has(variantMatchKey(offer.variant_key))) {
         const { error } = await supabase.from('supplier_variant_offers' as any)
           .update({ available: false, last_seen_at: new Date().toISOString() }).eq('id', offer.id);
         if (error) throw error;
@@ -804,8 +817,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     // que não apareceram ficam ocultas, mas permanecem cadastradas para voltar quando
     // reaparecerem em uma próxima lista.
     for (const existing of (existingVariants || []) as any[]) {
-      const key = existing.name.trim().toLocaleLowerCase('pt-BR');
-      if (!product.variants.some(variant => variant.name.trim().toLocaleLowerCase('pt-BR') === key)) {
+      const key = variantMatchKey(existing.name);
+      if (!importedKeys.has(key)) {
         const { error } = await supabase
           .from('product_variants' as any)
           // No seletor por cor, ausência na lista é esgotamento. Limpa uma
@@ -828,6 +841,21 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     
     // Resolve o fornecedor novamente para garantir que o ID esteja disponível no escopo da função
     const currentSupplierId = await resolveImportSupplier(importSupplierName);
+
+    // Cada catálogo representa o estado atual daquele fornecedor. Primeiro
+    // ocultamos as ofertas antigas dele; as linhas encontradas neste upload
+    // serão reativadas durante o processamento. Assim, produto/cor ausente
+    // fica esgotado sem apagar o histórico nem afetar o outro fornecedor.
+    if (currentSupplierId) {
+      const { error } = await supabase.from('supplier_product_prices')
+        .update({ available: false })
+        .eq('supplier_id', currentSupplierId);
+      if (error) throw error;
+      const { error: variantSnapshotError } = await supabase.from('supplier_variant_offers' as any)
+        .update({ available: false })
+        .eq('supplier_id', currentSupplierId);
+      if (variantSnapshotError) throw variantSnapshotError;
+    }
 
     // O parser já agrupa linhas do mesmo modelo e preserva custos por cor.
     // Não deduplicar aqui: isso perderia diferenças de custo entre variantes.
@@ -955,9 +983,20 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     if (!noOfferReadError && ids.length) {
       const { error: noOfferUpdateError } = await supabase
         .from('product_variants' as any)
-        .update({ in_stock: false, supplier_id: null, needs_price_review: true, updated_at: new Date().toISOString() })
+        .update({ in_stock: false, supplier_id: null, needs_price_review: false, updated_at: new Date().toISOString() })
         .in('id', ids);
       if (noOfferUpdateError) throw noOfferUpdateError;
+    }
+
+    // Com todos os snapshots atualizados, escolhe o menor custo disponível
+    // entre Mania Digital, Riphone e demais fornecedores cadastrados. A
+    // função também limpa a associação e marca esgotado quando não existe
+    // oferta ativa para o produto/cor.
+    if (currentSupplierId && !importCancelled) {
+      const { error: reconcileError } = await supabase.rpc('reconcile_supplier_catalog', {
+        p_supplier_id: currentSupplierId,
+      });
+      if (reconcileError) throw reconcileError;
     }
 
     await queryClient.invalidateQueries({ queryKey: ['product-variants'] });
