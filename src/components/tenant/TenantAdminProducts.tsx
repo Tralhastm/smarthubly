@@ -824,7 +824,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       if (!product.variants.some(variant => variant.name.trim().toLocaleLowerCase('pt-BR') === key)) {
         const { error } = await supabase
           .from('product_variants' as any)
-          .update({ in_stock: false, ...(colorOnly ? {} : { needs_price_review: true }) })
+          // No seletor por cor, ausência na lista é esgotamento. Limpa uma
+          // eventual flag antiga de revisão para o painel não exibir
+          // "defina o preço" no lugar de "esgotada".
+          .update({ in_stock: false, ...(colorOnly ? { needs_price_review: false } : { needs_price_review: true }) })
           .eq('id', existing.id);
         if (error) throw error;
       }
