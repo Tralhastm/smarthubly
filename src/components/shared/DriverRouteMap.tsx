@@ -4,6 +4,8 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { maplibreGL } from '@maplibre/maplibre-gl-leaflet';
 import { Loader2, Navigation2, Clock, MapPin } from 'lucide-react';
 
 // Fix dos ícones padrão do Leaflet (Vite quebra os assets default)
@@ -177,11 +179,13 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // OpenStreetMap não exige chave de API e evita tiles Carto quebrados.
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 20,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    // OpenFreeMap: estilo vetorial mais limpo, gratuito e sem API key.
+    maplibreGL({
+      style: 'https://tiles.openfreemap.org/styles/positron',
     }).addTo(map);
+    map.attributionControl.addAttribution(
+      '<a href="https://openfreemap.org/">OpenFreeMap</a> · <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    );
 
     mapRef.current = map;
 
