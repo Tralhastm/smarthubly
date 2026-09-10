@@ -338,20 +338,20 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
 
       {/* Overlay de info da rota (top) */}
       {routeInfo && (
-        <div className="absolute top-3 left-3 right-3 z-[400] rounded-2xl bg-card/95 backdrop-blur-md border border-border shadow-xl px-4 py-2.5 flex items-center justify-around gap-2">
-          <div className="flex items-center gap-1.5 text-white">
+        <div className="absolute top-3 left-3 right-3 z-[400] rounded-2xl bg-card/95 backdrop-blur-md border border-border shadow-xl px-4 py-2.5 flex items-center justify-around gap-2" style={{ color: '#ffffff' }}>
+          <div className="flex items-center gap-1.5 text-white" style={{ color: '#ffffff' }}>
             <Navigation2 className="h-4 w-4 text-primary" />
-            <div><span className="block text-[10px] uppercase tracking-wide text-white/70">Rota da entrega</span><span className="font-semibold text-sm">{routeInfo.distanceKm.toFixed(1)} km</span></div>
+            <div><span className="block text-[10px] uppercase tracking-wide text-white/70" style={{ color: 'rgba(255,255,255,.7)' }}>Rota da entrega</span><span className="font-semibold text-sm" style={{ color: '#ffffff' }}>{routeInfo.distanceKm.toFixed(1)} km</span></div>
           </div>
           <div className="w-px h-5 bg-border" />
-          <div className="flex items-center gap-1.5 text-white">
+          <div className="flex items-center gap-1.5 text-white" style={{ color: '#ffffff' }}>
             <Clock className="h-4 w-4 text-primary" />
-            <span className="font-semibold text-sm">{Math.max(1, Math.round(routeInfo.durationMin))} min</span>
+            <span className="font-semibold text-sm" style={{ color: '#ffffff' }}>{Math.max(1, Math.round(routeInfo.durationMin))} min</span>
           </div>
           <div className="w-px h-5 bg-border" />
-          <div className="flex items-center gap-1.5 text-white">
+          <div className="flex items-center gap-1.5 text-white" style={{ color: '#ffffff' }}>
             <MapPin className="h-4 w-4 text-red-500" />
-            <span className="text-xs">Destino</span>
+            <span className="text-xs" style={{ color: '#ffffff' }}>Destino</span>
           </div>
         </div>
       )}
