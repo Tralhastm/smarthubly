@@ -58,6 +58,7 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const lastRouteFetchRef = useRef<{ pos: LatLng; ts: number } | null>(null);
+  const lastFitKeyRef = useRef<string | null>(null);
 
   // Geocode endereço de destino — estratégia robusta:
   // 1. Extrai CEP do endereço (formato BR comum) → ViaCEP pra normalizar rua/bairro/cidade
@@ -173,10 +174,10 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
       attributionControl: false,
     }).setView([-15.78, -47.93], 4); // Brasil center default
 
-    // Tile layer CLARO com ruas bem destacadas — fundo branco + labels escuros
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    // OpenStreetMap não exige chave de API e evita tiles Carto quebrados.
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 20,
-      subdomains: 'abcd',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
 
     mapRef.current = map;
@@ -216,7 +217,11 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
       }
     }
 
-    // Enquadra ambos
+    // Enquadra apenas quando o destino ou a presença do marcador do motoboy muda.
+    // Não reenquadra a cada GPS recebido: isso roubava o zoom escolhido pelo usuário.
+    const fitKey = `${destCoords[0].toFixed(5)},${destCoords[1].toFixed(5)}:${currentPos ? 'with-driver' : 'destination-only'}`;
+    if (lastFitKeyRef.current === fitKey) return;
+    lastFitKeyRef.current = fitKey;
     if (currentPos) {
       const bounds = L.latLngBounds([currentPos, destCoords]);
       map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });

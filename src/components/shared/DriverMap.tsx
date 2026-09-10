@@ -1,6 +1,6 @@
 // Mapa Leaflet com marcadores e rota opcional. Usa OpenStreetMap (grátis, sem API key).
 // Renderiza posição do motoboy + opcionalmente loja, cliente e linha de rota.
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -45,12 +45,17 @@ interface Props {
 
 const FitBounds = ({ markers, route }: { markers: MapMarker[]; route?: [number, number][] }) => {
   const map = useMap();
+  const lastFitKey = useRef<string | null>(null);
   useEffect(() => {
     const points: [number, number][] = [
       ...markers.map(m => [m.lat, m.lng] as [number, number]),
       ...(route || []),
     ];
     if (points.length === 0) return;
+    // Atualizações de GPS alteram coordenadas, mas não devem resetar o zoom escolhido.
+    const fitKey = `${markers.map(marker => marker.type).join('|')}:${route?.length ? 'route' : 'no-route'}`;
+    if (lastFitKey.current === fitKey) return;
+    lastFitKey.current = fitKey;
     if (points.length === 1) {
       map.setView(points[0], 15);
       return;
@@ -94,17 +99,10 @@ const DriverMap = ({ markers, route, height = '320px', autoFit = true }: Props) 
   return (
     <div style={{ height, width: '100%' }} className="rounded-lg overflow-hidden border border-border">
       <MapContainer center={center} zoom={14} style={{ height: '100%', width: '100%', background: '#ffffff' }} scrollWheelZoom={false}>
-        {/* Base CLARA sem rótulos — fundo branco */}
+        {/* OpenStreetMap não exige chave de API e evita tiles Carto quebrados. */}
         <TileLayer
-          attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
-          url="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={20}
-        />
-        {/* Rótulos escuros, alto contraste — letras BEM destacadas no fundo branco */}
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={20}
         />
         {route && route.length > 1 && (

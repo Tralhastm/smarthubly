@@ -139,9 +139,10 @@ const SoloDriverMap = ({ position, driverName }: { position: { lat: number; lng:
       const L = (await import('leaflet')).default;
       await import('leaflet/dist/leaflet.css');
       if (cancelled) return;
-      map = L.map(container, { zoomControl: true, attributionControl: false }).setView([position.lat, position.lng], 16);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 20, subdomains: 'abcd',
+      map = L.map(container, { zoomControl: true, attributionControl: true }).setView([position.lat, position.lng], 16);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 20,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
       const icon = L.divIcon({
         className: '',
