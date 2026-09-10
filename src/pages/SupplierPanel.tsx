@@ -31,6 +31,7 @@ type OrderWithItems = {
   driver_id?: string | null;
   lalamove_order_id?: string | null;
   metadata?: any;
+  supplier_batch_sent?: Record<string, string>;
   order_items: { id: string; product_name: string; product_price: number; quantity: number }[];
 };
 
@@ -83,6 +84,7 @@ const SupplierPanel = () => {
   const [advancingId, setAdvancingId] = useState<string | null>(null);
   const [printingId, setPrintingId] = useState<string | null>(null);
   const [batchSending, setBatchSending] = useState(false);
+  const [selectedBatchOrders, setSelectedBatchOrders] = useState<Set<string>>(new Set());
   const [priceText, setPriceText] = useState('');
   const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both' | 'color'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
@@ -301,6 +303,14 @@ const SupplierPanel = () => {
       }
       prevCountRef.current = relevantOrders.length;
       setOrders(relevantOrders);
+      setSelectedBatchOrders(prev => {
+        const next = new Set(prev);
+        relevantOrders.forEach((o: any) => {
+          if (!o.supplier_batch_sent?.[supplier.id]) next.add(o.id);
+          else next.delete(o.id);
+        });
+        return next;
+      });
 
       // Auto-advance "received" → "preparing" in background (does not block render)
       if (autoEnabled && !reviewMode) {
@@ -339,7 +349,7 @@ const SupplierPanel = () => {
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       const { data, error } = await supabase.from('orders')
-        .select('id, created_at, customer_name, metadata')
+        .select('id, created_at, customer_name, metadata, supplier_batch_sent')
         .eq('tenant_id', supplier.tenant_id)
         .gte('created_at', start.toISOString())
         .not('status', 'in', '(cancelled,canceled)')
@@ -348,7 +358,7 @@ const SupplierPanel = () => {
       const orders = ((data || []) as any[]).map(order => ({
         order,
         items: order.metadata?.fragmentation_map?.[supplier.id] || [],
-      })).filter(x => Array.isArray(x.items) && x.items.length > 0);
+      })).filter(x => selectedBatchOrders.has(x.order.id) && Array.isArray(x.items) && x.items.length > 0);
       if (!orders.length) { toast.info('Nenhum pedido deste fornecedor hoje.'); return; }
 
       const variantIds = Array.from(new Set(orders.flatMap(x => x.items.map((i: any) => i.variantId).filter(Boolean))));
@@ -378,6 +388,11 @@ const SupplierPanel = () => {
       const phone = String((supplier as any).phone || '').replace(/\D/g, '');
       if (!phone) { toast.success('Lote copiado. Cadastre o telefone do fornecedor para abrir o WhatsApp.'); return; }
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+      const sentAt = new Date().toISOString();
+      await Promise.all(orders.map(({ order }) => supabase.from('orders').update({
+        supplier_batch_sent: { ...(order.supplier_batch_sent || {}), [supplier.id]: sentAt },
+      } as any).eq('id', order.id)));
+      setSelectedBatchOrders(new Set());
       toast.success('Lote diário preparado e copiado para o WhatsApp.');
     } catch (e) {
       console.error('[SupplierPanel] daily batch error:', e);
@@ -1043,6 +1058,20 @@ const SupplierPanel = () => {
 
         {tab === 'orders' && (
           <div className="space-y-4">
+            {orders.length > 0 && (
+              <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={orders.every(o => selectedBatchOrders.has(o.id))}
+                    onChange={e => setSelectedBatchOrders(e.target.checked ? new Set(orders.map(o => o.id)) : new Set())}
+                    className="h-4 w-4 accent-primary"
+                  />
+                  Selecionar tudo
+                </label>
+                <span className="text-xs text-muted-foreground">{selectedBatchOrders.size} selecionado(s)</span>
+              </div>
+            )}
             <button
               onClick={sendDailySupplierBatch}
               disabled={batchSending}
@@ -1057,11 +1086,25 @@ const SupplierPanel = () => {
                 <div key={order.id} className="rounded-lg border border-border bg-card p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-wrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedBatchOrders.has(order.id)}
+                        onChange={e => setSelectedBatchOrders(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(order.id); else next.delete(order.id);
+                          return next;
+                        })}
+                        className="h-4 w-4 accent-primary"
+                        title="Incluir no lote do WhatsApp"
+                      />
                       <Package className="h-4 w-4 text-primary" />
                       <span className="font-medium text-foreground text-sm">#{order.id.slice(0, 6)}</span>
                       <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.color}`}>
                         {cfg.icon} {cfg.label}
                       </span>
+                      {order.supplier_batch_sent?.[supplier.id] && (
+                        <span className="rounded-full bg-green-500/20 text-green-400 px-2 py-0.5 text-[11px] font-bold">✓ Já enviado</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <button
