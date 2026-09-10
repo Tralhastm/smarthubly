@@ -171,9 +171,11 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
     delete (containerEl as any)._leaflet_id;
 
     const map = L.map(containerEl, {
-      zoomControl: true,
-      attributionControl: false,
+      zoomControl: false,
+      attributionControl: true,
     }).setView([-15.78, -47.93], 4); // Brasil center default
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     // OpenStreetMap não exige chave de API e evita tiles Carto quebrados.
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -270,8 +272,8 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
           previous.remove();
         }
         // Linha base mais grossa pra criar contorno branco
-        const outline = L.polyline(coords, { color: '#ffffff', weight: 8, opacity: 0.9 }).addTo(map);
-        const line = L.polyline(coords, { color: '#3b82f6', weight: 5, opacity: 1, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+        const outline = L.polyline(coords, { color: '#ffffff', weight: 10, opacity: 0.92, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+        const line = L.polyline(coords, { color: '#2563eb', weight: 6, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
         // Salva grupo via outra estratégia: armazena só a linha, mas adiciona outline antes
         routeLineRef.current = line;
         // Hack: ao remover routeLineRef, remove também outline
@@ -305,15 +307,41 @@ export const DriverRouteMap = ({ destinationAddress, driverPosition }: Props) =>
   }, []);
 
   return (
-    <div className="relative w-full h-full">
-      <div ref={containerRef} className="w-full h-full" style={{ background: '#ffffff' }} />
+    <div className="relative w-full h-full overflow-hidden bg-slate-100 customer-route-map">
+      <div ref={containerRef} className="w-full h-full" style={{ background: '#e8eef3' }} />
+
+      <style>{`
+        .customer-route-map .leaflet-control-zoom {
+          border: 0 !important;
+          border-radius: 14px !important;
+          overflow: hidden;
+          box-shadow: 0 4px 16px rgba(15, 23, 42, .18) !important;
+        }
+        .customer-route-map .leaflet-control-zoom a {
+          width: 36px !important;
+          height: 36px !important;
+          line-height: 34px !important;
+          color: #1e3a8a !important;
+          background: rgba(255,255,255,.94) !important;
+          border: 0 !important;
+          font-weight: 700;
+        }
+        .customer-route-map .leaflet-control-zoom a:hover { background: #dbeafe !important; }
+        .customer-route-map .leaflet-control-attribution {
+          border-radius: 8px 0 0 0;
+          padding: 3px 7px !important;
+          background: rgba(255,255,255,.78) !important;
+          color: #64748b;
+          font-size: 9px;
+        }
+      `}</style>
 
       {/* Overlay de info da rota (top) */}
       {routeInfo && (
-        <div className="absolute top-3 left-3 right-3 z-[400] rounded-xl bg-card/95 backdrop-blur-md border border-border shadow-lg px-4 py-2.5 flex items-center justify-around gap-2">
+        <div className="absolute top-3 left-3 right-3 z-[400] rounded-2xl bg-white/95 backdrop-blur-md border border-white/80 shadow-xl px-4 py-2.5 flex items-center justify-around gap-2">
           <div className="flex items-center gap-1.5 text-foreground">
             <Navigation2 className="h-4 w-4 text-primary" />
-            <span className="font-semibold text-sm">{routeInfo.distanceKm.toFixed(1)} km</span>
+            <div><span className="block text-[10px] uppercase tracking-wide text-slate-500">Rota da entrega</span><span className="font-semibold text-sm">{routeInfo.distanceKm.toFixed(1)} km</span></div>
           </div>
           <div className="w-px h-5 bg-border" />
           <div className="flex items-center gap-1.5 text-foreground">
