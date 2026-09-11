@@ -731,7 +731,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       const key = variantMatchKey(name);
       const existing = existingByName.get(key);
       const variantCost = colorOnly ? Number(existing?.cost_price || 0) : Number(variant.cost_price || (isCost ? variant.price : 0)) || 0;
-      const explicitSale = colorOnly ? Number(existing?.suggested_price || 0) : Number(variant.resale_price || (!isCost ? variant.price : 0)) || 0;
+      // Listas de fornecedores informam exclusivamente custo. Mesmo que a IA
+      // extraia uma coluna chamada revenda, ela não pode alterar a revenda da
+      // loja; esse valor só entra em importações explicitamente não-cost.
+      const explicitSale = colorOnly ? Number(existing?.suggested_price || 0) : 0;
       const calculatedSale = variantCost > 0 ? (variantCost + shipping) * (1 + margin / 100) : 0;
       const preservedSale = isCost ? Number(existing?.suggested_price || 0) : 0;
       const variantSale = explicitSale > 0
