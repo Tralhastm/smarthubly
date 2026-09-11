@@ -1,4 +1,7 @@
-export const DEFAULT_ASAAS_RATE = 0.046;
+// A vitrine usa uma única revenda por item. Para não liberar uma venda
+// deficitária em nenhuma modalidade normal, usamos a maior taxa informada:
+// saldo Mercado Pago = 4,99% (Pix 0,99% e cartão 4,98%).
+export const DEFAULT_CHECKOUT_RATE = 0.0499;
 export const DEFAULT_SHIPPING_COST = 50;
 export const DEFAULT_CUSTOMER_DISCOUNT = 10;
 export const DEFAULT_SELLER_SHARE = 0.20;
@@ -7,11 +10,11 @@ export const DEFAULT_SELLER_SHARE = 0.20;
 export function calculateFinalProfit(salePrice: unknown, costPrice: unknown) {
   const sale = Number(salePrice) || 0;
   const cost = Number(costPrice) || 0;
-  const asaas = sale * DEFAULT_ASAAS_RATE;
-  const beforeSeller = sale - asaas - DEFAULT_SHIPPING_COST - DEFAULT_CUSTOMER_DISCOUNT - cost;
+  const checkoutFee = Math.max(0, sale - DEFAULT_CUSTOMER_DISCOUNT) * DEFAULT_CHECKOUT_RATE;
+  const beforeSeller = sale - DEFAULT_CUSTOMER_DISCOUNT - checkoutFee - DEFAULT_SHIPPING_COST - cost;
   const seller = Math.max(0, beforeSeller) * DEFAULT_SELLER_SHARE;
   const finalProfit = beforeSeller - seller;
-  return { sale, cost, asaas, beforeSeller, seller, finalProfit, isLoss: finalProfit < 0 };
+  return { sale, cost, checkoutFee, beforeSeller, seller, finalProfit, isLoss: finalProfit < 0 };
 }
 
 export function hasPositiveFinalProfit(salePrice: unknown, costPrice: unknown) {

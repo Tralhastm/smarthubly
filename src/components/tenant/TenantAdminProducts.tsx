@@ -1232,19 +1232,15 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         .filter(Boolean).join(' ').toLowerCase().includes(normalizedCatalogSearch))
     : orderedProducts;
   const productsWithGoogleImage = products.filter(p => p.image && p.image.includes('?src=google')).length;
-  const lossProducts = products
-    .map(product => {
-      const variants = allVariants.filter(variant => variant.product_id === product.id);
-      const pricedVariants = variants.map(variant => ({
-        price: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
-        cost: Number(variant.cost_price ?? (product as any).original_price) || 0,
-      })).filter(item => Number.isFinite(item.price) && item.price > 0);
-      const lowestVariant = pricedVariants.length > 0 ? pricedVariants.reduce((lowest, item) => item.price < lowest.price ? item : lowest) : null;
-      const referencePrice = Number(product.price) > 0 ? Number(product.price) : (lowestVariant?.price || 0);
-      const referenceCost = Number((product as any).original_price) > 0 ? Number((product as any).original_price) : (lowestVariant?.cost || 0);
-      return { product, pricing: calculateFinalProfit(referencePrice, referenceCost) };
-    })
-    .filter(item => item.pricing.isLoss);
+  const lossProducts = products.flatMap(product => {
+    const variants = allVariants.filter(variant => variant.product_id === product.id);
+    const candidates = variants.length > 0 ? variants : [{ id: `${product.id}-base`, name: 'base', suggested_price: null, price_delta: 0, cost_price: (product as any).original_price } as any];
+    return candidates.map(variant => {
+      const referencePrice = getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price });
+      const referenceCost = Number(variant.cost_price ?? (product as any).original_price) || 0;
+      return { product, variant, pricing: calculateFinalProfit(referencePrice, referenceCost) };
+    }).filter(item => item.pricing.isLoss);
+  });
   // Uma variante marcada como indisponível e sem pendência de preço foi
   // retirada da última lista do fornecedor. O aviso fica no topo para não
   // obrigar o administrador a abrir produto por produto.
@@ -1288,11 +1284,11 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
             <div className="min-w-0">
               <p className="font-semibold">Atenção: {lossProducts.length} produto(s) indisponível(is) por prejuízo</p>
-              <p className="mt-1 text-xs text-destructive/80">A vitrine bloqueia automaticamente a compra quando o lucro líquido final fica negativo, considerando Asaas de 4,6%, motoboy de R$ 50, desconto de R$ 10 e 20% do vendedor sobre o lucro positivo.</p>
+              <p className="mt-1 text-xs text-destructive/80">A vitrine bloqueia automaticamente a compra quando o lucro líquido final da variação fica negativo, considerando checkout de até 4,99%, motoboy de R$ 50, desconto de R$ 10 e 20% do vendedor sobre o lucro positivo.</p>
               <div className="mt-2 space-y-1 text-xs">
                 {lossProducts.map(({ product, pricing }) => (
                   <div key={product.id} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
-                    <span className="font-medium">{product.name}</span>
+                    <span className="font-medium">{product.name}{variant?.name && variant.name !== 'base' ? ` · ${variant.name}` : ''}</span>
                     <span>prejuízo final: R$ {Math.abs(pricing.finalProfit).toFixed(2)}</span>
                   </div>
                 ))}
