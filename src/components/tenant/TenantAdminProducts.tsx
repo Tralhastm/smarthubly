@@ -1286,7 +1286,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               <p className="font-semibold">Atenção: {lossProducts.length} produto(s) indisponível(is) por prejuízo</p>
               <p className="mt-1 text-xs text-destructive/80">A vitrine bloqueia automaticamente a compra quando o lucro líquido final da variação fica negativo, considerando checkout de até 4,99%, motoboy de R$ 50, desconto de R$ 10 e 20% do vendedor sobre o lucro positivo.</p>
               <div className="mt-2 space-y-1 text-xs">
-                {lossProducts.map(({ product, pricing }) => (
+                {lossProducts.map(({ product, variant, pricing }) => (
                   <div key={product.id} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
                     <span className="font-medium">{product.name}{variant?.name && variant.name !== 'base' ? ` · ${variant.name}` : ''}</span>
                     <span>prejuízo final: R$ {Math.abs(pricing.finalProfit).toFixed(2)}</span>
