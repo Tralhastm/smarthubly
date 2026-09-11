@@ -2156,9 +2156,16 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
             rows={3} placeholder="Descrição do produto..."
             className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground resize-none" />
         </div>
-        <label className="flex items-center gap-2 text-sm text-foreground">
-          <input type="checkbox" checked={form.in_stock} onChange={e => setForm({ ...form, in_stock: e.target.checked })} className="accent-primary" /> Em estoque
+        <label className="flex items-center gap-2 text-sm text-foreground" title={isDropshipping ? 'A disponibilidade é controlada exclusivamente pelas listas vigentes dos fornecedores.' : undefined}>
+          <input type="checkbox" checked={form.in_stock} disabled={isDropshipping}
+            onChange={e => setForm({ ...form, in_stock: e.target.checked })} className="accent-primary disabled:opacity-50" />
+          {isDropshipping ? 'Disponibilidade pelas listas dos fornecedores' : 'Em estoque'}
         </label>
+        {isDropshipping && (
+          <p className="text-[10px] text-muted-foreground -mt-1">
+            Não é possível liberar manualmente: o item só fica disponível quando aparecer em uma lista válida e vigente.
+          </p>
+        )}
         <label className="flex items-center gap-2 text-sm text-foreground" title="Bloqueia a venda na vitrine mesmo quando o produto estiver em estoque">
           <input type="checkbox" checked={Boolean((form as any).manual_blocked)} onChange={e => setForm({ ...form, manual_blocked: e.target.checked } as any)} className="accent-primary" />
           Bloquear produto na vitrine
