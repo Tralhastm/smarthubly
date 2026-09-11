@@ -25,7 +25,7 @@ BEGIN
     price_source=CASE WHEN t.winner_supplier_id IS NULL THEN NULL ELSE 'supplier_offer' END,
     in_stock=CASE WHEN t.winner_supplier_id IS NULL THEN false WHEN t.allow_loss THEN true
       ELSE (COALESCE(t.price+COALESCE(t.price_delta,0),t.price,0)
-        -(COALESCE(t.price+COALESCE(t.price_delta,0),t.price,0)*0.046)-20-10-t.winner_cost)>=0 END,
+        -(COALESCE(t.price+COALESCE(t.price_delta,0),t.price,0)*0.046)-50-10-t.winner_cost)>=0 END,
     needs_price_review=CASE WHEN t.winner_supplier_id IS NULL THEN false ELSE COALESCE(t.suggested_price,0)<=0 END,
     updated_at=now() FROM target t WHERE pv.id=t.id;
   GET DIAGNOSTICS v_variants=ROW_COUNT;
@@ -47,7 +47,7 @@ BEGIN
   )
   UPDATE public.products p SET supplier_id=w.supplier_id,original_price=w.unit_price,
     in_stock=CASE WHEN p.allow_loss THEN true ELSE (COALESCE(p.price,0)
-      -(COALESCE(p.price,0)*0.046)-20-10-w.unit_price)>=0 END,updated_at=now()
+      -(COALESCE(p.price,0)*0.046)-50-10-w.unit_price)>=0 END,updated_at=now()
     FROM winner w WHERE p.id=w.product_id;
   GET DIAGNOSTICS v_products=ROW_COUNT;
 

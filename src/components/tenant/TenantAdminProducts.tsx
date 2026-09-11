@@ -1272,7 +1272,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
             <div className="min-w-0">
               <p className="font-semibold">Atenção: {lossProducts.length} produto(s) indisponível(is) por prejuízo</p>
-              <p className="mt-1 text-xs text-destructive/80">A vitrine bloqueia automaticamente a compra quando o lucro líquido final fica negativo, considerando Asaas de 4,6%, frete de R$ 20, desconto de R$ 10 e 20% do vendedor sobre o lucro positivo.</p>
+              <p className="mt-1 text-xs text-destructive/80">A vitrine bloqueia automaticamente a compra quando o lucro líquido final fica negativo, considerando Asaas de 4,6%, motoboy de R$ 50, desconto de R$ 10 e 20% do vendedor sobre o lucro positivo.</p>
               <div className="mt-2 space-y-1 text-xs">
                 {lossProducts.map(({ product, pricing }) => (
                   <div key={product.id} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">

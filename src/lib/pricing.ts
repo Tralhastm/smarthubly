@@ -1,5 +1,5 @@
 export const DEFAULT_ASAAS_RATE = 0.046;
-export const DEFAULT_SHIPPING_COST = 20;
+export const DEFAULT_SHIPPING_COST = 50;
 export const DEFAULT_CUSTOMER_DISCOUNT = 10;
 export const DEFAULT_SELLER_SHARE = 0.20;
 
