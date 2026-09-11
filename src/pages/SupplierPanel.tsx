@@ -941,6 +941,7 @@ const SupplierPanel = () => {
             unit_price: Number(entry.cost),
             price_types: ['cost'],
             available: true,
+            source_archive_id: archivedList || null,
           }, { onConflict: 'supplier_id,product_name' });
           if (productOfferError) warnings.push(`${entry.name} (preço do produto não atualizado: ${productOfferError.message})`);
         }

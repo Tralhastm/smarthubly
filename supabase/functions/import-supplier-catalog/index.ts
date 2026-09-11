@@ -626,6 +626,15 @@ Deno.serve(async (req) => {
       text = String(content);
     }
 
+    const archiveContent = kind === "image" ? `[imagem de catálogo: ${content.slice(0, 2000)}]` : text;
+    const { data: sourceArchiveId, error: archiveError } = await admin.rpc("archive_supplier_catalog", {
+      p_tenant_id: supplier.tenant_id,
+      p_supplier_name: supplier.name,
+      p_file_name: `import-${kind}-${supplier.name}`,
+      p_content: archiveContent || String(content).slice(0, 50000),
+    });
+    if (archiveError) console.warn("[import-supplier-catalog] arquivamento não realizado:", archiveError.message);
+
     const SYSTEM = `Você é um extrator de dados de catálogos de fornecedores brasileiros. O usuário enviou um catálogo (texto de PDF, imagem ou texto puro). Extraia TODOS os produtos com preços.`;
 
     const USER = `Extraia desta ${kind === "pdf" ? "lista em texto extraída de um PDF" : kind === "image" ? "imagem de catálogo" : "lista de texto"} TODOS os produtos com preços em reais (R$).
@@ -697,8 +706,24 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
       const productVariants = variantsByProduct.get(product.id) || new Map();
       for (const rawVariant of it.variants) {
         const variantName = String(rawVariant.name || '').trim();
-        const variant = productVariants.get(normalizeMatch(variantName));
+        let variant = productVariants.get(normalizeMatch(variantName));
         const cost = Number(rawVariant.cost_price ?? rawVariant.price ?? NaN);
+        if (!variant && variantName && Number.isFinite(cost) && cost > 0) {
+          const created = await admin.from('product_variants').insert({
+            product_id: product.id,
+            tenant_id: supplier.tenant_id,
+            name: variantName,
+            price_delta: 0,
+            suggested_price: null,
+            needs_price_review: true,
+            in_stock: rawVariant.available !== false,
+            sort_order: productVariants.size,
+          }).select('id, product_id, name').single();
+          if (!created.error && created.data) {
+            variant = created.data;
+            productVariants.set(normalizeMatch(variantName), variant);
+          }
+        }
         if (!variant || !variantName || !Number.isFinite(cost) || cost <= 0) continue;
         await admin.from("supplier_variant_offers").upsert({
           tenant_id: supplier.tenant_id,
@@ -709,6 +734,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           variant_key: normalizeMatch(variantName),
           unit_cost: cost,
           available: rawVariant.available !== false,
+          source_archive_id: sourceArchiveId || null,
           source: 'supplier_list',
           last_seen_at: new Date().toISOString(),
         }, { onConflict: 'supplier_id,product_id,variant_key' });
@@ -731,6 +757,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           product_name: name,
           unit_price: price,
           available: it.available ?? it.disponivel ?? true,
+          source_archive_id: sourceArchiveId || null,
           price_types: priceType === 'both' ? ['cost', 'resale'] : [priceType],
           metadata: { profit_margin: profitMargin, shipping_fee: shippingFee, resale_price: Number.isFinite(resale) && resale > 0 ? resale : null, category: it.category ?? it.categoria ?? null, variants: Array.isArray(it.variants) ? it.variants : [] }
         });
@@ -762,6 +789,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           product_name: name,
           unit_price: price,
           available: it.available ?? it.disponivel ?? true,
+          source_archive_id: sourceArchiveId || null,
           price_types: priceType === 'both' ? ['cost', 'resale'] : [priceType],
           metadata: { profit_margin: profitMargin, shipping_fee: shippingFee, resale_price: Number.isFinite(resale) && resale > 0 ? resale : null, category: it.category ?? it.categoria ?? null, variants: Array.isArray(it.variants) ? it.variants : [] }
         },
@@ -793,4 +821,3 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
     return json({ error: String(e?.message || e) }, 500);
   }
 });
-
