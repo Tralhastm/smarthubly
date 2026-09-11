@@ -836,7 +836,7 @@ const SupplierPanel = () => {
       return;
     }
     setImportingPrices(true);
-    const { error: archiveError } = await (supabase as any).rpc('archive_supplier_catalog', {
+    const { data: archivedList, error: archiveError } = await (supabase as any).rpc('archive_supplier_catalog', {
       p_tenant_id: supplier.tenant_id,
       p_supplier_name: supplier.name,
       p_file_name: `painel-fornecedor-${supplier.name}`,
@@ -906,6 +906,13 @@ const SupplierPanel = () => {
                   _source: 'supplier_panel',
                 });
                 if (offerError) warnings.push(`${entry.name} (oferta da cor ${color} não atualizada: ${offerError.message})`);
+                else {
+                  await (supabase as any).from('supplier_variant_offers').update({
+                    source_archive_id: archivedList || null,
+                    match_confidence: 0.95,
+                    match_reason: 'produto_e_cor_reconhecidos_no_painel',
+                  }).eq('supplier_id', supplier.id).eq('product_id', product.id).eq('variant_key', normalizedColor);
+                }
               }
             }
             const allIncoming = incomingByProduct.get(product.id) || new Set<string>();
@@ -1358,8 +1365,6 @@ const SupplierPanel = () => {
                 <label className="block text-xs font-semibold text-foreground">O que deseja atualizar?</label>
                 <select value={priceUpdateMode} onChange={e => { setPriceUpdateMode(e.target.value as 'cost' | 'resale' | 'both' | 'color'); setImportResult(null); }} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
                   <option value="cost">Somente preço de custo</option>
-                  <option value="resale">Somente preço de revenda</option>
-                  <option value="both">Preço de custo e revenda</option>
                   <option value="color">Seletor por cor — custo e disponibilidade</option>
                 </select>
                 <p className="text-[11px] text-muted-foreground">No Seletor por cor, uma cor nova pode ser criada. O custo fica registrado para este fornecedor; o sistema escolhe o menor custo sem vender abaixo do preço da loja. Se empatar, vence quem já recebeu mais pedidos daquela cor.</p>

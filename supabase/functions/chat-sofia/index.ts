@@ -47,6 +47,22 @@ async function fetchMerchantContext(supabase: any, tenantId: string): Promise<{ 
   const { count: productCount } = await supabase
     .from("products").select("*", { count: "exact", head: true }).eq("tenant_id", tenantId);
 
+  // Memória temporária dos fornecedores: permite comparar listas coladas
+  // sem o lojista precisar reenviar o texto para a Sofia.
+  const { data: supplierLists } = await supabase
+    .from("supplier_catalog_archives")
+    .select("supplier_name, created_at, expires_at, content")
+    .eq("tenant_id", tenantId)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(6);
+  const { data: supplierAudit } = await supabase
+    .from("supplier_catalog_audit")
+    .select("action, old_cost, new_cost, old_available, new_available, match_confidence, match_reason, created_at")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+
   const features: string[] = [];
   if (tenant.scheduling_enabled) features.push("agendamento ATIVO");
   if (tenant.quotes_enabled) features.push("calculadora de orçamento ATIVA");
@@ -60,6 +76,12 @@ async function fetchMerchantContext(supabase: any, tenantId: string): Promise<{ 
     `- Produtos cadastrados: ${productCount ?? 0}`,
     `- Pedidos abertos agora: ${counts.received} recebidos, ${counts.preparing} em preparo, ${counts.out} a caminho, ${counts.ready} prontos p/ retirada`,
     `- Configurações: ${features.join(", ")}`,
+    supplierLists?.length
+      ? `- Listas de fornecedores disponíveis para análise (válidas por 48h):\n${supplierLists.map((l: any) => `  * ${l.supplier_name} — ${l.created_at} — conteúdo: ${String(l.content || '').slice(0, 3500)}`).join("\n")}`
+      : "- Nenhuma lista de fornecedor arquivada dentro da janela de 48h.",
+    supplierAudit?.length
+      ? `- Auditoria recente de custos/ofertas:\n${supplierAudit.map((a: any) => `  * ${a.action}: ${a.old_cost ?? "—"} → ${a.new_cost ?? "—"}; disponível ${a.old_available ?? "—"} → ${a.new_available ?? "—"}; confiança ${a.match_confidence ?? "—"} (${a.match_reason || "sem motivo"}) em ${a.created_at}`).join("\n")}`
+      : "- Ainda não há auditoria de ofertas registrada.",
   ].join("\n");
 
   return { name: tenant.name, slug: tenant.slug, ctx };

@@ -805,6 +805,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           unit_cost: variantCost,
           available: variant.available !== false,
           source: 'supplier_list',
+          match_confidence: 0.95,
+          match_reason: 'produto_e_cor_reconhecidos_na_importacao',
           last_seen_at: new Date().toISOString(),
         }, { onConflict: 'supplier_id,product_id,variant_key' });
         if (offerError) throw offerError;
