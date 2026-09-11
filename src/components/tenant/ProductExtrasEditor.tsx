@@ -54,6 +54,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       price_delta: parseFloat(vDelta) || 0,
       cost_price: vCost.trim() ? normalizeVariantCost(parseMoney(vCost), parseMoney(vSale)) : null,
       suggested_price: vSale.trim() ? parseMoney(vSale) : null,
+      price_source: vSale.trim() ? 'manual' : null,
       sort_order: variants.length,
     });
     setVName(''); setVDelta(''); setVCost(''); setVSale(''); setVSupplierId('');
@@ -77,6 +78,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       cost_price: vCost.trim() ? normalizeVariantCost(parseMoney(vCost), price) : null,
       supplier_id: vSupplierId || null,
       needs_price_review: false,
+      price_source: 'manual',
     });
     setEditingVariantId(null);
     toast.success('Preço da variação atualizado');
