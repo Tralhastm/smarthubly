@@ -715,7 +715,14 @@ const SupplierPanel = () => {
     };
     const genericMatch = (line: string) => line.match(/^(.*?)(?:\s*[-–—:]\s*|\s+)(?:R?\$\s*)?([\d.]+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*$/i);
 
-    for (const rawLine of text.split(/\r?\n/)) {
+    const sourceLines = text.split(/\r?\n/);
+    for (let lineIndex = 0; lineIndex < sourceLines.length; lineIndex++) {
+      let rawLine = sourceLines[lineIndex];
+      // HI PHONE frequentemente quebra o preço depois de "R$" ou deixa o
+      // nome do produto em uma linha e "(R$ 660)" na seguinte.
+      while (/\(\s*R?\$\s*$/i.test(rawLine.trim()) && lineIndex + 1 < sourceLines.length) {
+        rawLine = `${rawLine} ${sourceLines[++lineIndex]}`;
+      }
       let line = rawLine.trim().replace(/\*/g, '').trim();
       line = line.replace(/R\$\s*R\$/gi, 'R$');
       if (!line) continue;
@@ -751,13 +758,20 @@ const SupplierPanel = () => {
 
       const vendorPrice = line.match(/\(\s*R?\$\s*([^)]*)\)/i);
       if (vendorPrice) {
-        flush();
         const name = cleanImportedName(line.slice(0, vendorPrice.index ?? 0));
         const vendorCost = parsePrice(vendorPrice[1]);
         const remainder = line.slice((vendorPrice.index ?? 0) + vendorPrice[0].length);
         const vendorResale = numberFromLine(remainder, ['venda sugerida', 'venda', 'revenda', 'resale', 'preço de venda', 'preco de venda']);
         const aliases = [name];
         if (brand && name && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
+        if (!name && current && vendorCost != null) {
+          current.cost = current.cost ?? vendorCost;
+          current.colors = [...new Set([...current.colors, ...extractColors(remainder)])];
+          flush();
+          nextUnavailable = false;
+          continue;
+        }
+        flush();
         if (name && vendorCost != null) {
           const colors = extractColors(remainder);
           entries.push({ name, cost: vendorCost, resale: vendorResale, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], aliases });
