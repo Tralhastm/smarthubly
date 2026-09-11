@@ -21,6 +21,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [addonQty, setAddonQty] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
+  const productUnavailable = product.in_stock === false || (product.in_stock as any) === 'false';
   const displayPrice = (value: number) => showPixPrice ? grossUpPaymentFee(value, 0.99) : value;
   const availableVariants = variants.filter(v =>
     v.in_stock !== false && v.in_stock !== 'false' &&
@@ -63,6 +64,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   const unitTotal = selectedVariantPrice + addonsTotal;
 
   const handleAdd = () => {
+    if (productUnavailable || (variants.length > 0 && availableVariants.length === 0)) return;
     if (missingRequired.length > 0) return;
     addToCart(product, {
       variantId: selectedVariant?.id || null,
@@ -203,10 +205,10 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
           )}
           <button
             onClick={handleAdd}
-            disabled={missingRequired.length > 0}
+            disabled={productUnavailable || (variants.length > 0 && availableVariants.length === 0) || missingRequired.length > 0}
             className="w-full flex items-center justify-between gap-2 rounded-lg gradient-primary text-primary-foreground px-4 py-3 font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span>Adicionar ao carrinho</span>
+            <span>{productUnavailable || (variants.length > 0 && availableVariants.length === 0) ? 'Indisponível' : 'Adicionar ao carrinho'}</span>
             <span className="font-bold">R${displayPrice(unitTotal).toFixed(2)}</span>
           </button>
         </div>
