@@ -836,6 +836,13 @@ const SupplierPanel = () => {
       return;
     }
     setImportingPrices(true);
+    const { error: archiveError } = await (supabase as any).rpc('archive_supplier_catalog', {
+      p_tenant_id: supplier.tenant_id,
+      p_supplier_name: supplier.name,
+      p_file_name: `painel-fornecedor-${supplier.name}`,
+      p_content: priceText,
+    });
+    if (archiveError) console.warn('[supplier-panel] não foi possível arquivar a lista:', archiveError);
     const byName = new Map<string, Product>();
     products.forEach(product => {
       const keys = [product.name, product.name.replace(/\s*\([^)]*\)\s*$/g, '')];
@@ -855,8 +862,10 @@ const SupplierPanel = () => {
         const product = entry.aliases.map(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
         if (!product) { notFound.push(entry.name); continue; }
         const patch: Record<string, any> = {};
-        if ((priceUpdateMode === 'cost' || priceUpdateMode === 'both') && entry.cost != null) patch.original_price = entry.cost;
-        if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) patch.price = entry.resale;
+        // Lista de fornecedor informa exclusivamente custo. Revenda manual da
+        // loja nunca é alterada por este painel, mesmo se a lista tiver uma
+        // coluna chamada REVENDA ou o modo antigo estiver selecionado.
+        if (entry.cost != null) patch.original_price = entry.cost;
         if (Object.keys(patch).length === 0 && entry.colors.length === 0) {
           const expected = priceUpdateMode === 'color' ? 'CUSTO por cor' : priceUpdateMode === 'cost' ? 'CUSTO' : priceUpdateMode === 'resale' ? 'REVENDA' : 'CUSTO ou REVENDA';
           invalid.push(`${entry.name} (não contém ${expected})`);
@@ -880,13 +889,9 @@ const SupplierPanel = () => {
               incomingNames.add(normalizedColor);
               const old = (existingVariants || []).find((variant: any) => variantMatchKey(String(variant.name).replace(/^cor\s*:\s*/i, '')) === normalizedColor);
               const variantPatch: Record<string, any> = { in_stock: !unavailable };
-              if ((priceUpdateMode === 'resale' || priceUpdateMode === 'both') && entry.resale != null) {
-                variantPatch.suggested_price = entry.resale;
-                variantPatch.price_delta = entry.resale - Number(product.price || 0);
-              }
               const { error: variantError } = old
                 ? await (supabase as any).from('product_variants').update(variantPatch).eq('id', old.id)
-                : await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, name: color, price_delta: priceUpdateMode === 'resale' && entry.resale != null ? entry.resale - Number(product.price || 0) : 0, suggested_price: priceUpdateMode !== 'cost' ? entry.resale : null, in_stock: true, sort_order: entry.colors.indexOf(color) });
+                : await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, name: color, price_delta: 0, suggested_price: null, needs_price_review: true, in_stock: !unavailable, sort_order: entry.colors.indexOf(color) });
               if (variantError) warnings.push(`${entry.name} (cor ${color} não atualizada: ${variantError.message})`);
               const variant = old || (await (supabase as any).from('product_variants').select('id').eq('product_id', product.id).eq('name', color).limit(1).maybeSingle()).data;
               if (variant?.id && entry.cost != null && Number(entry.cost) > 0) {
