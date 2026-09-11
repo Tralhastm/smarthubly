@@ -699,6 +699,20 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         supplier_name: p.supplier_name || importSupplierName
       }));
 
+      // Mantém a lista original disponível para consultas posteriores da IA por
+      // 48 horas. Para PDF/imagem, guardamos o resultado estruturado extraído.
+      const archiveSupplierNames = [...new Set(productsWithSupplier.map((p: any) => p.supplier_name).filter(Boolean))];
+      const archiveContent = importRawText !== '[Arquivo Binário: PDF/Imagem]'
+        ? importRawText
+        : JSON.stringify({ products: productsWithSupplier });
+      const { error: archiveError } = await (supabase as any).rpc('archive_supplier_catalog', {
+        p_tenant_id: tenantId,
+        p_supplier_name: archiveSupplierNames.join(' + ') || importSupplierName || 'Fornecedor não informado',
+        p_file_name: importFileName || 'lista-fornecedor',
+        p_content: archiveContent,
+      });
+      if (archiveError) console.warn('[catalog-import] não foi possível arquivar a lista:', archiveError);
+
       setParsedProducts(productsWithSupplier);
       setImportStep('preview');
     } catch (err) {
