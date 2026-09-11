@@ -47,12 +47,11 @@ const getImportedPrices = (product: ParsedProduct, priceType: string) => {
   if (priceType === 'color') return { cost: 0, sale: 0 };
   const legacyPrice = Number(product.price || 0) || 0;
   const explicitCost = Number(product.cost_price || 0) || 0;
-  const explicitSale = Number(product.resale_price || 0) || 0;
   const isCost = priceType === 'cost' || priceType === 'both';
-  const isSale = priceType === 'resale' || priceType === 'both';
   const cost = isCost ? (explicitCost || (priceType === 'both' ? 0 : legacyPrice)) : explicitCost;
-  const sale = isSale ? (explicitSale || (priceType === 'resale' ? legacyPrice : 0)) : 0;
-  return { cost, sale };
+  // Lista de fornecedor informa custo. Revenda é sempre definida manualmente
+  // no painel e nunca pode ser copiada do catálogo recebido.
+  return { cost, sale: 0 };
 };
 
 const normalizeProductName = (value: unknown) => String(value ?? '')
