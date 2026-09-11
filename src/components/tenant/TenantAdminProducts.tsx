@@ -928,8 +928,30 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           await saveImportedVariants(existing.id, p, Number(existing.price) || price, Number(existing.original_price) || importedCost, isCost, shipping, margin, productSupplierId, colorOnly);
           insertedIds.push(existing.id);
         } else {
-          // A lista diária é uma fonte de atualização de custo, nunca de criação automática.
-          console.info('[catalog-import] produto não cadastrado ignorado:', p.name);
+          // Produtos que aparecem nas listas precisam entrar automaticamente no
+          // catálogo. O preço de venda fica pendente até o administrador definir
+          // a revenda; o custo e as variações vêm da lista do fornecedor.
+          const { data: created, error: createError } = await supabase
+            .from('products')
+            .insert({
+              tenant_id: tenantId,
+              name: String(p.name || '').trim(),
+              price: importedSale > 0 ? importedSale : 0,
+              original_price: importedCost > 0 ? importedCost : 0,
+              image: '',
+              category: p.category || 'Geral',
+              description: p.description || '',
+              in_stock: false,
+              supplier_id: productSupplierId || null,
+              condition: p.condition || 'new',
+            } as any)
+            .select('id')
+            .single();
+          if (createError) throw createError;
+          if (created?.id) {
+            await saveImportedVariants(created.id, p, importedSale, importedCost, isCost, shipping, margin, productSupplierId, colorOnly);
+            insertedIds.push(created.id);
+          }
         }
 
         // Registra sempre na tabela de comparação multi-fornecedor
