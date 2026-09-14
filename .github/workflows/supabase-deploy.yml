@@ -15,6 +15,9 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      - name: Deploy parse-products-txt
+        if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase functions deploy parse-products-txt --project-ref qbcplbcdxoyqpmcehnvu --no-verify-jwt
       - name: Deploy ai-media-unified
         if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
         run: supabase functions deploy ai-media-unified --project-ref qbcplbcdxoyqpmcehnvu
