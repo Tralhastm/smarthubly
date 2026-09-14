@@ -867,14 +867,14 @@ const SupplierPanel = () => {
     const invalid: string[] = [];
     const warnings: string[] = [];
     const incomingByProduct = new Map<string, Set<string>>();
+    const incomingProductIds = new Set<string>();
+    const incomingProductNames = new Set<string>();
     try {
-      // O upload do fornecedor é um snapshot: o que não voltar neste
-      // catálogo deixa de ser uma oferta ativa, sem apagar o histórico.
-      await (supabase as any).from('supplier_product_prices').update({ available: false }).eq('supplier_id', supplier.id);
-      await (supabase as any).from('supplier_variant_offers').update({ available: false }).eq('supplier_id', supplier.id);
       for (const entry of entries) {
         const product = entry.aliases.map(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
         if (!product) { notFound.push(entry.name); continue; }
+        incomingProductIds.add(product.id);
+        incomingProductNames.add(product.name.toLowerCase().trim());
         const patch: Record<string, any> = {};
         // Lista de fornecedor informa exclusivamente custo. Revenda manual da
         // loja nunca é alterada por este painel, mesmo se a lista tiver uma
@@ -950,6 +950,12 @@ const SupplierPanel = () => {
         updated.push(entry.name);
         Object.assign(product, patch);
       }
+      const { error: snapshotError } = await (supabase as any).rpc('sync_supplier_catalog_snapshot_by_token', {
+        _token: token,
+        _product_ids: [...incomingProductIds],
+        _product_names: [...incomingProductNames],
+      });
+      if (snapshotError) warnings.push(`Snapshot não sincronizado: ${snapshotError.message}`);
       for (const [productId, incomingKeys] of incomingByProduct) {
         const { error: staleError } = await (supabase as any).rpc('hide_stale_supplier_variant_offers_by_token', {
           _token: token,
