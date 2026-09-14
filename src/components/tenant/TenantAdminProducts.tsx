@@ -1901,7 +1901,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     </div>
   );
 };
-const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, suppliers, tenantId, feeRequests, soldOutVariantIds, onRequestFee, onEdit, onSave, onCancel, onDelete }: {
+const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, suppliers, tenantId, feeRequests, soldOutVariantIds, onRequestFee, onEdit, onSave, onCancel, onDelete, onToggleVisibility }: {
   product: Product; isEditing: boolean; isDropshipping?: boolean; isAffiliate?: boolean;
   suppliers: { id: string; name: string }[];
   tenantId: string;
