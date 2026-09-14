@@ -250,7 +250,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   // venda - Asaas 4,6% - frete - desconto - custo - comissão do vendedor.
   // Assim, uma alteração de preço/custo passa a refletir na vitrine sem depender
   // de uma atualização manual de in_stock no banco.
-  const storefrontProducts = useMemo(() => allProducts.map(product => {
+  const storefrontProducts = useMemo(() => allProducts.filter(product => (product as any).store_visible !== false).map(product => {
     const variants = variantMap.get(product.id) || [];
     const pricedVariants = variants.map(variant => ({
       sale: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),

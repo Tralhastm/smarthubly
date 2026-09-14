@@ -10,7 +10,7 @@ import AutoCategorizeButton from '@/components/shared/AutoCategorizeButton';
 import ProductExtrasEditor from './ProductExtrasEditor';
 import CategoryTreeSelect from './CategoryTreeSelect';
 import TenantCategoriesTree from './TenantCategoriesTree';
-import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Download, Sparkles, Loader2, ImageIcon, Link as LinkIcon, AlertTriangle, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Download, Sparkles, Loader2, ImageIcon, Link as LinkIcon, AlertTriangle, Search, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
@@ -454,6 +454,24 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     } finally {
       setDeletingAll(false);
     }
+  };
+  const availableProductCount = products.filter(product => product.in_stock !== false).length;
+  const unavailableProductCount = products.length - availableProductCount;
+  const hiddenUnavailableCount = products.filter(product => product.in_stock === false && (product as any).store_visible === false).length;
+  const handleToggleUnavailableVisibility = async () => {
+    if (unavailableProductCount === 0) {
+      toast.info('Não há produtos indisponíveis para alterar.');
+      return;
+    }
+    const shouldShow = hiddenUnavailableCount === unavailableProductCount;
+    const { error } = await supabase.from('products').update({ store_visible: shouldShow, updated_at: new Date().toISOString() } as any)
+      .eq('tenant_id', tenantId).eq('in_stock', false);
+    if (error) {
+      toast.error(`Não foi possível atualizar a vitrine: ${error.message}`);
+      return;
+    }
+    await refetch();
+    toast.success(shouldShow ? 'Produtos indisponíveis reexibidos na vitrine.' : 'Produtos indisponíveis ocultados da vitrine.');
   };
   const handleDeleteBulk = useCallback(async (source: 'ai' | 'google') => {
     const label = source === 'ai' ? 'geradas por IA' : 'importadas da web';
@@ -1300,6 +1318,20 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         </div>
       )}
       <div className="flex gap-2 flex-wrap">
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
+          <Package className="h-4 w-4 text-primary" />
+          <span className="text-muted-foreground">Disponíveis:</span>
+          <strong className="text-foreground">{availableProductCount}</strong>
+          <span className="text-muted-foreground">/ {products.length}</span>
+        </div>
+        {unavailableProductCount > 0 && (
+          <button onClick={handleToggleUnavailableVisibility}
+            className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary/80"
+            title={hiddenUnavailableCount === unavailableProductCount ? 'Reexibir todos os indisponíveis na vitrine' : 'Ocultar todos os indisponíveis da vitrine'}>
+            {hiddenUnavailableCount === unavailableProductCount ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            {hiddenUnavailableCount === unavailableProductCount ? 'Reexibir indisponíveis' : 'Ocultar indisponíveis'}
+          </button>
+        )}
         <div className="relative min-w-[240px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input value={catalogSearch} onChange={e => setCatalogSearch(e.target.value)} placeholder="Localizar produto no catálogo..." aria-label="Buscar produto no catálogo"
@@ -1855,7 +1887,13 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             });
           }}
           onEdit={() => setEditing(p.id)} onSave={(prod) => { updateMutation.mutate(prod); setEditing(null); }}
-          onCancel={() => setEditing(null)} onDelete={() => deleteMutation.mutate(p.id)} />
+          onCancel={() => setEditing(null)} onDelete={() => deleteMutation.mutate(p.id)}
+          onToggleVisibility={async () => {
+            const nextVisible = (p as any).store_visible === false;
+            const { error } = await supabase.from('products').update({ store_visible: nextVisible, updated_at: new Date().toISOString() } as any).eq('id', p.id).eq('tenant_id', tenantId);
+            if (error) toast.error(`Não foi possível alterar a vitrine: ${error.message}`);
+            else { await refetch(); toast.success(nextVisible ? 'Produto reexibido na vitrine.' : 'Produto ocultado da vitrine.'); }
+          }} />
             ))}
       {products.length > 0 && visibleProducts.length === 0 && (
         <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">Nenhum produto encontrado para “{catalogSearch}”.</p>
@@ -1870,7 +1908,7 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
   feeRequests: { id: string; requested_percent: number; status: string }[];
   soldOutVariantIds: string[];
   onRequestFee: (productId: string, percent: number) => void;
-  onEdit: () => void; onSave: (p: Product) => void; onCancel: () => void; onDelete: () => void;
+  onEdit: () => void; onSave: (p: Product) => void; onCancel: () => void; onDelete: () => void; onToggleVisibility: () => void;
 }) => {
   const [form, setForm] = useState(product);
   const [media, setMedia] = useState<MediaItem[]>((product as any).media || []);
@@ -2271,6 +2309,11 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
             title={((product as any).manual_blocked) ? 'Liberar produto na vitrine' : 'Bloquear produto na vitrine'}
           >
             {((product as any).manual_blocked) ? 'Liberar' : 'Bloquear'}
+          </button>
+          <button onClick={onToggleVisibility}
+            className={`rounded-md p-2 ${((product as any).store_visible === false) ? 'text-amber-600 hover:bg-amber-500/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/10'}`}
+            title={((product as any).store_visible === false) ? 'Reexibir na vitrine' : 'Ocultar da vitrine'}>
+            {((product as any).store_visible === false) ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           </button>
           <button onClick={onEdit} className="rounded-md p-2 text-muted-foreground hover:text-primary hover:bg-primary/10"><Edit className="h-4 w-4" /></button>
           <button onClick={onDelete} className="rounded-md p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" /></button>

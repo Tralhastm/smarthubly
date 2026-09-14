@@ -113,6 +113,7 @@ export const useUpdateProduct = () => {
         category: product.category,
         description: product.description,
         in_stock: product.in_stock,
+        store_visible: (product as any).store_visible !== false,
         manual_blocked: Boolean((product as any).manual_blocked),
         allow_loss: Boolean((product as any).allow_loss),
         supplier_id: product.supplier_id,
