@@ -198,6 +198,17 @@ export async function catalog(req: Request, body?: any): Promise<Response> {
       return json({ error: "forbidden" }, 403);
     }
 
+    // Cada upload é uma fotografia independente do fornecedor. O preço da
+    // lista é sempre custo de aquisição; preço de revenda nunca vem do
+    // fornecedor e não pode substituir o preço publicado pela loja.
+    const { data: sourceArchiveId, error: archiveError } = await admin.rpc('archive_supplier_catalog', {
+      p_tenant_id: supplier.tenant_id,
+      p_supplier_name: supplier.name,
+      p_file_name: `catalog-${kind}-${supplier.name}`,
+      p_content: String(content).slice(0, 50000),
+    });
+    if (archiveError) return json({ error: 'catalog_archive_failed', detail: archiveError.message }, 500);
+
     // A lista enviada substitui o estado anterior deste fornecedor. Ofertas
     // ausentes deixam de participar da escolha do menor custo.
     await admin.from('supplier_product_prices')
@@ -280,7 +291,7 @@ Regras:
     let skipped = 0;
     const skippedProducts: string[] = [];
     const matchedProducts: string[] = [];
-    const priceTypes = payload.priceType === 'both' ? ['cost', 'resale'] : [payload.priceType || 'resale'];
+    const priceTypes = ['cost'];
 
     // O painel do fornecedor nunca cria produtos: somente o catálogo oficial
     // da loja é fonte de verdade para os itens que podem ser atualizados.
@@ -320,7 +331,7 @@ Regras:
         const unmatchedResale = positiveNumber(it.resale_price);
         const unmatchedGeneric = positiveNumber(it.price ?? it.unit_price ?? it.preco);
         const unmatchedFallback = unmatchedVariantPrices.length ? Math.min(...unmatchedVariantPrices) : unmatchedGeneric;
-        const unmatchedPrice = priceTypes.includes('cost') ? (unmatchedCost || unmatchedFallback) : (unmatchedResale || unmatchedGeneric || unmatchedFallback);
+        const unmatchedPrice = unmatchedCost || unmatchedFallback;
         if (sourceName && Number.isFinite(unmatchedPrice) && unmatchedPrice > 0) {
           const { error: unmatchedPriceError } = await admin.from('supplier_product_prices').upsert({
             supplier_id: targetSupplierId,
@@ -330,6 +341,7 @@ Regras:
             description: it.description || null,
             variations: unmatchedVariants.length ? unmatchedVariants : (it.variations || null),
             price_types: priceTypes,
+            source_archive_id: sourceArchiveId || null,
             metadata: { cost_price: unmatchedCost || null, resale_price: unmatchedResale || null, source_name: sourceName, unmatched_catalog_product: true },
           }, { onConflict: 'supplier_id,product_name' });
           if (unmatchedPriceError) warnings.push(`${sourceName}: falha ao salvar preço do fornecedor (${unmatchedPriceError.message})`);
@@ -346,7 +358,7 @@ Regras:
       const fallback = variantPrices.length ? Math.min(...variantPrices) : generic;
       const effectiveCost = cost || fallback;
       const effectiveResale = resale || generic || fallback;
-      const newPrice = priceTypes.includes('cost') ? effectiveCost : effectiveResale;
+      const newPrice = effectiveCost;
       if (!name || !Number.isFinite(newPrice) || newPrice <= 0) {
         skipped++;
         continue;
@@ -367,6 +379,7 @@ Regras:
           product_name: String(catalogProduct.name).toLowerCase(),
           unit_price: newPrice,
           available: it.available ?? it.disponivel ?? true,
+          source_archive_id: sourceArchiveId || null,
           description: it.description || null,
           variations: variants.length ? variants : (it.variations || null),
           price_types: priceTypes,
@@ -395,18 +408,17 @@ Regras:
             const variantKey = variantMatchKey(variantName);
             incomingNames.add(variantKey);
             const variantCost = positiveNumber(incoming.cost_price) || effectiveCost || positiveNumber(incoming.price);
-            const variantResale = positiveNumber(incoming.resale_price) || effectiveResale || positiveNumber(incoming.price);
-            const selectedVariantPrice = priceTypes.includes('cost') ? variantCost : variantResale;
             const old = current.find((v: any) => variantMatchKey(v.name) === variantKey);
             const row = {
               product_id: catalogProduct.id,
               tenant_id: targetTenantId,
               name: variantName,
-              price_delta: selectedVariantPrice - Number(catalogProduct.price || 0),
               cost_price: variantCost || null,
-              suggested_price: variantResale || selectedVariantPrice,
-              needs_price_review: false,
-              price_source: 'supplier_catalog',
+              // O preço de revenda aprovado pela loja permanece intacto.
+              suggested_price: old?.suggested_price ?? null,
+              price_delta: old?.price_delta ?? 0,
+              needs_price_review: old?.needs_price_review ?? true,
+              price_source: 'supplier_catalog_cost',
               in_stock: incoming.available ?? incoming.disponivel ?? true,
               sort_order: i,
             };
@@ -429,6 +441,7 @@ Regras:
                 variant_key: variantKey,
                 unit_cost: variantCost,
                 available: incoming.available ?? incoming.disponivel ?? true,
+                source_archive_id: sourceArchiveId || null,
                 source: 'supplier_list',
                 last_seen_at: new Date().toISOString(),
               }, { onConflict: 'supplier_id,product_id,variant_key' });

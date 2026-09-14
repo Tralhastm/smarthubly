@@ -879,8 +879,9 @@ const SupplierPanel = () => {
         // Lista de fornecedor informa exclusivamente custo. Revenda manual da
         // loja nunca é alterada por este painel, mesmo se a lista tiver uma
         // coluna chamada REVENDA ou o modo antigo estiver selecionado.
-        if (entry.cost != null) patch.original_price = entry.cost;
-        if (Object.keys(patch).length === 0 && entry.colors.length === 0) {
+        // A lista do fornecedor informa somente custo. O preço de revenda
+        // aprovado pela loja não pode ser substituído durante a sincronização.
+        if (Object.keys(patch).length === 0 && entry.colors.length === 0 && entry.cost == null) {
           const expected = priceUpdateMode === 'color' ? 'CUSTO por cor' : priceUpdateMode === 'cost' ? 'CUSTO' : priceUpdateMode === 'resale' ? 'REVENDA' : 'CUSTO ou REVENDA';
           invalid.push(`${entry.name} (não contém ${expected})`);
           continue;
