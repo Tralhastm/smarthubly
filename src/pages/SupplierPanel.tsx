@@ -885,8 +885,11 @@ const SupplierPanel = () => {
           invalid.push(`${entry.name} (não contém ${expected})`);
           continue;
         }
-        if (Object.keys(patch).length > 0 && product.supplier_id === supplier.id) {
-          const { error } = await supabase.from('products').update(patch).eq('id', product.id).eq('supplier_id', supplier.id);
+        if (Object.keys(patch).length > 0) {
+          // O produto não fica preso ao fornecedor que recebeu esta lista.
+          // Cada fornecedor atualiza sua própria oferta; a reconciliação global
+          // escolhe depois o menor custo vigente entre todos os fornecedores.
+          const { error } = await supabase.from('products').update(patch).eq('id', product.id);
           if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
         }
         // Cada cor é uma oferta independente. Nunca apagamos a variante de
@@ -1375,7 +1378,7 @@ const SupplierPanel = () => {
           <div className="space-y-4">
             <div className="rounded-lg border border-border bg-card p-4 space-y-2">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground"><Upload className="h-5 w-5 text-primary" /> Importar preços</h2>
-              <p className="text-xs text-muted-foreground">Cole a lista original do fornecedor ou escolha um arquivo .txt. O valor entre parênteses é o custo e as cores após o preço também são importadas. Só serão atualizados produtos já vinculados a este fornecedor.</p>
+              <p className="text-xs text-muted-foreground">Cole a lista original do fornecedor ou escolha um arquivo .txt. O valor entre parênteses é o custo e as cores após o preço também são importadas. O produto pode mudar de fornecedor: a reconciliação sempre escolhe a menor oferta vigente.</p>
               <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
                 <label className="block text-xs font-semibold text-foreground">O que deseja atualizar?</label>
                 <select value={priceUpdateMode} onChange={e => { setPriceUpdateMode(e.target.value as 'cost' | 'resale' | 'both' | 'color'); setImportResult(null); }} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
