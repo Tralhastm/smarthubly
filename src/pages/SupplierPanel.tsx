@@ -939,14 +939,12 @@ const SupplierPanel = () => {
           }
         }
         if (entry.cost != null && Number(entry.cost) > 0 && priceUpdateMode !== 'color') {
-          const { error: productOfferError } = await (supabase as any).from('supplier_product_prices').upsert({
-            supplier_id: supplier.id,
-            product_name: product.name.toLowerCase(),
-            unit_price: Number(entry.cost),
-            price_types: ['cost'],
-            available: true,
-            source_archive_id: archivedList || null,
-          }, { onConflict: 'supplier_id,product_name' });
+          const { error: productOfferError } = await (supabase as any).rpc('upsert_supplier_product_price_by_token', {
+            _token: token,
+            _product_name: product.name,
+            _unit_price: Number(entry.cost),
+            _source_archive_id: archivedList || null,
+          });
           if (productOfferError) warnings.push(`${entry.name} (preço do produto não atualizado: ${productOfferError.message})`);
         }
         updated.push(entry.name);
