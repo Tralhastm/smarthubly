@@ -18,6 +18,8 @@ jobs:
       - name: Deploy parse-products-txt
         if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
         run: supabase functions deploy parse-products-txt --project-ref qbcplbcdxoyqpmcehnvu --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       - name: Deploy ai-media-unified
         if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
         run: supabase functions deploy ai-media-unified --project-ref qbcplbcdxoyqpmcehnvu
