@@ -47,7 +47,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
             <MediaCarousel items={product.media} className="h-full w-full" imgClassName="h-full w-full object-contain" videoClassName="h-full w-full object-contain" />
           ) : product.image ? (
             <>
-              <img src={product.image} alt={product.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
+              <img src={getHighResolutionImageUrl(product.image)} alt={product.name} className="h-full w-full object-contain" loading="lazy" decoding="async" />
               {isAiGeneratedImage(product.image) && (
                 <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] text-white/70 leading-none select-none">Foto gerada por IA</span>
               )}

@@ -5,7 +5,7 @@ export type MediaItem = { type: 'image' | 'video'; url: string };
 
 /** Prefere a versão 2X do CDN do Mercado Livre sem alterar outras URLs. */
 export const getHighResolutionImageUrl = (url: string) =>
-  url.includes('http2.mlstatic.com/D_NQ_NP_')
+  url.includes('http2.mlstatic.com/D_NQ_NP_') && !url.includes('http2.mlstatic.com/D_NQ_NP_2X_')
     ? url.replace('http2.mlstatic.com/D_NQ_NP_', 'http2.mlstatic.com/D_NQ_NP_2X_')
     : url;
 
