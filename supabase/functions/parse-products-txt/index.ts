@@ -207,3 +207,5 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
+
+// Parser deployment trigger: keep supplier currency parsing current.
