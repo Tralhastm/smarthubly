@@ -596,7 +596,15 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         { supplier_id: supplierId, product_name: productName.toLowerCase(), unit_price: price, price_types: types, available: true },
         { onConflict: 'supplier_id,product_name' },
       );
-    if (error) console.warn('Falha ao gravar preço do fornecedor', error);
+    if (error) {
+      console.error('[catalog-import] Falha ao gravar preço principal do fornecedor', {
+        supplierId,
+        productName,
+        price,
+        error,
+      });
+      throw error;
+    }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
