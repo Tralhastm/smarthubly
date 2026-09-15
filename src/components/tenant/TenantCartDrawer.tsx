@@ -108,6 +108,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const [pickupOnlyConfirmed, setPickupOnlyConfirmed] = useState(false);
   // Estimativa ViaCEP (apenas modo dropshipping)
   const [freightEstimate, setFreightEstimate] = useState<FreightEstimate | null>(null);
+  // A cotação continua visível para o cliente, mas a loja aplica frete grátis.
+  const [freeShippingApplied, setFreeShippingApplied] = useState(false);
   // Agendamento: data/hora escolhida pro serviço
   const [scheduledStart, setScheduledStart] = useState<Date | null>(null);
   const { toast } = useToast();
@@ -344,7 +346,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const effectiveDeliveryFee = useLalamoveQuote
     ? (courierQuote!.fee || 0)
     : (isDropshipping ? deliveryFee : (allItemsHaveShipping ? 0 : deliveryFee));
-  const subtotalForCoupon = total + (deliveryType === 'delivery' ? effectiveDeliveryFee : 0) + customerFee + shippingFee;
+  const quotedShippingTotal = deliveryType === 'delivery' ? effectiveDeliveryFee + shippingFee : 0;
+  const appliedShippingTotal = freeShippingApplied ? 0 : quotedShippingTotal;
+  const subtotalForCoupon = total + appliedShippingTotal + customerFee;
   const discountAmount = appliedCoupon
     ? (appliedCoupon.discount_type === 'percent'
         ? Math.min(subtotalForCoupon * appliedCoupon.discount_value / 100, subtotalForCoupon)
@@ -362,7 +366,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const deliveryBlocked = deliveryType === 'delivery' && (
     checkingDelivery ||
     !!distanceError ||
-    (isDropshipping && (!freightEstimate || effectiveDeliveryFee <= 0))
+    (isDropshipping && !freightEstimate)
   );
 
   const applyCoupon = async () => {
@@ -402,6 +406,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       setDeliveryCheck(null);
       setDistanceError('');
       setFreightEstimate(null);
+      setFreeShippingApplied(false);
       return val;
     });
   }, []);
@@ -412,6 +417,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     setOriginDistances({});
     setDeliveryCheck(null);
     setDeliveryFee(0);
+    setFreeShippingApplied(false);
   }, []);
 
   const handleDistanceCalculated = useCallback(async (distanceKm: number, fee: number, calculatedAddress: string) => {
@@ -422,6 +428,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     setDistanceError('');
     setDeliveryCheck(null);
     setPickupOnlyConfirmed(false);
+    setFreeShippingApplied(false);
 
     const tenantOrigin = (tenant as any).shipping_origin_address || tenant.address;
     const uniqueOrigins = new Set<string>();
@@ -553,6 +560,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
               : est.pac;
             setFreightEstimate(est);
             setDeliveryFee(Math.round(tableFee * 100) / 100);
+            setFreeShippingApplied(true);
             setDeliveryCheck(null);
             setDistanceError('');
           } else {
@@ -590,6 +598,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
               setDistance((data as any).distance_km ?? null);
             }
           }
+          setFreeShippingApplied(true);
         }
       }
     } catch { /* fallback silencioso pra não bloquear o checkout */ }
@@ -611,7 +620,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       return;
     }
     const needsDistance = deliveryType === 'delivery' && !isDropshipping;
-    if (deliveryType === 'delivery' && (!simulateApproved && checkingDelivery || distanceError || (isDropshipping && (!freightEstimate || effectiveDeliveryFee <= 0)))) {
+    if (deliveryType === 'delivery' && (!simulateApproved && checkingDelivery || distanceError || (isDropshipping && !freightEstimate))) {
       toast({ title: 'Frete indisponível para este endereço', description: distanceError || 'Calcule o frete antes de prosseguir.', variant: 'destructive' });
       return;
     }
@@ -694,7 +703,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         toast({ title: 'WhatsApp da loja não configurado', variant: 'destructive' });
         return;
       }
-      const preMsg = buildWhatsAppMessage(items, finalTotal, deliveryType === 'delivery' ? (effectiveDeliveryFee + shippingFee) : 0, address, deliveryType, paymentMethod, tenant.name, name);
+      const preMsg = buildWhatsAppMessage(items, finalTotal, deliveryType === 'delivery' ? appliedShippingTotal : 0, address, deliveryType, paymentMethod, tenant.name, name);
       window.open(`https://wa.me/${waNumber}?text=${preMsg}`, '_blank');
       setWaConfirm(true);
       return;
@@ -848,7 +857,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           fee_fixed_amount: 0,
           fee_total: 0,
           delivery_type: deliveryType,
-          delivery_fee: deliveryType === 'delivery' ? (effectiveDeliveryFee + shippingFee) : 0,
+          delivery_fee: deliveryType === 'delivery' ? appliedShippingTotal : 0,
           payment_method: infinitePayTap ? 'infinitepay_tap' : payOnline ? (isInfinitePay ? 'infinitepay_pix' : isAsaasActive ? 'asaas_online' : 'mercadopago') : paymentMethod,
           payment_provider: simulateApproved ? 'demo' : (payOnline ? (isInfinitePay ? 'infinitepay' : isAsaasActive ? 'asaas' : ((tenant as any).payment_provider || 'mercadopago')) : null),
           payment_external_id: simulateApproved ? `demo:${courierCode}` : null,
@@ -1167,7 +1176,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                         onError={handleDistanceError}
                         tenantAddress={primaryShippingOrigin}
                         skipDistanceCalculation={isDropshipping || (tenant as any).is_dropshipping === true}
-                        displayFeeOverride={effectiveDeliveryFee + shippingFee}
+                        displayFeeOverride={quotedShippingTotal}
                         displayFeeLabel={
                           useLalamoveQuote
                             ? `Taxa ${courierQuote?.method === 'uber_direct' ? 'Uber' : 'Lalamove'} + frete fornecedor:`
@@ -1200,12 +1209,12 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                         const driverOpt = deliveryCheck.options.find(o => o.method === 'driver' && o.available);
                         const chosen = courierOpt || driverOpt;
                         if (!chosen) return null;
-                        const totalFreteExibido = (allItemsHaveShipping ? 0 : effectiveDeliveryFee) + shippingFee;
+                        const totalFreteExibido = quotedShippingTotal;
                         return (
                           <div className="mt-2 rounded-lg border border-green-500/30 bg-green-500/5 p-2 text-xs text-green-600 dark:text-green-400 space-y-0.5">
                             <p className="font-medium">✓ Entrega disponível!</p>
                             <p className="text-muted-foreground">
-                              {chosen.label} {totalFreteExibido > 0 ? `· R$${totalFreteExibido.toFixed(2)}` : '· grátis'} {chosen.eta ? `· ${chosen.eta}` : ''}
+                              {chosen.label} {totalFreteExibido > 0 ? `· Cotação R$${totalFreteExibido.toFixed(2)}` : '· grátis'} · Frete grátis aplicado {chosen.eta ? `· ${chosen.eta}` : ''}
                             </p>
                           </div>
                         );
@@ -1306,13 +1315,15 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                   <div className="border-t border-border pt-3 space-y-1">
                     <div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal:</span><span>R${total.toFixed(2)}</span></div>
                     {customerFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Taxa operacional:</span><span>R${customerFee.toFixed(2)}</span></div>}
-                    {effectiveDeliveryFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? `Frete estimado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):` : useLalamoveQuote ? 'Entrega Lalamove:' : 'Entrega (distância):'}</span><span>R${effectiveDeliveryFee.toFixed(2)}</span></div>}
+                    {freeShippingApplied && quotedShippingTotal > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? `Frete calculado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):` : useLalamoveQuote ? 'Entrega calculada:' : 'Entrega calculada:'}</span><span className="line-through">R${quotedShippingTotal.toFixed(2)}</span></div>}
+                    {freeShippingApplied && quotedShippingTotal > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>Frete grátis aplicado:</span><span>R$0,00</span></div>}
+                    {!freeShippingApplied && effectiveDeliveryFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? `Frete estimado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):` : useLalamoveQuote ? 'Entrega Lalamove:' : 'Entrega (distância):'}</span><span>R${effectiveDeliveryFee.toFixed(2)}</span></div>}
                     {isDropshipping && freightEstimate && (
                       <div className="text-xs text-muted-foreground italic px-1">
                         Estimativa CEP→CEP via ViaCEP. Sedex aprox. R${freightEstimate.sedex.toFixed(2)} · ~{freightEstimate.distanceKm}km. Valor final pode variar conforme transportadora.
                       </div>
                     )}
-                    {shippingFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete (produtos):</span><span>R${shippingFee.toFixed(2)}</span></div>}
+                    {!freeShippingApplied && shippingFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete (produtos):</span><span>R${shippingFee.toFixed(2)}</span></div>}
                     {discountAmount > 0 && <div className="flex justify-between text-sm text-green-400"><span>Cupom ({appliedCoupon?.code}):</span><span>−R${discountAmount.toFixed(2)}</span></div>}
                     <div className="flex justify-between text-lg font-bold text-foreground"><span>{onlinePaymentMethod === 'pix' ? 'Total Pix:' : onlinePaymentMethod === 'credit' ? 'Total cartão:' : onlinePaymentMethod === 'debit' ? 'Total débito:' : 'Subtotal:'}</span><span className="text-primary">R${(hasOnlinePayment && onlinePaymentMethod ? onlineTotal : finalTotal).toFixed(2)}</span></div>
                   </div>
@@ -1401,7 +1412,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
               </button>
               <button
                 onClick={() => {
-                  const preMsg = buildWhatsAppMessage(items, finalTotal, deliveryType === 'delivery' ? (effectiveDeliveryFee + shippingFee) : 0, address, deliveryType, paymentMethod, tenant.name, name);
+                  const preMsg = buildWhatsAppMessage(items, finalTotal, deliveryType === 'delivery' ? appliedShippingTotal : 0, address, deliveryType, paymentMethod, tenant.name, name);
                   window.open(`https://wa.me/${waNumber}?text=${preMsg}`, '_blank');
                 }}
                 className="py-2.5 rounded-lg text-sm font-medium bg-secondary text-foreground hover:bg-muted"
