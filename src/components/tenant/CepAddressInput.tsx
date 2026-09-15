@@ -264,15 +264,6 @@ const CepAddressInput = ({ onChange, onCalculated, onError, tenantAddress, displ
 
       {result && (
         <div className="p-3 rounded-lg bg-secondary border border-border">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Distância:</span>
-            <span className="text-foreground font-medium">
-              {(typeof displayDistanceOverride === 'number' && displayDistanceOverride > 0
-                ? displayDistanceOverride
-                : result.distance
-              ).toFixed(1)} km
-            </span>
-          </div>
           <div className="flex justify-between text-sm mt-1">
             <span className="text-muted-foreground">{displayFeeLabel || 'Taxa de entrega:'}</span>
             <span className="text-primary font-bold">

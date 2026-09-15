@@ -63,10 +63,6 @@ const AddressAutocomplete = ({ value, onChange, onCalculated, onError, tenantAdd
 
       {result && (
         <div className="p-3 rounded-lg bg-secondary border border-border">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Distância:</span>
-            <span className="text-foreground font-medium">{result.distance} km</span>
-          </div>
           <div className="flex justify-between text-sm mt-1">
             <span className="text-muted-foreground">Taxa de entrega:</span>
             <span className="text-primary font-bold">R${result.fee.toFixed(2)}</span>
