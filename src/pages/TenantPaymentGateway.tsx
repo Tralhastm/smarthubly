@@ -14,6 +14,19 @@ function providerLabel(provider: string) {
   return 'Mercado Pago';
 }
 
+async function providerErrorMessage(result: any, invokeError: any) {
+  const context = invokeError?.context;
+  if (context instanceof Response) {
+    try {
+      const body = await context.clone().json();
+      return body?.error || body?.message || invokeError?.message;
+    } catch {
+      return invokeError?.message;
+    }
+  }
+  return result?.error || result?.message || context?.error || invokeError?.message;
+}
+
 export default function TenantPaymentGateway() {
   const { slug, orderId } = useParams<{ slug: string; orderId: string }>();
   const navigate = useNavigate();
@@ -42,7 +55,7 @@ export default function TenantPaymentGateway() {
       const { data, error: invokeError } = await supabase.functions.invoke('create-payment', { body: { order_id: orderId, tenant_id: tenant.id } });
       if (!active) return;
       const result: any = data || {};
-      const message = result.error || result.message || (invokeError as any)?.context?.error || invokeError?.message;
+      const message = await providerErrorMessage(result, invokeError);
       if (result.provider) setProvider(String(result.provider));
       if (invokeError || (!result.init_point && !result.pix_qr_code)) {
         setError(message || 'Não foi possível preparar o pagamento.');

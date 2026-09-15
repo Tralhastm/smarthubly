@@ -39,6 +39,22 @@ async function fetchJson(url: string, init: RequestInit, timeoutMs = 15000) {
 function errorFromProvider(provider: string, data: any, fallback: string) {
   const details = Array.isArray(data?.errors) ? data.errors : data?.errors || data?.message || data?.error || null;
   console.error(`[payment:${provider}] provider error`, JSON.stringify(data));
+  if (provider === "mercadopago" && data?.code === "PA_UNAUTHORIZED_RESULT_FROM_POLICIES") {
+    return reply({
+      provider,
+      code: "MERCADOPAGO_ACCOUNT_BLOCKED",
+      error: "O Mercado Pago recusou a credencial: a conta está bloqueada ou as chaves foram revogadas. Gere uma nova credencial de produção no Mercado Pago ou desbloqueie a conta antes de receber pagamentos.",
+      details,
+    }, 502);
+  }
+  if (provider === "mercadopago" && data?.status === 403) {
+    return reply({
+      provider,
+      code: "MERCADOPAGO_CREDENTIAL_FORBIDDEN",
+      error: "A credencial do Mercado Pago não tem autorização para criar checkouts. Confira a conta, as permissões e o ambiente da credencial.",
+      details,
+    }, 502);
+  }
   return reply({ provider, code: "PROVIDER_ERROR", error: fallback, details }, 502);
 }
 
