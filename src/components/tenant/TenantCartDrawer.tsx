@@ -347,7 +347,25 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     ? (courierQuote!.fee || 0)
     : (isDropshipping ? deliveryFee : (allItemsHaveShipping ? 0 : deliveryFee));
   const quotedShippingTotal = deliveryType === 'delivery' ? effectiveDeliveryFee + shippingFee : 0;
-  const appliedShippingTotal = freeShippingApplied ? 0 : quotedShippingTotal;
+  const globalDiscountEnabled = (tenant as any).shipping_discount_enabled !== false;
+  const applyShippingRule = (amount: number, type: string, value: number) => {
+    if (type === 'free') return 0;
+    if (type === 'percent') return Math.max(0, amount * (1 - Math.min(100, Math.max(0, value)) / 100));
+    if (type === 'fixed') return Math.max(0, amount - Math.max(0, value));
+    return amount;
+  };
+  const productSubtotal = items.reduce((sum, item) => sum + getCartLineUnitPrice(item) * item.quantity, 0);
+  const appliedShippingTotal = deliveryType !== 'delivery' ? 0 : items.reduce((sum, item) => {
+    const lineShare = productSubtotal > 0 ? quotedShippingTotal * (getCartLineUnitPrice(item) * item.quantity / productSubtotal) : 0;
+    const product = item.product as any;
+    const hasProductRule = product.shipping_discount_enabled === true;
+    const enabled = hasProductRule || globalDiscountEnabled;
+    if (!enabled) return sum + lineShare;
+    const type = hasProductRule ? product.shipping_discount_type : ((tenant as any).shipping_discount_type || 'free');
+    const value = hasProductRule ? Number(product.shipping_discount_value || 0) : Number((tenant as any).shipping_discount_value || 0);
+    return sum + applyShippingRule(lineShare, type, value);
+  }, 0);
+  const shippingDiscountAmount = Math.max(0, quotedShippingTotal - appliedShippingTotal);
   const subtotalForCoupon = total + appliedShippingTotal + customerFee;
   const discountAmount = appliedCoupon
     ? (appliedCoupon.discount_type === 'percent'
@@ -1214,7 +1232,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                           <div className="mt-2 rounded-lg border border-green-500/30 bg-green-500/5 p-2 text-xs text-green-600 dark:text-green-400 space-y-0.5">
                             <p className="font-medium">✓ Entrega disponível!</p>
                             <p className="text-muted-foreground">
-                              {chosen.label} {totalFreteExibido > 0 ? `· Cotação R$${totalFreteExibido.toFixed(2)}` : '· grátis'} · Frete grátis aplicado {chosen.eta ? `· ${chosen.eta}` : ''}
+                              {chosen.label} {totalFreteExibido > 0 ? `· Cotação R$${totalFreteExibido.toFixed(2)}` : '· grátis'}{shippingDiscountAmount > 0 ? ` · Desconto aplicado: R$${shippingDiscountAmount.toFixed(2)}` : ''} {chosen.eta ? `· ${chosen.eta}` : ''}
                             </p>
                           </div>
                         );
@@ -1315,15 +1333,15 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                   <div className="border-t border-border pt-3 space-y-1">
                     <div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal:</span><span>R${total.toFixed(2)}</span></div>
                     {customerFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Taxa operacional:</span><span>R${customerFee.toFixed(2)}</span></div>}
-                    {freeShippingApplied && quotedShippingTotal > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? `Frete calculado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):` : useLalamoveQuote ? 'Entrega calculada:' : 'Entrega calculada:'}</span><span className="line-through">R${quotedShippingTotal.toFixed(2)}</span></div>}
-                    {freeShippingApplied && quotedShippingTotal > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>Frete grátis aplicado:</span><span>R$0,00</span></div>}
-                    {!freeShippingApplied && effectiveDeliveryFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? `Frete estimado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):` : useLalamoveQuote ? 'Entrega Lalamove:' : 'Entrega (distância):'}</span><span>R${effectiveDeliveryFee.toFixed(2)}</span></div>}
+                    {shippingDiscountAmount > 0 && quotedShippingTotal > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete calculado:</span><span className="line-through">R${quotedShippingTotal.toFixed(2)}</span></div>}
+                    {shippingDiscountAmount > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>{appliedShippingTotal === 0 ? 'Frete grátis aplicado:' : 'Desconto no frete aplicado:'}</span><span>R${appliedShippingTotal.toFixed(2)}</span></div>}
+                    {shippingDiscountAmount === 0 && effectiveDeliveryFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? `Frete estimado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):` : useLalamoveQuote ? 'Entrega Lalamove:' : 'Entrega (distância):'}</span><span>R${effectiveDeliveryFee.toFixed(2)}</span></div>}
                     {isDropshipping && freightEstimate && (
                       <div className="text-xs text-muted-foreground italic px-1">
                         Estimativa CEP→CEP via ViaCEP. Sedex aprox. R${freightEstimate.sedex.toFixed(2)} · ~{freightEstimate.distanceKm}km. Valor final pode variar conforme transportadora.
                       </div>
                     )}
-                    {!freeShippingApplied && shippingFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete (produtos):</span><span>R${shippingFee.toFixed(2)}</span></div>}
+                    {shippingDiscountAmount === 0 && shippingFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete (produtos):</span><span>R${shippingFee.toFixed(2)}</span></div>}
                     {discountAmount > 0 && <div className="flex justify-between text-sm text-green-400"><span>Cupom ({appliedCoupon?.code}):</span><span>−R${discountAmount.toFixed(2)}</span></div>}
                     <div className="flex justify-between text-lg font-bold text-foreground"><span>{onlinePaymentMethod === 'pix' ? 'Total Pix:' : onlinePaymentMethod === 'credit' ? 'Total cartão:' : onlinePaymentMethod === 'debit' ? 'Total débito:' : 'Subtotal:'}</span><span className="text-primary">R${(hasOnlinePayment && onlinePaymentMethod ? onlineTotal : finalTotal).toFixed(2)}</span></div>
                   </div>
