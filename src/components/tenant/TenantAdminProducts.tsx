@@ -237,6 +237,18 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     return productPrice > 0 ? productPrice : (variantPrices.length ? Math.min(...variantPrices) : 0);
   };
 
+  const getExportManufacturer = (product: Product) => {
+    const name = product.name.toLowerCase();
+    if (name.includes('iphone')) return 'Apple';
+    if (name.includes('galaxy') || name.includes('samsung')) return 'Samsung';
+    if (name.includes('moto')) return 'Motorola';
+    if (name.includes('realme')) return 'Realme';
+    if (name.includes('honor')) return 'Honor';
+    if (name.includes('poco')) return 'POCO';
+    if (name.includes('redmi') || name.includes('xiaomi') || name.includes('mi ')) return 'Xiaomi';
+    return (product as any).subcategory || 'Não informado';
+  };
+
   const exportCatalogTxt = () => {
     if (!products.length) { toast.error('Não há produtos para exportar.'); return; }
     const lines = [`CATÁLOGO DE PRODUTOS`, `Gerado em: ${new Date().toLocaleString('pt-BR')}`, `Total de produtos: ${products.length}`, ''];
@@ -246,6 +258,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       const variants = getExportVariants(product);
       const exportPrice = getExportPrice(product, variants);
       lines.push(`${index + 1}. ${product.name}`, `Categoria: ${product.category || 'Geral'}`);
+      lines.push(`Fabricante: ${getExportManufacturer(product)}`);
       if (p.subcategory) lines.push(`Subcategoria: ${p.subcategory}`);
       lines.push(`Preço de venda: ${money(exportPrice)}`, `Preço original/custo: ${money(p.original_price)}`, `Em estoque: ${product.in_stock ? 'Sim' : 'Não'}`);
       if (variants.length) {
@@ -282,7 +295,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       const variantsMarkup = variants.length
         ? `<div class="variants"><strong>Preços por cor/variação</strong>${variants.map(variant => `<div class="variant"><span>${escapeHtml(variant.name)}</span><strong>${escapeHtml(money(variant.price))}</strong><span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div>`).join('')}</div>`
         : '';
-      return `<article class="product ${product.in_stock ? '' : 'out'}">${imageMarkup}<div class="content"><div class="eyebrow">${String(index + 1).padStart(2, '0')} · ${escapeHtml(product.category || 'Geral')}</div><h2>${escapeHtml(product.name)}</h2>${p.subcategory ? `<div class="subcategory">${escapeHtml(p.subcategory)}</div>` : ''}${product.description ? `<p>${escapeHtml(product.description)}</p>` : ''}<div class="price">${escapeHtml(money(exportPrice))}</div>${p.original_price ? `<div class="old-price">Preço original: ${escapeHtml(money(p.original_price))}</div>` : ''}${variantsMarkup}<div class="stock ${product.in_stock ? 'available' : 'unavailable'}">${stock}</div>${p.unidade ? `<div class="meta">Unidade: ${escapeHtml(p.unidade)}</div>` : ''}${p.affiliate_url ? `<a class="link" href="${escapeHtml(p.affiliate_url)}">Ver produto</a>` : ''}</div></article>`;
+      const stockMarkup = variants.length ? '' : `<div class="stock ${product.in_stock ? 'available' : 'unavailable'}">${stock}</div>`;
+      return `<article class="product ${product.in_stock ? '' : 'out'}">${imageMarkup}<div class="content"><div class="eyebrow">${String(index + 1).padStart(2, '0')} · ${escapeHtml(product.category || 'Geral')}</div><h2>${escapeHtml(product.name)}</h2><div class="subcategory">Fabricante: ${escapeHtml(getExportManufacturer(product))}</div>${p.subcategory ? `<div class="subcategory">${escapeHtml(p.subcategory)}</div>` : ''}${product.description ? `<p>${escapeHtml(product.description)}</p>` : ''}<div class="price">${escapeHtml(money(exportPrice))}</div>${p.original_price ? `<div class="old-price">Preço original: ${escapeHtml(money(p.original_price))}</div>` : ''}${variantsMarkup}${stockMarkup}${p.unidade ? `<div class="meta">Unidade: ${escapeHtml(p.unidade)}</div>` : ''}${p.affiliate_url ? `<a class="link" href="${escapeHtml(p.affiliate_url)}">Ver produto</a>` : ''}</div></article>`;
     }).join('\n');
     const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Catálogo de Produtos</title><style>:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0f172a;background:#eff6ff}*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#eff6ff,#dbeafe);padding:32px}.wrap{max-width:1180px;margin:auto}.header{background:#fff;border-radius:24px;padding:28px 32px;margin-bottom:24px;box-shadow:0 16px 40px #1e3a8a18}.header h1{margin:0 0 8px;font-size:30px;color:#1e3a8a}.header p{margin:0;color:#64748b}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}.product{overflow:hidden;background:#fff;border-radius:20px;box-shadow:0 12px 30px #1e3a8a18;border:1px solid #dbeafe}.product.out{opacity:.72}.gallery{height:230px;display:flex;gap:8px;overflow-x:auto;padding:12px;background:#f8fafc}.gallery img{height:206px;min-width:206px;width:206px;object-fit:contain;border-radius:12px;background:white}.no-image{height:230px;display:grid;place-items:center;color:#94a3b8;background:#f8fafc}.content{padding:20px}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#2563eb;font-size:11px;font-weight:700}.product h2{font-size:19px;margin:8px 0;color:#0f172a}.subcategory,.meta{color:#64748b;font-size:13px}.product p{color:#475569;line-height:1.5;font-size:14px}.price{font-size:26px;font-weight:800;color:#1d4ed8;margin-top:16px}.old-price{font-size:12px;color:#94a3b8;margin-top:4px}.variants{margin-top:14px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:13px}.variants>strong{display:block;color:#475569;margin-bottom:6px}.variant{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0;color:#64748b}.variant strong{color:#1d4ed8}.stock,.variant-status{display:inline-block;margin-top:14px;padding:6px 10px;border-radius:999px;background:#dcfce7;color:#15803d;font-size:12px;font-weight:700}.stock.unavailable,.variant-status.unavailable{background:#fee2e2;color:#b91c1c}.variant-status{margin-top:0;padding:3px 8px;font-size:11px}.link{display:inline-block;margin-top:16px;color:#1d4ed8;font-weight:700;text-decoration:none}@media(max-width:600px){body{padding:16px}.header{padding:22px}.gallery{height:190px}.gallery img{height:166px;min-width:166px;width:166px}}</style></head><body><main class="wrap"><header class="header"><h1>Catálogo de Produtos</h1><p>${products.length} produto(s) · Gerado em ${escapeHtml(new Date().toLocaleString('pt-BR'))}</p></header><section class="grid">${cards}</section></main></body></html>`;
     downloadBlob(html, `catalogo-${catalogSlug()}.html`, 'text/html;charset=utf-8');
