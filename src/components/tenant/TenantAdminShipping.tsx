@@ -47,6 +47,7 @@ const TenantAdminShipping = ({ tenantId }: { tenantId: string }) => {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [bulkDiscountType, setBulkDiscountType] = useState<'free' | 'percent' | 'fixed'>('free');
   const [bulkDiscountValue, setBulkDiscountValue] = useState(0);
+  const allProductsSelected = products.length > 0 && selectedProducts.length === products.length;
 
   useEffect(() => {
     let cancelled = false;
@@ -396,6 +397,18 @@ const TenantAdminShipping = ({ tenantId }: { tenantId: string }) => {
               </div>
             </div>
             {products.length === 0 && <p className="text-sm text-muted-foreground">Nenhum produto cadastrado.</p>}
+            {products.length > 0 && (
+              <div className="flex items-center justify-between border-b border-border pb-2">
+                <span className="text-xs text-muted-foreground">{selectedProducts.length} de {products.length} selecionado(s)</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedProducts(allProductsSelected ? [] : products.map(p => p.id))}
+                  className="rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
+                >
+                  {allProductsSelected ? 'Desmarcar todos' : 'Selecionar todos'}
+                </button>
+              </div>
+            )}
             {products.map(p => (
               <div key={p.id} className="py-3 border-b border-border last:border-0 space-y-2">
                 <div className="flex items-center justify-between gap-3">
