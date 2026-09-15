@@ -279,10 +279,12 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
         return raw;
       })
       .filter(price => Number.isFinite(price) && price > 0);
-    const uniquePrices = Array.from(new Set(prices.map(price => Math.round(price * 100))));
     return {
       displayPrice: prices.length > 0 ? Math.min(...prices) : Number(product.price) || 0,
-      displayFrom: uniquePrices.length > 1,
+      // Variações são a fonte de verdade da venda: o cliente deve ver o
+      // menor preço pesquisado com o rótulo “A partir de”, mesmo quando há
+      // somente uma cor ou quando todas as cores têm o mesmo valor.
+      displayFrom: prices.length > 0,
       pricePrefix: undefined,
     };
   };
