@@ -11,11 +11,13 @@ import HelpButton from '@/components/tenant/HelpButton';
 import SofiaChat from '@/components/SofiaChat';
 import { useStoreManifest } from '@/hooks/useStoreManifest';
 import { parseAddress } from '@/lib/address-utils';
+import { getCourierCode } from '@/lib/delivery-code';
 
 type OrderWithItems = {
   id: string; status: string; total: number; delivery_type: string;
   created_at: string; customer_name: string; customer_phone: string; customer_address: string;
   delivery_status_note: string;
+  metadata?: unknown;
   payment_method?: string;
   change_for?: number;
   order_items: { id: string; product_name: string; product_price: number; quantity: number }[];
@@ -327,6 +329,11 @@ const DriverPanel = () => {
               </div>
               <div className="text-sm text-muted-foreground">
                 <p><strong className="text-foreground">{order.customer_name}</strong> · {order.customer_phone}</p>
+                <div className="mt-2 rounded-md border-2 border-primary/50 bg-primary/10 p-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-primary">🔐 Código para conferência</p>
+                  <p className="font-mono text-lg font-bold tracking-widest text-foreground">{getCourierCode(order)}</p>
+                  <p className="text-[11px] text-muted-foreground">Informe este código ao retirar ou entregar o pedido.</p>
+                </div>
                 {(() => {
                   const { main, reference } = parseAddress(order.customer_address);
                   return (

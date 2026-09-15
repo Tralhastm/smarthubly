@@ -22,6 +22,7 @@ import { registerSupplierPushSubscription } from '@/lib/push-notifications';
 import { useSupplierReviews } from '@/hooks/useReviews';
 import ReviewsList from '@/components/tenant/ReviewsList';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
+import { getCourierCode } from '@/lib/delivery-code';
 
 type OrderWithItems = {
   id: string; status: string; total: number; delivery_type: string; payment_method: string;
@@ -372,7 +373,8 @@ const SupplierPanel = () => {
       let totalDue = 0;
       let totalUnits = 0;
       const lines = [`LOTE DIÁRIO — ${supplier.name.toUpperCase()}`, `Data: ${start.toLocaleDateString('pt-BR')}`, ''];
-      orders.forEach(({ items }) => {
+      orders.forEach(({ order, items }) => {
+        lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', `Pedido: #${order.id.slice(0, 8).toUpperCase()}`, `CÓDIGO DO MOTOBOY: ${getCourierCode(order)}`, '');
         items.forEach((item: any) => {
           const qty = Number(item.quantity || 0);
           const cost = costs.get(item.variantId) ?? Number(item.product?.original_price ?? 0);
@@ -382,7 +384,7 @@ const SupplierPanel = () => {
         });
       });
       const batchCode = `LOTE-${start.toISOString().slice(0, 10).replace(/-/g, '')}-${String(supplier.id).slice(0, 6).toUpperCase()}`;
-      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'TOTAL DO LOTE', `Quantidade total: ${totalUnits} unidade(s)`, `VALOR TOTAL DEVIDO AO FORNECEDOR: ${money(totalDue)}`, '', `CÓDIGO DO LOTE / MOTOBOY: ${batchCode}`, '', 'Conferir quantidade, variação, custo unitário e total antes de separar.');
+      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'TOTAL DO LOTE', `Quantidade total: ${totalUnits} unidade(s)`, `VALOR TOTAL DEVIDO AO FORNECEDOR: ${money(totalDue)}`, '', `REFERÊNCIA DO LOTE: ${batchCode}`, 'Os códigos do motoboy estão informados junto de cada pedido acima.', '', 'Conferir quantidade, variação, custo unitário e total antes de separar.');
       const text = lines.join('\n');
       await navigator.clipboard?.writeText(text);
       const phone = String((supplier as any).phone || '').replace(/\D/g, '');

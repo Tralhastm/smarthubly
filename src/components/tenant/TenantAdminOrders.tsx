@@ -17,6 +17,7 @@ import { isSimulationMode } from '@/lib/printer-simulator';
 import { registerTenantAdminPush, getNotificationPermission, isPushSupported } from '@/lib/push-notifications';
 import OrderEmitNFCeButton from './OrderEmitNFCeButton';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
+import { getCourierCode } from '@/lib/delivery-code';
 
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   pending_review: { label: 'Aguardando Aprovação', icon: <Clock className="h-4 w-4" />, color: 'bg-purple-500/20 text-purple-400' },
@@ -197,7 +198,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
       `• ${group.quantity}x ${name}${group.colors.length ? ` — Cores: ${group.colors.join(', ')}` : ''}\n  Unitário: R$ ${group.unit.toFixed(2).replace('.', ',')} · Total: R$ ${group.total.toFixed(2).replace('.', ',')}`,
     ).join('\n');
     const supplierTotal = [...groups.values()].reduce((sum, group) => sum + group.total, 0);
-    const courierCode = `MT-${order.id.slice(0, 8).toUpperCase()}`;
+    const courierCode = getCourierCode(order);
     const message = [
       `📦 *Separação de pedido — ${tenantName}*`,
       `Código do motoboy: *${courierCode}*`,
