@@ -191,22 +191,17 @@ const SupplierPanel = () => {
     // O produto não fica preso a um fornecedor: qualquer fornecedor ativo
     // precisa conseguir encontrar todo o catálogo da loja para registrar sua
     // própria oferta. A reconciliação escolhe depois o menor custo vigente.
-    const [{ data: own }, { data: offers }] = await Promise.all([
-      supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity')
-        .eq('tenant_id', supplier.tenant_id).limit(2000),
+    const [{ data: catalog }, { data: offers }] = await Promise.all([
+      (supabase as any).rpc('get_supplier_catalog_by_token', { _token: token }),
       (supabase as any).from('supplier_variant_offers').select('product_id, product_variant_id, unit_cost')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).eq('available', true).limit(500),
     ]);
+    const own = Array.isArray(catalog?.products) ? catalog.products : [];
+    const catalogVariants = Array.isArray(catalog?.variants) ? catalog.variants : [];
     const ids = Array.from(new Set(((offers || []) as any[]).map(o => o.product_id).filter(Boolean)));
     const variantIds = Array.from(new Set(((offers || []) as any[]).map(o => o.product_variant_id).filter(Boolean)));
-    const [{ data: offered }, { data: variants }] = await Promise.all([
-      ids.length
-        ? supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity').in('id', ids)
-        : Promise.resolve({ data: [] as any[] } as any),
-      variantIds.length
-        ? (supabase as any).from('product_variants').select('id, product_id, name, in_stock').in('id', variantIds)
-        : Promise.resolve({ data: [] as any[] } as any),
-    ]);
+    const offered = ids.length ? own.filter((p: any) => ids.includes(p.id)) : [];
+    const variants = variantIds.length ? catalogVariants.filter((v: any) => variantIds.includes(v.id)) : [];
     const costByVariant = new Map(((offers || []) as any[]).map(o => [o.product_variant_id, Number(o.unit_cost)]));
     const variantsByProduct = new Map<string, Product['supplierVariants']>();
     ((variants || []) as any[]).forEach(v => {
