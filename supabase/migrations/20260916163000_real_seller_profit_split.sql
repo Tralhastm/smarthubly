@@ -16,7 +16,6 @@ BEGIN
     FROM public.supplier_product_prices spp
     WHERE spp.supplier_id = NEW.supplier_id
       AND lower(trim(spp.product_name)) = lower(trim(NEW.product_name))
-      AND spp.available = true
     ORDER BY spp.updated_at DESC LIMIT 1;
   END IF;
   IF v_supplier_cost <= 0 AND NEW.product_id IS NOT NULL THEN
