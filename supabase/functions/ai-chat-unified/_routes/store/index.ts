@@ -38,6 +38,14 @@ async function getProductsForTenant(supabase, tenantId) {
     text: "",
     products: []
   };
+  const productIds = data.map((p) => p.id);
+  const { data: variants } = await supabase.from("product_variants").select("product_id, name, in_stock, price_delta").in("product_id", productIds);
+  const variantsByProduct = new Map();
+  (variants || []).forEach((v) => {
+    const list = variantsByProduct.get(v.product_id) || [];
+    list.push(v);
+    variantsByProduct.set(v.product_id, list);
+  });
   const text = "\n\nPRODUTOS DISPONÍVEIS NA LOJA (use NOME e PREÇO EXATOS):\n" + data.map((p)=>{
     const priceTag = `R$${Number(p.price).toFixed(2)}`;
     const promo = p.original_price > p.price ? ` (de R$${Number(p.original_price).toFixed(2)} POR ${priceTag} 🔥)` : ` ${priceTag}`;
@@ -48,7 +56,10 @@ async function getProductsForTenant(supabase, tenantId) {
     const tipo = p.item_type === 'service' ? ` | SERVIÇO (~${p.duration_minutes || 30} min)` : '';
     const stock = p.stock_quantity != null && p.stock_quantity <= 5 && p.stock_quantity > 0 ? ` | ⚠️ últimas ${p.stock_quantity} un` : '';
     const desc = p.description ? ` | ${String(p.description).slice(0, 120)}` : '';
-    return `- ${p.name}${promo}${cat ? ` | ${cat}` : ''}${tipo}${stock}${desc}`;
+    const productVariants = variantsByProduct.get(p.id) || [];
+    const availableVariants = productVariants.filter((v) => v?.in_stock !== false).map((v) => v.name).filter(Boolean);
+    const colors = availableVariants.length ? ` | variantes/cores disponíveis: ${availableVariants.join(', ')}` : '';
+    return `- ${p.name}${promo}${cat ? ` | ${cat}` : ''}${tipo}${stock}${colors}${desc}`;
   }).join("\n");
   return {
     text,
@@ -445,7 +456,7 @@ Voce so fala sobre o que ESTA no contexto abaixo. Se o cliente perguntar algo qu
 O contexto vivo do catalogo e a fonte de verdade: item ou variante sem estoque/oferta nao pode ser recomendado. Nao misture especificacoes de modelos, regioes, capacidades ou variantes 4G/5G; se a ficha nao confirmar o SKU, diga que precisa confirmar.
 
 REGRA #2 - RECOMENDACAO COM PROVA:
-Em TODA resposta cite pelo menos 1 produto/servico REAL do catalogo com NOME EXATO + PRECO EXATO. Se houver promocao ativa OU cupom valido que se aplique, MENCIONE pra fechar a venda.
+Quando a pergunta pedir recomendacao, cite produto/servico REAL do catalogo com NOME EXATO + PRECO EXATO. Em saudações, conversa casual ou perguntas que não pedem produto, não force recomendação. Se houver promocao ativa OU cupom valido que se aplique, mencione para fechar a venda.
 
 REGRA #3 - TAMANHO E TOM:
 MAXIMO 4 linhas curtas. Tom de amigo no WhatsApp. No maximo 1 emoji. Sem listas numeradas. Sem titulos em ###. Sem negrito em subtitulos.
@@ -463,6 +474,9 @@ Voce e um chat de TEXTO. NAO consegue criar pedido, marcar horario, aplicar cupo
 - Cupom: "No checkout digite o cupom."
 
 PROIBIDO: inventar dados; prometer acoes; texto longo.
+
+REGRA #5 - VARIANTES E CARACTERISTICAS:
+As cores/variantes listadas no contexto são as únicas disponíveis. Se o cliente perguntar "quais cores", responda com os nomes exatos dessas variantes; se não houver variantes no contexto, diga que não há informação disponível. Nunca diga que um celular é resistente, tem câmera melhor, é imbatível, possui NFC, 5G, determinada bateria ou outro recurso técnico sem isso estar escrito na descrição/contexto do produto. Não use profissão ou perfil pessoal do cliente como motivo para inventar características.
 
 ${productsAvailable ? '' : 'CATALOGO VAZIO - peca desculpa e oriente o WhatsApp.'}
 ${productsContext}
