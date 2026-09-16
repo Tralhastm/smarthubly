@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { BadgeDollarSign, Check, Copy, Plus, Save, Trash2, Users, Wallet } from 'lucide-react';
+import { BadgeDollarSign, Check, Copy, ExternalLink, Plus, Save, Trash2, Users, Wallet } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
-type Seller = { id: string; name: string; phone: string | null; pix_key: string | null; pix_key_type: string | null; commission_percent: number; active: boolean };
+type Seller = { id: string; name: string; phone: string | null; pix_key: string | null; pix_key_type: string | null; commission_percent: number; active: boolean; dashboard_token: string | null };
 type SellerCode = { id: string; seller_id: string; code: string; discount_type: 'percent' | 'fixed'; discount_value: number; active: boolean; max_uses: number | null; uses_count: number; };
 type ReportRow = { seller_id: string; product_name: string; quantity: number; line_total: number; discount_amount: number; commission_amount: number; created_at: string; };
 
 const money = (n: number) => `R$ ${Number(n || 0).toFixed(2).replace('.', ',')}`;
 
-export default function TenantSellerManagement({ tenantId }: { tenantId: string }) {
+export default function TenantSellerManagement({ tenantId, slug }: { tenantId: string; slug: string }) {
   const { toast } = useToast();
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [codes, setCodes] = useState<SellerCode[]>([]);
@@ -23,7 +23,7 @@ export default function TenantSellerManagement({ tenantId }: { tenantId: string 
   const load = async () => {
     setLoading(true);
     const [{ data: sellerRows }, { data: codeRows }, { data: reportRows }] = await Promise.all([
-      (supabase as any).from('sellers').select('id,name,phone,pix_key,pix_key_type,commission_percent,active').eq('tenant_id', tenantId).order('name'),
+      (supabase as any).from('sellers').select('id,name,phone,pix_key,pix_key_type,commission_percent,active,dashboard_token').eq('tenant_id', tenantId).order('name'),
       (supabase as any).from('seller_codes').select('id,seller_id,code,discount_type,discount_value,active,max_uses,uses_count').eq('tenant_id', tenantId).order('created_at', { ascending: false }),
       (supabase as any).from('seller_order_items').select('seller_id,product_name,quantity,line_total,discount_amount,commission_amount,created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(500),
     ]);
@@ -74,7 +74,7 @@ export default function TenantSellerManagement({ tenantId }: { tenantId: string 
       </section>
     </div>
     <section className="rounded-xl border bg-card p-4"><h3 className="font-semibold flex items-center gap-2 mb-3"><Wallet className="h-4 w-4" /> Resumo de comissões</h3><div className="grid grid-cols-3 gap-2 mb-4"><div className="rounded-lg bg-muted p-3"><small>Vendas</small><b className="block">{money(totals.sales)}</b></div><div className="rounded-lg bg-muted p-3"><small>Descontos</small><b className="block">{money(totals.discount)}</b></div><div className="rounded-lg bg-primary/10 p-3"><small>A pagar</small><b className="block">{money(totals.commission)}</b></div></div>
-      <div className="space-y-2">{sellers.map(s => { const rows = report.filter(r => r.seller_id === s.id); const due = rows.reduce((n, r) => n + Number(r.commission_amount || 0), 0); return <div key={s.id} className="rounded-lg border p-3"><div className="flex justify-between gap-2"><div><b>{s.name}</b><p className="text-xs text-muted-foreground">{s.phone || 'Sem telefone'} · Pix: {s.pix_key || 'não informado'} · Comissão: {s.commission_percent}%</p></div><strong>{money(due)}</strong></div>{rows.length > 0 && <div className="mt-2 overflow-auto"><table className="w-full text-xs"><thead><tr className="text-left text-muted-foreground"><th>Data</th><th>Produto</th><th>Qtd.</th><th>Desconto</th><th>Comissão</th></tr></thead><tbody>{rows.map((r, i) => <tr key={`${r.created_at}-${i}`} className="border-t"><td>{new Date(r.created_at).toLocaleDateString('pt-BR')}</td><td>{r.product_name}</td><td>{r.quantity}</td><td>{money(r.discount_amount)}</td><td>{money(r.commission_amount)}</td></tr>)}</tbody></table></div>}<button onClick={() => deleteSeller(s.id)} className="mt-2 text-xs text-destructive flex items-center gap-1"><Trash2 className="h-3 w-3" /> Excluir vendedor</button></div> })}{sellers.length === 0 && <p className="text-sm text-muted-foreground">Nenhum vendedor cadastrado.</p>}</div>
+      <div className="space-y-2">{sellers.map(s => { const rows = report.filter(r => r.seller_id === s.id); const due = rows.reduce((n, r) => n + Number(r.commission_amount || 0), 0); const link = s.dashboard_token ? `${window.location.origin}/loja/${slug}/vendedor/${s.dashboard_token}` : ''; return <div key={s.id} className="rounded-lg border p-3"><div className="flex justify-between gap-2"><div><b>{s.name}</b><p className="text-xs text-muted-foreground">{s.phone || 'Sem telefone'} · Pix: {s.pix_key || 'não informado'} · Repasse: 20%</p>{link && <button onClick={() => { void navigator.clipboard?.writeText(link); toast({ title: 'Link do vendedor copiado' }); }} className="mt-2 text-xs text-primary hover:underline"><Copy className="mr-1 inline h-3 w-3" />Copiar link individual</button>}</div><strong>{money(due)}</strong></div>{rows.length > 0 && <div className="mt-2 overflow-auto"><table className="w-full text-xs"><thead><tr className="text-left text-muted-foreground"><th>Data</th><th>Produto</th><th>Qtd.</th><th>Desconto</th><th>Comissão</th></tr></thead><tbody>{rows.map((r, i) => <tr key={`${r.created_at}-${i}`} className="border-t"><td>{new Date(r.created_at).toLocaleDateString('pt-BR')}</td><td>{r.product_name}</td><td>{r.quantity}</td><td>{money(r.discount_amount)}</td><td>{money(r.commission_amount)}</td></tr>)}</tbody></table></div>}<button onClick={() => deleteSeller(s.id)} className="mt-2 text-xs text-destructive flex items-center gap-1"><Trash2 className="h-3 w-3" /> Excluir vendedor</button></div> })}{sellers.length === 0 && <p className="text-sm text-muted-foreground">Nenhum vendedor cadastrado.</p>}</div>
     </section>
   </div>;
 }

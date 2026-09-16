@@ -419,7 +419,7 @@ const TenantAdmin = () => {
           {tab === 'users' && <TenantAdminUsers tenantId={tenant.id} />}
           {tab === 'sales' && <TenantSalesRanking tenantId={tenant.id} />}
           {tab === 'commissions' && <TenantWaiterCommissions tenantId={tenant.id} />}
-          {tab === 'sellers' && <TenantSellerManagement tenantId={tenant.id} />}
+          {tab === 'sellers' && <TenantSellerManagement tenantId={tenant.id} slug={slug!} />}
           {tab === 'abc' && <TenantAbcCurve tenantId={tenant.id} />}
           {tab === 'bi' && <TenantBIDashboard tenantId={tenant.id} />}
           {tab === 'clicks' && <TenantAffiliateClicksRanking tenantId={tenant.id} />}

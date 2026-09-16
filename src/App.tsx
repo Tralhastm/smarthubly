@@ -29,6 +29,7 @@ const WaiterPanel = lazy(() => import("./pages/WaiterPanel"));
 const PdvMaquininha = lazy(() => import("./pages/PdvMaquininha"));
 const Kds = lazy(() => import("./pages/Kds"));
 const Totem = lazy(() => import("./pages/Totem"));
+const SellerPanel = lazy(() => import("./pages/SellerPanel"));
 
 const LazyPage = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div className="flex h-screen items-center justify-center bg-background"><div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" /></div>}>
@@ -64,6 +65,7 @@ const App = () => (
                 <Route path="/loja/:slug/totem" element={<LazyPage><Totem /></LazyPage>} />
                 <Route path="/loja/:slug/fornecedor/:token" element={<LazyPage><SupplierPanel /></LazyPage>} />
                 <Route path="/loja/:slug/motoboy/:token" element={<LazyPage><DriverPanel /></LazyPage>} />
+                <Route path="/loja/:slug/vendedor/:token" element={<LazyPage><SellerPanel /></LazyPage>} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
