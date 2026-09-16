@@ -1,6 +1,6 @@
 // Conhecimento COMPLETO da plataforma — usado por Sofia, Clara, Cindy e o Vendedor IA.
 // Atualize este arquivo sempre que adicionar uma feature relevante para clientes/lojistas.
-// ÚLTIMA ATUALIZAÇÃO: 19/08/2026 — fallback de modelos Gemini para chaves novas (AQ.…)
+// ÚLTIMA ATUALIZAÇÃO: 16/09/2026 — catálogo MultiTec auditado, ofertas por cor e fichas técnicas revisadas
 // KDS, maquininha Stone/conciliação, fiscal NF-e, subcategorias ilimitadas, carrossel de
 // fotos/vídeo, splash opcional, Sofia Agente com aplicação automática, prospecção avançada
 // e motor de imagens editorial em cascata.
@@ -106,6 +106,16 @@ Estratégia de retenção: oferecer 9,90 por 2 meses pra entrar; depois 60 reais
 - **Motor de imagens editorial**: gera fotos de produto e posts com padrão profissional estilo foto editorial — tema ancorado no produto real (evita imagens genéricas), sem texto distorcido na arte. A geração roda em cascata automática: rede interna de workers de imagem (24 ativos, com retry e fallback de prompt) → Google Gemini (Nano Banana) → Lovable AI → OpenRouter. Se um provedor esgota a cota, o próximo assume sozinho. Imagens vão direto pro storage da plataforma e aparecem na loja
 - **Chat de IA (Cindy/Sofia/Clara)**: cadeia Google AI (chaves cadastradas em Super Admin → API Keys) → Lovable AI → OpenRouter → workers chat. Chaves antigas (AIzaSy…) usam modelos legados; chaves NOVAS do Google AI Studio (formato AQ.…) não têm acesso aos legados — o sistema faz fallback automático para gemini-3.1-flash-lite / gemini-3.5-flash-lite / gemini-flash-lite-latest. Chave pode estar esgotada (quota diária de 429) — "Resetar Esgotados" revive. Geração leva 50–90s
 - IA gera: foto de produto (editorial), descrição, post de marketing, parse de cardápio TXT, análise de lead
+
+## VERDADE OPERACIONAL DO CATÁLOGO (ATUALIZADA EM 16/09/2026)
+- Estoque e disponibilidade são definidos pelas ofertas vigentes dos fornecedores e pelas variantes do banco. Se uma cor não aparece na lista vigente, trate-a como esgotada; não invente reposição, custo ou prazo.
+- O fornecedor vencedor é escolhido automaticamente pelo menor custo vigente para a combinação produto + cor. Não presuma fornecedor fixo para um produto.
+- Branco e Prata só devem ser unificados quando houver confirmação comercial do mesmo SKU/cor; no iPhone 17 Pro 256GB, Branco foi unificado com Prata e a variante válida é Prata.
+- O chatbot da loja deve usar o catálogo enviado no contexto em tempo real: nome, preço, disponibilidade e descrição exatos. Nunca recomende item ou cor marcada como esgotada.
+- As fichas técnicas revisadas exigem cautela regional: Redmi 17 128/4GB está descrito como 4G; realme C71 NFC 128/4GB corresponde a SKU NFC/4G regional; POCO X8 Pro 512/8GB e 512/12GB têm fichas separadas; Redmi Note 15 Pro 512/12GB exige confirmação do SKU 5G ou sem 5G.
+- Não misture especificações entre variantes 4G/5G, RAM física/RAM virtual, regiões ou capacidades. Se o SKU não estiver confirmado, diga isso claramente e não prometa a especificação.
+- O Redmi Note 15 Pro 512/12GB está temporariamente bloqueado na loja até a confirmação do SKU exato com o fornecedor.
+- Ao responder sobre dados atuais do catálogo, priorize o contexto vivo do banco sobre memória geral ou suposições. Se houver conflito, informe a incerteza e não invente.
 
 ## PARA O CLIENTE FINAL DO LOJISTA, A PLATAFORMA APARECE COMO
 A marca da LOJA. O cliente nunca vê "SmartHubly" — vê o nome do comércio,
