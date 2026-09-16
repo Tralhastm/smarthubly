@@ -630,6 +630,8 @@ const SupplierPanel = () => {
     // O fornecedor alterna entre 128GB e 128 GB; o catálogo também pode
     // guardar Apple iPhone ou apenas o modelo. Essas diferenças não mudam o
     // produto e não devem impedir a atualização do custo.
+    .replace(/\b(\d+)\s*gb\s*\/\s*(\d+)\s*gb\b/g, '$1 gb/$2 gb')
+    .replace(/\b(\d+)\s*\/\s*(\d+)\s*gb\b/g, '$1 gb/$2 gb')
     .replace(/\b(\d+)\s*gb\b/g, '$1 gb')
     .replace(/^apple\s+/g, '')
     .replace(/\s*[-–—]\s*/g, '-')
