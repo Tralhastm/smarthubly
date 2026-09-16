@@ -17,6 +17,7 @@ export default function SellerPanel() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
 
   const load = async () => {
     if (!token) return;
@@ -27,6 +28,26 @@ export default function SellerPanel() {
     setLoading(false);
   };
   useEffect(() => { void load(); }, [token]);
+
+  useEffect(() => {
+    const sellerId = (data?.seller as any)?.id;
+    const tenantId = data?.seller?.tenant_id;
+    if (!sellerId || !tenantId) return;
+
+    const refresh = () => { void load(); };
+    const channel = supabase
+      .channel(`seller-dashboard-${sellerId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `seller_id=eq.${sellerId}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'seller_order_items', filter: `seller_id=eq.${sellerId}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'seller_codes', filter: `seller_id=eq.${sellerId}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `tenant_id=eq.${tenantId}` }, refresh)
+      .subscribe((status) => setRealtimeConnected(status === 'SUBSCRIBED'));
+
+    return () => {
+      setRealtimeConnected(false);
+      void supabase.removeChannel(channel);
+    };
+  }, [data?.seller?.tenant_id, (data?.seller as any)?.id, token]);
 
   const metrics = useMemo(() => {
     const orders = data?.orders || [];
@@ -48,7 +69,7 @@ export default function SellerPanel() {
   if (error || !data) return <main className="min-h-screen bg-background p-6"><div className="mx-auto max-w-xl rounded-2xl border bg-card p-8 text-center"><XCircle className="mx-auto mb-3 h-10 w-10 text-destructive" /><h1 className="text-xl font-bold">Painel não encontrado</h1><p className="mt-2 text-sm text-muted-foreground">{error || 'Confira o link recebido da loja.'}</p></div></main>;
 
   return <main className="min-h-screen bg-muted/30 pb-12">
-    <header className="border-b bg-card"><div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 md:px-8"><div><p className="text-xs font-semibold uppercase tracking-widest text-primary">Painel do vendedor</p><h1 className="text-2xl font-bold">Olá, {data.seller.name}</h1><p className="text-sm text-muted-foreground">Atualizado em {new Date().toLocaleString('pt-BR')}</p></div><div className="flex gap-2"><button onClick={copyLink} className="rounded-lg border bg-background px-3 py-2 text-sm">{copied ? <CheckCircle2 className="mr-1 inline h-4 w-4 text-green-600" /> : <Copy className="mr-1 inline h-4 w-4" />}{copied ? 'Copiado' : 'Copiar link'}</button><button onClick={() => void load()} className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"><RefreshCw className="mr-1 inline h-4 w-4" /> Atualizar</button></div></div></header>
+    <header className="border-b bg-card"><div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 md:px-8"><div><p className="text-xs font-semibold uppercase tracking-widest text-primary">Painel do vendedor</p><h1 className="text-2xl font-bold">Olá, {data.seller.name}</h1><p className="text-sm text-muted-foreground">Atualizado em {new Date().toLocaleString('pt-BR')} · <span className={realtimeConnected ? 'text-green-600' : 'text-muted-foreground'}>{realtimeConnected ? 'Sincronização em tempo real ativa' : 'Sincronização reconectando'}</span></p></div><div className="flex gap-2"><button onClick={copyLink} className="rounded-lg border bg-background px-3 py-2 text-sm">{copied ? <CheckCircle2 className="mr-1 inline h-4 w-4 text-green-600" /> : <Copy className="mr-1 inline h-4 w-4" />}{copied ? 'Copiado' : 'Copiar link'}</button><button onClick={() => void load()} className="rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"><RefreshCw className="mr-1 inline h-4 w-4" /> Atualizar</button></div></div></header>
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-8">
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {[['Pedidos', metrics.orders, ShoppingBag], ['Celulares vendidos', metrics.phones, Package], ['Vendas', money(metrics.sales), TrendingUp], ['Você recebe', money(metrics.due), BadgeDollarSign]].map(([label, value, Icon]: any) => <div key={label} className="rounded-2xl border bg-card p-4 shadow-sm"><Icon className="mb-3 h-5 w-5 text-primary" /><p className="text-xs text-muted-foreground">{label === 'Você recebe' ? 'Repasse' : label}</p><p className="mt-1 text-xl font-bold">{value}</p>{label === 'Você recebe' && <p className="mt-1 text-xs text-green-600">Repasse calculado pela loja</p>}</div>)}
