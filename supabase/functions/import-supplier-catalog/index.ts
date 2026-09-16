@@ -500,6 +500,11 @@ const normalizeMatch = (value: unknown) => String(value ?? '')
   .replace(/\s+/g, ' ')
   .trim();
 
+// Deve espelhar normalize_supplier_product_name() no Postgres: a chave
+// única remove acentos, pontuação, emojis e também espaços/separadores.
+const normalizeSupplierPriceName = (value: unknown) => normalizeMatch(value)
+  .replace(/[^a-z0-9]+/g, '');
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -699,6 +704,46 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
       variantsByProduct.get(v.product_id)!.set(normalizeMatch(v.name), v);
     }
 
+    // A tabela possui uma segunda chave única por nome normalizado
+    // (supplier_id, normalize_supplier_product_name(product_name)). O
+    // upsert por (supplier_id, product_name) não cobre nomes que diferem
+    // apenas por acentos, pontuação ou espaços. Mantemos um índice local
+    // normalizado e atualizamos a linha existente antes de inserir uma nova.
+    const { data: existingSupplierPrices } = await admin
+      .from('supplier_product_prices')
+      .select('id, product_name')
+      .eq('supplier_id', supplierId);
+    const supplierPricesByNormalizedName = new Map(
+      (existingSupplierPrices || []).map((row: any) => [normalizeSupplierPriceName(row.product_name), row]),
+    );
+
+    const saveSupplierProductPrice = async (payload: any) => {
+      const normalizedName = normalizeSupplierPriceName(payload.product_name);
+      const existing = supplierPricesByNormalizedName.get(normalizedName);
+      if (existing) {
+        const { error } = await admin
+          .from('supplier_product_prices')
+          .update({
+            product_name: payload.product_name,
+            unit_price: payload.unit_price,
+            available: payload.available,
+            source_archive_id: payload.source_archive_id,
+            price_types: payload.price_types,
+            metadata: payload.metadata,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existing.id);
+        return error;
+      }
+      const { data, error } = await admin
+        .from('supplier_product_prices')
+        .insert(payload)
+        .select('id, product_name')
+        .single();
+      if (!error && data) supplierPricesByNormalizedName.set(normalizedName, data);
+      return error;
+    };
+
     const saveVariantOffers = async (it: CatalogItem, itemName: string) => {
       if (!Array.isArray(it.variants) || it.variants.length === 0) return;
       const product = productsByName.get(normalizeMatch(itemName));
@@ -743,6 +788,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
 
     if (!merge) {
       await admin.from("supplier_product_prices").delete().eq("supplier_id", supplierId);
+      supplierPricesByNormalizedName.clear();
       for (const it of items) {
         const name = String(it.name || it.product_name || "").trim().toLowerCase();
         const cost = Number(it.cost_price ?? it.cost ?? it.custo ?? NaN);
@@ -752,7 +798,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           skipped++;
           continue;
         }
-        await admin.from("supplier_product_prices").insert({
+        const priceError = await saveSupplierProductPrice({
           supplier_id: supplierId,
           product_name: name,
           unit_price: price,
@@ -761,6 +807,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           price_types: priceType === 'both' ? ['cost', 'resale'] : [priceType],
           metadata: { profit_margin: profitMargin, shipping_fee: shippingFee, resale_price: Number.isFinite(resale) && resale > 0 ? resale : null, category: it.category ?? it.categoria ?? null, variants: Array.isArray(it.variants) ? it.variants : [] }
         });
+        if (priceError) skipped++;
         await saveVariantOffers(it, name);
       }
       const { data: reconciliation, error: reconciliationError } = await admin
@@ -783,8 +830,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
         skipped++;
         continue;
       }
-      const { error } = await admin.from("supplier_product_prices").upsert(
-        {
+      const error = await saveSupplierProductPrice({
           supplier_id: supplierId,
           product_name: name,
           unit_price: price,
@@ -792,9 +838,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           source_archive_id: sourceArchiveId || null,
           price_types: priceType === 'both' ? ['cost', 'resale'] : [priceType],
           metadata: { profit_margin: profitMargin, shipping_fee: shippingFee, resale_price: Number.isFinite(resale) && resale > 0 ? resale : null, category: it.category ?? it.categoria ?? null, variants: Array.isArray(it.variants) ? it.variants : [] }
-        },
-        { onConflict: "supplier_id,product_name" },
-      );
+      });
       if (error) {
         console.error("[import-supplier-catalog] upsert erro:", error);
         skipped++;
