@@ -188,11 +188,12 @@ const SupplierPanel = () => {
 
   const fetchProducts = useCallback(async () => {
     if (!supplier) return;
-    // Mostra produtos próprios e também produtos nos quais este fornecedor
-    // possui uma oferta por cor/custo menor.
+    // O produto não fica preso a um fornecedor: qualquer fornecedor ativo
+    // precisa conseguir encontrar todo o catálogo da loja para registrar sua
+    // própria oferta. A reconciliação escolhe depois o menor custo vigente.
     const [{ data: own }, { data: offers }] = await Promise.all([
       supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity')
-        .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id),
+        .eq('tenant_id', supplier.tenant_id).limit(2000),
       (supabase as any).from('supplier_variant_offers').select('product_id, product_variant_id, unit_cost')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).eq('available', true).limit(500),
     ]);
