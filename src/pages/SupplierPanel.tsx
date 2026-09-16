@@ -631,7 +631,12 @@ const SupplierPanel = () => {
   const normalizeSupplierProductName = (value: string) => normalizeProductName(value)
     .replace(/\s*\([^)]*\)\s*$/g, '')
     .replace(/\bnfce\b/g, 'nfc')
-    .replace(/\s*-\s*/g, '-')
+    // O fornecedor alterna entre 128GB e 128 GB; o catálogo também pode
+    // guardar Apple iPhone ou apenas o modelo. Essas diferenças não mudam o
+    // produto e não devem impedir a atualização do custo.
+    .replace(/\b(\d+)\s*gb\b/g, '$1 gb')
+    .replace(/^apple\s+/g, '')
+    .replace(/\s*[-–—]\s*/g, '-')
     .replace(/\s*\+\s*/g, '+')
     .replace(/\s+/g, ' ')
     .trim();
@@ -836,9 +841,13 @@ const SupplierPanel = () => {
       const aliases = [...entry.aliases];
       const compact = normalizeSupplierProductName(entry.name);
       if (/^\d/.test(compact)) aliases.push(`iphone ${entry.name}`);
+      if (/^iphone\b/i.test(compact)) aliases.push(entry.name.replace(/^iphone\s+/i, ''));
       // Alguns cadastros antigos guardam “IPHONE 17E” sem capacidade,
       // enquanto a lista do fornecedor informa “17E 256GB”.
-      if (/^17e\b/i.test(compact)) aliases.push('iphone 17e');
+      if (/^(?:iphone\s+)?17e\b/i.test(compact)) {
+        aliases.push('iphone 17e');
+        aliases.push('17e');
+      }
       if (/^(?:se\b|serie\b|s[eé]rie\b)/i.test(compact)) aliases.push(`apple watch ${entry.name}`);
       return { ...entry, aliases: [...new Set(aliases)] };
     });
@@ -862,6 +871,8 @@ const SupplierPanel = () => {
     const byName = new Map<string, Product>();
     products.forEach(product => {
       const keys = [product.name, product.name.replace(/\s*\([^)]*\)\s*$/g, '')];
+      if (/^iphone\b/i.test(product.name)) keys.push(product.name.replace(/^iphone\s+/i, ''));
+      if (/^apple\s+iphone\b/i.test(product.name)) keys.push(product.name.replace(/^apple\s+/i, ''));
       keys.forEach(key => byName.set(normalizeSupplierProductName(key).replace(/\bsansung\b/g, 'samsung'), product));
     });
     const updated: string[] = [];
