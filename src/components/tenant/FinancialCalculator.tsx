@@ -55,7 +55,7 @@ const expenseValue = (amount: number, unit: Unit, sale: number) => unit === 'per
 
 const FinancialCalculator = () => {
   const [text, setText] = useState('');
-  const [asaas, setAsaas] = useState('4.6');
+  const [asaas, setAsaas] = useState('4.99');
   const [asaasUnit, setAsaasUnit] = useState<Unit>('percent');
   const [freight, setFreight] = useState('20');
   const [freightUnit, setFreightUnit] = useState<Unit>('brl');

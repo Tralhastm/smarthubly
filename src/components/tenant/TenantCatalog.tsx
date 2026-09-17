@@ -247,7 +247,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     const [detail, setDetail] = useState<Product | null>(null);
   const allProducts = useMemo(() => data?.pages.flatMap(p => p.data) ?? [], [data]);
   // O bloqueio é calculado no cliente com a mesma regra do Financeiro:
-  // venda - Asaas 4,6% - frete - desconto - custo - comissão do vendedor.
+  // venda - checkout 4,99% - frete - desconto - custo - comissão do vendedor.
   // Assim, uma alteração de preço/custo passa a refletir na vitrine sem depender
   // de uma atualização manual de in_stock no banco.
   const storefrontProducts = useMemo(() => allProducts.filter(product => (product as any).store_visible !== false).map(product => {
