@@ -10,7 +10,7 @@ import SupermarketStorefront from '@/components/tenant/SupermarketStorefront';
 import StoreQuoteCalculator from '@/components/tenant/StoreQuoteCalculator';
 import StoreChatbot from '@/components/tenant/StoreChatbot';
 import { useSplashOverlay } from '@/hooks/useSplashOverlay';
-import { ClipboardList, Store, MessageCircle, Heart, Calculator, ShoppingBag } from 'lucide-react';
+import { ClipboardList, Store, MessageCircle, Heart, Calculator, ShoppingBag, UsersRound } from 'lucide-react';
 import { deriveBrandTokens, applyBrandTokens, clearBrandTokens } from '@/lib/color-utils';
 
 const TenantStore = () => {
@@ -116,6 +116,9 @@ const TenantStore = () => {
             <span className="font-heading text-lg text-foreground">{tenant.name}</span>
           </div>
           <nav className="flex items-center gap-4">
+            <a href={`/loja/${slug}/vendedores`} className="hidden items-center gap-1 text-sm font-medium text-cyan-600 hover:text-primary transition-colors sm:flex">
+              <UsersRound className="h-4 w-4" /> Seja vendedor
+            </a>
             <a href={`/loja/${slug}/chat`} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors">
               <MessageCircle className="h-4 w-4" /> Chat
             </a>
