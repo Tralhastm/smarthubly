@@ -1376,11 +1376,11 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                           🧪 SIMULAR pagamento online aprovado (TESTE)
                         </button>
                       )}
-                      <div className="flex items-center gap-2 my-1">
+                      {!cashOnDeliveryDisabled && <div className="flex items-center gap-2 my-1">
                         <div className="flex-1 h-px bg-border" />
                         <span className="text-[10px] text-muted-foreground uppercase tracking-wider">ou pagar depois</span>
                         <div className="flex-1 h-px bg-border" />
-                      </div>
+                      </div>}
                     </>
                   )}
                   {isWhatsAppMode ? (
