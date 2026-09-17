@@ -2283,12 +2283,15 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
                   const price = referencePrice;
                   const cost = (product as any).original_price || 0;
                   const profit = price - cost;
+                  const net = calculateFinalProfit(price, cost);
+                  const belowMinimum = net.finalProfit < 80;
                   const margin = price > 0 ? (profit / price) * 100 : 0;
                   const isLow = margin < 15;
                   return (
-                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${isLow ? 'bg-destructive/20 text-destructive' : 'bg-green-500/20 text-green-500'}`}>
-                      {isLow ? <AlertTriangle className="h-3 w-3 inline mr-1" /> : null}
-                      Margem: {margin.toFixed(0)}% (R${profit.toFixed(2)})
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold ${belowMinimum || isLow ? 'bg-destructive/20 text-destructive' : 'bg-green-500/20 text-green-500'}`}>
+                      {belowMinimum || isLow ? <AlertTriangle className="h-3 w-3 inline mr-1" /> : null}
+                      {belowMinimum ? `BLOQUEADO: lucro líquido R$${net.finalProfit.toFixed(2)}` : null}
+                      {!belowMinimum ? `Margem: ${margin.toFixed(0)}% (R$${profit.toFixed(2)})` : null}
                     </span>
                   );
                 })()}

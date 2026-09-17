@@ -23,6 +23,7 @@ import { useSupplierReviews } from '@/hooks/useReviews';
 import ReviewsList from '@/components/tenant/ReviewsList';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 import { getCourierCode } from '@/lib/delivery-code';
+import { calculateFinalProfit } from '@/lib/pricing';
 
 type OrderWithItems = {
   id: string; status: string; total: number; delivery_type: string; payment_method: string;
@@ -90,6 +91,8 @@ const SupplierPanel = () => {
   const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both' | 'color'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
   const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[] } | null>(null);
+  const [exportIncludeCost, setExportIncludeCost] = useState(false);
+  const [exportIncludeCommission, setExportIncludeCommission] = useState(false);
   const [tenant, setTenant] = useState<any>(null);
   const [isActive, setIsActive] = useState<boolean>(true);
   const [togglingActive, setTogglingActive] = useState(false);
@@ -1000,7 +1003,15 @@ const SupplierPanel = () => {
   };
 
   const exportPrices = () => {
-    const lines = products.map(p => `${p.name} - CUSTO: R$ ${Number(p.original_price || 0).toFixed(2).replace('.', ',')} - ${p.category || 'PRODUTO'} - REVENDA: R$ ${Number(p.price || 0).toFixed(2).replace('.', ',')}`);
+    const lines = products.map(p => {
+      const sale = Number(p.price || 0);
+      const cost = Number(p.original_price || 0);
+      const pricing = calculateFinalProfit(sale, cost);
+      const parts = [`${p.name}`, p.category || 'PRODUTO', `REVENDA: R$ ${sale.toFixed(2).replace('.', ',')}`];
+      if (exportIncludeCost) parts.push(`CUSTO: R$ ${cost.toFixed(2).replace('.', ',')}`);
+      if (exportIncludeCommission) parts.push(`COMISSÃO VENDEDOR: R$ ${pricing.seller.toFixed(2).replace('.', ',')}`);
+      return parts.join(' - ');
+    });
     const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1429,6 +1440,8 @@ const SupplierPanel = () => {
                 <button type="button" onClick={importPrices} disabled={importingPrices || !priceText.trim()} className="inline-flex items-center gap-2 rounded-lg gradient-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50">
                   <Upload className="h-4 w-4" /> {importingPrices ? 'Atualizando...' : 'Atualizar preços'}
                 </button>
+                <label className="inline-flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={exportIncludeCost} onChange={e => setExportIncludeCost(e.target.checked)} /> Incluir custo</label>
+                <label className="inline-flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={exportIncludeCommission} onChange={e => setExportIncludeCommission(e.target.checked)} /> Incluir comissão do vendedor</label>
                 <button type="button" onClick={exportPrices} disabled={!products.length} className="inline-flex items-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:border-primary disabled:opacity-50">
                   <Download className="h-4 w-4" /> Exportar .txt
                 </button>
