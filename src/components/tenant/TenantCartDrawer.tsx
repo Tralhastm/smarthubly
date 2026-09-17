@@ -91,6 +91,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     try { localStorage.setItem('lastCustomer:' + tenant.slug, JSON.stringify({ name, phone, email, documentNumber, address })); } catch { /* ignore */ }
   }, [name, phone, email, documentNumber, address, tenant.slug]);
   const requireEmail = !!(tenant as any).require_customer_email;
+  // A Mobiletec inicia a operação sem pagamento na entrega.
+  const cashOnDeliveryDisabled = tenant.slug === 'mobiletec';
   const [couponInput, setCouponInput] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null);
   const [couponMsg, setCouponMsg] = useState('');
@@ -1388,10 +1390,10 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       {addOrderMutation.isPending ? 'Registrando...' : 'Enviar pedido no WhatsApp'}
                     </button>
                   ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => submitOrder(false)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked} className={`py-3 rounded-lg font-medium text-sm disabled:opacity-50 ${hasOnlinePayment ? 'bg-secondary text-foreground hover:bg-muted border border-border' : 'gradient-primary text-primary-foreground hover:opacity-90'}`}>
+                  <div className={cashOnDeliveryDisabled ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-2'}>
+                    {!cashOnDeliveryDisabled && <button onClick={() => submitOrder(false)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked} className={`py-3 rounded-lg font-medium text-sm disabled:opacity-50 ${hasOnlinePayment ? 'bg-secondary text-foreground hover:bg-muted border border-border' : 'gradient-primary text-primary-foreground hover:opacity-90'}`}>
                       {addOrderMutation.isPending ? 'Enviando...' : `Pagar ${deliveryType === 'pickup' ? 'no balcão' : 'na entrega'}`}
-                    </button>
+                    </button>}
                     <button onClick={() => submitOrder(true)} disabled={addOrderMutation.isPending || !waNumber || creatingPayment || deliveryBlocked}
                       className="py-3 rounded-lg font-medium text-sm text-foreground transition-colors flex items-center justify-center gap-1 disabled:opacity-50 bg-[hsl(142,71%,30%)] hover:bg-[hsl(142,71%,35%)]">
                       <MessageCircle className="h-4 w-4" /> WhatsApp
