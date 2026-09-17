@@ -67,7 +67,7 @@ const App = () => (
                 <Route path="/loja/:slug/fornecedor/:token" element={<LazyPage><SupplierPanel /></LazyPage>} />
                 <Route path="/loja/:slug/motoboy/:token" element={<LazyPage><DriverPanel /></LazyPage>} />
                 <Route path="/loja/:slug/vendedor/:token" element={<LazyPage><SellerPanel /></LazyPage>} />
-                <Route path="/loja/:slug/vendedores" element={<LazyPage><SellerNetwork /></LazyPage>} />
+                <Route path="/vendedores" element={<LazyPage><SellerNetwork /></LazyPage>} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
