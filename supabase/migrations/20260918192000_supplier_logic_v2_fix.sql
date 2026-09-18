@@ -1,0 +1,17 @@
+-- Final V2 correction: every query resolves the latest completed snapshot in its own scope.
+CREATE OR REPLACE FUNCTION public.rebuild_supplier_catalog_state(_tenant_id text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
+DECLARE pv_count int:=0; p_count int:=0;
+BEGIN
+  WITH current_snap AS (SELECT DISTINCT ON (supplier_id) supplier_id,id FROM public.supplier_catalog_snapshots WHERE tenant_id=_tenant_id AND status='completed' ORDER BY supplier_id,completed_at DESC NULLS LAST,created_at DESC), winner AS (SELECT DISTINCT ON (o.product_variant_id) o.product_variant_id,o.supplier_id,o.unit_cost FROM public.supplier_variant_offers o JOIN current_snap cs ON cs.supplier_id=o.supplier_id AND cs.id=o.snapshot_id WHERE o.tenant_id=_tenant_id AND o.available=true AND o.product_variant_id IS NOT NULL ORDER BY o.product_variant_id,o.unit_cost ASC,md5(o.supplier_id||':'||o.product_variant_id))
+  UPDATE public.product_variants pv SET supplier_id=w.supplier_id,cost_price=w.unit_cost,price_source='supplier_offer',in_stock='true',updated_at=now() FROM winner w WHERE pv.id=w.product_variant_id;
+  GET DIAGNOSTICS pv_count=ROW_COUNT;
+  UPDATE public.product_variants pv SET supplier_id=NULL,in_stock='false',updated_at=now() WHERE pv.tenant_id=_tenant_id AND NOT EXISTS (SELECT 1 FROM public.supplier_variant_offers o JOIN public.supplier_catalog_snapshots cs ON cs.supplier_id=o.supplier_id AND cs.id=o.snapshot_id AND cs.tenant_id=_tenant_id AND cs.status='completed' WHERE o.product_variant_id=pv.id AND o.available=true);
+  UPDATE public.products p SET supplier_id=NULL,in_stock=EXISTS(SELECT 1 FROM public.product_variants pv WHERE pv.product_id=p.id AND pv.in_stock='true'),updated_at=now() WHERE p.tenant_id=_tenant_id AND EXISTS(SELECT 1 FROM public.product_variants pv WHERE pv.product_id=p.id);
+  WITH current_snap AS (SELECT DISTINCT ON (supplier_id) supplier_id,id FROM public.supplier_catalog_snapshots WHERE tenant_id=_tenant_id AND status='completed' ORDER BY supplier_id,completed_at DESC NULLS LAST,created_at DESC), winner AS (SELECT DISTINCT ON (p.id) p.id AS product_id,spp.supplier_id,spp.unit_price FROM public.products p JOIN public.supplier_product_prices spp ON spp.available=true AND public.catalog_product_match_key(spp.product_name)=public.catalog_product_match_key(p.name) JOIN current_snap cs ON cs.supplier_id=spp.supplier_id AND cs.id=spp.snapshot_id WHERE p.tenant_id=_tenant_id AND NOT EXISTS(SELECT 1 FROM public.product_variants pv WHERE pv.product_id=p.id) ORDER BY p.id,spp.unit_price ASC,md5(spp.supplier_id||':'||p.id))
+  UPDATE public.products p SET supplier_id=w.supplier_id,original_price=w.unit_price,in_stock=true,updated_at=now() FROM winner w WHERE p.id=w.product_id;
+  GET DIAGNOSTICS p_count=ROW_COUNT;
+  UPDATE public.products p SET supplier_id=NULL,in_stock=false,updated_at=now() WHERE p.tenant_id=_tenant_id AND NOT EXISTS(SELECT 1 FROM public.product_variants pv WHERE pv.product_id=p.id) AND NOT EXISTS(SELECT 1 FROM public.supplier_product_prices spp JOIN public.supplier_catalog_snapshots cs ON cs.supplier_id=spp.supplier_id AND cs.id=spp.snapshot_id AND cs.tenant_id=_tenant_id AND cs.status='completed' WHERE spp.available=true AND public.catalog_product_match_key(spp.product_name)=public.catalog_product_match_key(p.name));
+  RETURN jsonb_build_object('products',p_count,'variants',pv_count);
+END; $$;
+GRANT EXECUTE ON FUNCTION public.rebuild_supplier_catalog_state(text) TO authenticated,service_role;
