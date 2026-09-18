@@ -34,7 +34,9 @@ export const useProducts = (tenantId?: string) => {
         const normalized = {
           ...p,
           price: Number(p.price) || 0,
-          original_price: Number((p as any).original_price) || 0,
+          // Preserve NULL: custo não definido não é custo zero e o exportador
+          // precisa distinguir "não informado" de R$ 0,00.
+          original_price: (p as any).original_price == null ? null : Number((p as any).original_price),
           stock_quantity: (p as any).stock_quantity != null ? Number((p as any).stock_quantity) : null,
         };
         if (img && img.startsWith('data:') && img.length > 100_000) {
