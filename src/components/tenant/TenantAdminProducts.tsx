@@ -229,8 +229,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       cost: Number(variant.cost_price ?? (product as any).original_price) || 0,
       commission: calculateFinalProfit(getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }), Number(variant.cost_price ?? (product as any).original_price) || 0).seller,
       inStock: variant.in_stock !== false,
+      needsPriceReview: Boolean((variant as any).needs_price_review) || getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }) <= 0,
     }))
-    .filter(variant => variant.name && (variant.price > 0 || variant.cost > 0));
+    .filter(variant => variant.name);
 
   const getExportPrice = (product: Product, variants: ReturnType<typeof getExportVariants>) => {
     const productPrice = Number(product.price) || 0;
@@ -277,7 +278,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       lines.push(`Em estoque: ${product.in_stock ? 'Sim' : 'Não'}`);
       if (variants.length) {
         lines.push('Preços por cor/variação:');
-        variants.forEach(variant => lines.push(`- ${variant.name}: venda ${money(variant.price)}${includeCost ? ` | custo ${money(variant.cost)}` : ''}${includeCommission ? ` | comissão vendedor ${money(variant.commission)}` : ''} | estoque ${variant.inStock ? 'Sim' : 'Não'}`));
+        variants.forEach(variant => lines.push(`- ${variant.name}: venda ${variant.needsPriceReview ? 'Pendente de definição manual' : money(variant.price)}${includeCost ? ` | custo ${money(variant.cost)}` : ''}${includeCommission ? ` | comissão vendedor ${money(variant.commission)}` : ''} | estoque ${variant.inStock ? 'Sim' : 'Não'}`));
       }
       if (p.stock_quantity != null) lines.push(`Quantidade: ${p.stock_quantity}`);
       if (p.unidade) lines.push(`Unidade: ${p.unidade}`);
@@ -309,7 +310,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         : 'Indisponível';
       const commissionMarkup = !variants.length && includeCommission ? `<div class="commission">Comissão estimada do vendedor: ${escapeHtml(money(calculateFinalProfit(exportPrice, p.original_price).seller))}</div>` : '';
       const variantsMarkup = variants.length
-        ? `<div class="variants"><strong>Preços por cor/variação</strong>${variants.map(variant => `<div class="variant"><span>${escapeHtml(variant.name)}</span><strong>${escapeHtml(money(variant.price))}</strong>${includeCost ? `<small>Custo: ${escapeHtml(money(variant.cost))}</small>` : ''}${includeCommission ? `<small>Comissão: ${escapeHtml(money(variant.commission))}</small>` : ''}<span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div>`).join('')}</div>`
+        ? `<div class="variants"><strong>Preços por cor/variação</strong>${variants.map(variant => `<div class="variant"><span>${escapeHtml(variant.name)}</span><strong>${variant.needsPriceReview ? 'Preço de revenda pendente' : escapeHtml(money(variant.price))}</strong>${includeCost ? `<small>Custo: ${escapeHtml(money(variant.cost))}</small>` : ''}${includeCommission && !variant.needsPriceReview ? `<small>Comissão: ${escapeHtml(money(variant.commission))}</small>` : ''}<span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div>`).join('')}</div>`
         : '';
       const stockMarkup = variants.length ? '' : `<div class="stock ${product.in_stock ? 'available' : 'unavailable'}">${stock}</div>`;
       return `<article class="product ${product.in_stock ? '' : 'out'}">${imageMarkup}<div class="content"><div class="eyebrow">${String(index + 1).padStart(2, '0')} · ${escapeHtml(product.category || 'Geral')}</div><h2>${escapeHtml(product.name)}</h2><div class="subcategory">Fabricante: ${escapeHtml(getExportManufacturer(product))}</div>${p.subcategory ? `<div class="subcategory">${escapeHtml(p.subcategory)}</div>` : ''}${product.description ? `<p>${escapeHtml(product.description)}</p>` : ''}${!variants.length ? `<div class="price">${escapeHtml(money(exportPrice))}</div>${includeCost && p.original_price ? `<div class="old-price">Preço de custo: ${escapeHtml(money(p.original_price))}</div>` : ''}` : ''}${commissionMarkup}${variantsMarkup}${stockMarkup}${p.unidade ? `<div class="meta">Unidade: ${escapeHtml(p.unidade)}</div>` : ''}${p.affiliate_url ? `<a class="link" href="${escapeHtml(p.affiliate_url)}">Ver produto</a>` : ''}</div></article>`;
