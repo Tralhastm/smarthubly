@@ -4,7 +4,7 @@ export const DEFAULT_CHECKOUT_RATE = 0.0499;
 export const DEFAULT_SHIPPING_COST = 50;
 export const DEFAULT_CUSTOMER_DISCOUNT = 10;
 export const DEFAULT_SELLER_SHARE = 0.20;
-export const SAFE_MARGIN_THRESHOLD = 80;
+export const SAFE_MARGIN_THRESHOLD = 100;
 export const SAFE_MARGIN_TARGET = 100;
 
 export type CatalogPricingMode = 'margem_segura' | 'carro_chefe';
