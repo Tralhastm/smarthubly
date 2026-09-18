@@ -228,7 +228,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       price: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
       cost: Number(variant.cost_price ?? (product as any).original_price) || 0,
       commission: calculateFinalProfit(getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }), Number(variant.cost_price ?? (product as any).original_price) || 0).seller,
-      inStock: variant.in_stock !== false,
+      // Produto fora da lista do fornecedor permanece esgotado em todas as
+      // suas variações. Custo zero não significa esgotado: significa preço
+      // de revenda pendente quando o produto está presente na lista.
+      inStock: product.in_stock !== false && variant.in_stock !== false,
       needsPriceReview: Boolean((variant as any).needs_price_review) || getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }) <= 0,
     }))
     .filter(variant => variant.name);
