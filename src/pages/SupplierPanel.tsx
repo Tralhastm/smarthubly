@@ -879,6 +879,13 @@ const SupplierPanel = () => {
       p_content: priceText,
     });
     if (archiveError) console.warn('[supplier-panel] não foi possível arquivar a lista:', archiveError);
+    // Cada envio substitui a fotografia anterior do fornecedor. As ofertas
+    // serão reativadas somente quando aparecerem no texto atual.
+    const { error: snapshotStartError } = await (supabase as any).rpc('begin_supplier_catalog_snapshot_by_token', { _token: token });
+    if (snapshotStartError) {
+      toast.error(`Não foi possível iniciar a sincronização: ${snapshotStartError.message}`);
+      return;
+    }
     const byName = new Map<string, Product>();
     products.forEach(product => {
       const keys = [product.name, product.name.replace(/\s*\([^)]*\)\s*$/g, '')];
