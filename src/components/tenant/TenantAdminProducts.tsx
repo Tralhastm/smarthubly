@@ -41,7 +41,7 @@ const parseBrazilianMoney = (value: unknown) => {
 };
 
 type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
-type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; condition?: 'new' | 'grade_a'; variants?: ParsedVariant[]; needs_price_review?: boolean; supplier_id?: string | null; supplier_name?: string };
+type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; condition?: 'new' | 'grade_a'; available?: boolean; variants?: ParsedVariant[]; needs_price_review?: boolean; supplier_id?: string | null; supplier_name?: string };
 
 const getImportedPrices = (product: ParsedProduct, priceType: string) => {
   if (priceType === 'color') return { cost: 0, sale: 0 };
@@ -987,7 +987,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
                 updated_at: new Date().toISOString(),
                 condition: p.condition || 'new',
                 // O modelo voltou a aparecer na lista atual: reativa o card na vitrine.
-                in_stock: true,
+                in_stock: p.available !== false,
                 supplier_id: productSupplierId || existing.supplier_id || null,
               };
 
