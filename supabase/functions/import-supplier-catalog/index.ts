@@ -654,7 +654,7 @@ Regras obrigatórias:
 - Normalize somente espaços e caracteres estranhos; não remova informações técnicas relevantes do nome.
 - NÃO invente itens nem preços. Se a imagem ou trecho não estiver legível, extraia apenas o que conseguir e inclua warnings.
 - available: true quando o item/variação estiver listado. As palavras "Falta", "esgotado", "indisponível" e "fora de estoque" significam available: false. "Verificar disponibilidade" mantém available: true e deve entrar em warnings; não trate isso como ausência.
-- Preserve cada cor/variação explicitamente listada mesmo quando o preço estiver vazio ou for 0; nesse caso retorne a variação com cost_price: 0, resale_price: 0 e available conforme o texto, pois o preço de revenda será definido manualmente.
+- Preserve cada produto e cor/variação explicitamente listada, inclusive quando marcada "Falta" ou quando o preço estiver vazio/for 0; nesse caso retorne o item com cost_price: 0, resale_price: 0 e available conforme o texto, pois o preço de revenda será definido manualmente. Nunca omita uma linha de produto por falta de preço.
 
 Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "cost_price": 0, "resale_price": 0, "category": "...", "available": true, "variants": [] }], "warnings": [] }`;
 

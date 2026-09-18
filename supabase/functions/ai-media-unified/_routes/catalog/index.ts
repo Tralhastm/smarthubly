@@ -253,7 +253,7 @@ Regras:
 5. Informe cost_price quando o catálogo der custo e resale_price quando der venda sugerida; use 0 quando ausente. Para cada variante, faça o mesmo.
 6. "variations" antigo pode ser mantido como complemento, mas "variants" deve conter as opções que têm preço próprio.
 7. Um produto/variação listado é available=true por presença, exceto quando o texto disser explicitamente "Falta", "esgotado", "indisponível" ou "fora de estoque". "Verificar disponibilidade" continua available=true e deve gerar warning.
-8. Preserve todas as cores/variações listadas mesmo sem preço; use cost_price: 0 e resale_price: 0 quando ausentes, pois o preço de revenda será definido manualmente.
+8. Preserve TODAS as linhas de produto/variação, inclusive as marcadas "Falta" e as que têm preço vazio. Nunca omita um item só porque não tem preço; use cost_price: 0 e resale_price: 0 nesses casos.
 9. REGRA OBRIGATÓRIA: ignore completamente qualquer seção, produto ou variação identificada como Grade A, Grade-A, Grade A+, Grade A Premium ou A Grade. Nunca retorne esses itens, mesmo que tenham preço.`;
 
     let items: CatalogItem[] = [];
