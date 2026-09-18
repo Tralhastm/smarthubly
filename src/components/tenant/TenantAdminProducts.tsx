@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
-import { calculateFinalProfit } from '@/lib/pricing';
+import { calculateFinalProfit, DEFAULT_SELLER_SHARE } from '@/lib/pricing';
 import { getVariantSalePrice } from '@/lib/variant-pricing';
 
 const parseBrazilianMoney = (value: unknown) => {
@@ -300,7 +300,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
   const exportCatalogHtml = () => {
     if (!products.length) { toast.error('Não há produtos para exportar.'); return; }
-    const { includeCost, includeCommission } = askExportOptions();
+    // O HTML é uma exportação completa e auditável.
+    const includeCost = true;
+    const includeCommission = true;
     const cards = products.map((product, index) => {
       const p = product as any;
       const images = getProductImageUrls(product);
@@ -315,7 +317,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         : 'Indisponível';
       const commissionMarkup = !variants.length && includeCommission ? `<div class="commission">Comissão estimada do vendedor: ${escapeHtml(money(calculateFinalProfit(exportPrice, p.original_price).seller))}</div>` : '';
       const variantsMarkup = variants.length
-        ? `<div class="variants"><strong>Preços por cor/variação</strong>${variants.map(variant => `<div class="variant"><span>${escapeHtml(variant.name)}</span><strong>${variant.needsPriceReview ? 'Preço de revenda pendente' : escapeHtml(money(variant.price))}</strong>${includeCost ? `<small>Custo: ${escapeHtml(money(variant.cost))}</small>` : ''}${includeCommission && !variant.needsPriceReview ? `<small>Comissão: ${escapeHtml(money(variant.commission))}</small>` : ''}<span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div>`).join('')}</div>`
+        ? `<div class="variants"><strong>Preços por cor/variação</strong>${variants.map(variant => `<div class="variant"><span>${escapeHtml(variant.name)}</span><strong>${variant.needsPriceReview ? 'Preço de revenda pendente' : escapeHtml(money(variant.price))}</strong>${includeCost ? `<small>Custo: ${escapeHtml(money(variant.cost))}</small>` : ''}${includeCommission ? `<small>Comissão do vendedor: ${(DEFAULT_SELLER_SHARE * 100).toFixed(0)}%${variant.needsPriceReview ? '' : ` (${escapeHtml(money(variant.commission))})`}</small>` : ''}<span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div>`).join('')}</div>`
         : '';
       const stockMarkup = variants.length ? '' : `<div class="stock ${productInStock ? 'available' : 'unavailable'}">${stock}</div>`;
       return `<article class="product ${productInStock ? '' : 'out'}">${imageMarkup}<div class="content"><div class="eyebrow">${String(index + 1).padStart(2, '0')} · ${escapeHtml(product.category || 'Geral')}</div><h2>${escapeHtml(product.name)}</h2><div class="subcategory">Fabricante: ${escapeHtml(getExportManufacturer(product))}</div>${p.subcategory ? `<div class="subcategory">${escapeHtml(p.subcategory)}</div>` : ''}${product.description ? `<p>${escapeHtml(product.description)}</p>` : ''}${!variants.length ? `<div class="price">${escapeHtml(money(exportPrice))}</div>${includeCost && p.original_price ? `<div class="old-price">Preço de custo: ${escapeHtml(money(p.original_price))}</div>` : ''}` : ''}${commissionMarkup}${variantsMarkup}${stockMarkup}${p.unidade ? `<div class="meta">Unidade: ${escapeHtml(p.unidade)}</div>` : ''}${p.affiliate_url ? `<a class="link" href="${escapeHtml(p.affiliate_url)}">Ver produto</a>` : ''}</div></article>`;
