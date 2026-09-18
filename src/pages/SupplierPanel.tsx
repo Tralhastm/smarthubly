@@ -642,17 +642,20 @@ const SupplierPanel = () => {
     .replace(/\s+/g, ' ')
     .trim();
   const variantMatchKey = (value: string) => {
-    const aliases: Record<string, string> = { black: 'preto', white: 'branco', blue: 'azul', green: 'verde', purple: 'roxo', violet: 'roxo', pink: 'rosa', gold: 'dourado', silver: 'prata', gray: 'cinza', grey: 'cinza', orange: 'laranja', brown: 'marrom', titanium: 'titanio' };
+    // Apenas traduções 1:1 são equivalentes. Sage, Pink e Violet devem
+    // continuar sendo chaves próprias para que o fornecedor possa cadastrar
+    // essas cores sem reativar Verde, Rosa ou Roxo antigos.
+    const aliases: Record<string, string> = { black: 'preto', white: 'branco', blue: 'azul', green: 'verde', purple: 'roxo', gold: 'dourado', silver: 'prata', gray: 'cinza', grey: 'cinza', orange: 'laranja', brown: 'marrom', titanium: 'titanio' };
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
       .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).map(token => aliases[token] || token).filter(Boolean).sort().join(' ');
   };
   const extractColors = (value: string) => {
     const colorPattern = /\b(preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|black|white|blue|green|pink|silver|orange|sage|midnight|starlight|sky\s+blue|space\s+gray|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
     const colorAliases: Record<string, string> = {
-      black: 'Preto', blue: 'Azul', green: 'Verde', pink: 'Rosa', silver: 'Prata',
-      orange: 'Laranja', sage: 'Verde', midnight: 'Preto', 'sky blue': 'Azul',
+      black: 'Preto', blue: 'Azul', green: 'Verde', silver: 'Prata',
+      orange: 'Laranja', pink: 'Pink', sage: 'Sage', midnight: 'Preto', 'sky blue': 'Azul',
       'space gray': 'Cinza', grey: 'Cinza', gray: 'Cinza', purple: 'Roxo',
-      violet: 'Roxo', brown: 'Marrom', red: 'Vermelho', gold: 'Dourado',
+      violet: 'Violet', brown: 'Marrom', red: 'Vermelho', gold: 'Dourado',
       white: 'Branco', titanium: 'Titanium',
     };
     const emojiColors: Array<[RegExp, string]> = [
