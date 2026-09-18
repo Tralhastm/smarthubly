@@ -33,7 +33,6 @@ function productMatchKey(value: string | null | undefined): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/\([^)]*\)/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
   return normalized.split(/\s+/).filter(Boolean).sort().join(' ');
@@ -52,6 +51,7 @@ function variantMatchKey(value: string | null | undefined): string {
     green: 'verde', purple: 'roxo', violet: 'roxo', pink: 'rosa',
     gold: 'dourado', golden: 'dourado', silver: 'prata', gray: 'cinza',
     grey: 'cinza', yellow: 'amarelo', orange: 'laranja', brown: 'marrom',
+    sage: 'verde',
     beige: 'bege', navy: 'azul marinho', midnight: 'meia noite',
     graphite: 'grafite', titanium: 'titanio', natural: 'natural',
   };
