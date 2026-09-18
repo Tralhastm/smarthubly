@@ -224,24 +224,28 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
   const getExportVariants = (product: Product) => allVariants
     .filter(variant => variant.product_id === product.id)
-    .map(variant => ({
-      name: String(variant.name || '').trim(),
-      price: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
-      cost: Number(variant.cost_price ?? (product as any).original_price) || 0,
-      commission: calculateFinalProfit(getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }), Number(variant.cost_price ?? (product as any).original_price) || 0).seller,
-      // Produto fora da lista do fornecedor permanece esgotado em todas as
-      // suas variações. Custo zero não significa esgotado: significa preço
-      // de revenda pendente quando o produto está presente na lista.
-      inStock: isInStock(product.in_stock) && isInStock(variant.in_stock),
-      needsPriceReview: Boolean((variant as any).needs_price_review) || getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }) <= 0,
-    }))
+    .map(variant => {
+      const sale = getVariantSalePrice({
+        productPrice: Number(product.price),
+        suggestedPrice: variant.suggested_price,
+        priceDelta: variant.price_delta,
+        variantCost: variant.cost_price,
+      });
+      const cost = variant.cost_price == null ? null : Number(variant.cost_price);
+      const pending = Boolean((variant as any).needs_price_review) || sale <= 0;
+      return {
+        id: String((variant as any).id || ''),
+        name: String(variant.name || '').trim(),
+        sale,
+        cost: Number.isFinite(cost as number) ? cost : null,
+        commission: pending || cost == null ? null : calculateFinalProfit(sale, cost).seller,
+        inStock: isInStock(variant.in_stock),
+        pending,
+      };
+    })
     .filter(variant => variant.name);
 
-  const getExportPrice = (product: Product, variants: ReturnType<typeof getExportVariants>) => {
-    const productPrice = Number(product.price) || 0;
-    const variantPrices = variants.map(variant => variant.price).filter(price => price > 0);
-    return productPrice > 0 ? productPrice : (variantPrices.length ? Math.min(...variantPrices) : 0);
-  };
+  const getExportPrice = (product: Product) => Number(product.price) || 0;
 
   const getExportManufacturer = (product: Product) => {
     const name = product.name.toLowerCase();
@@ -300,31 +304,36 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
   const exportCatalogHtml = () => {
     if (!products.length) { toast.error('Não há produtos para exportar.'); return; }
-    // O HTML é uma exportação completa e auditável.
-    const includeCost = true;
-    const includeCommission = true;
+    // HTML V3: espelho integral do catálogo atual. Não há perguntas nem
+    // campos opcionais: custos, revendas, comissão, fotos e status sempre são
+    // exportados, inclusive para itens esgotados ou com revenda pendente.
+    const generatedAt = new Date().toISOString();
+    const rows: Array<Record<string, unknown>> = [];
     const cards = products.map((product, index) => {
       const p = product as any;
       const images = getProductImageUrls(product);
       const variants = getExportVariants(product);
-      const exportPrice = getExportPrice(product, variants);
+      const exportPrice = getExportPrice(product);
       const imageMarkup = images.length
         ? `<div class="gallery">${images.map((url: string, imageIndex: number) => `<img src="${escapeHtml(url)}" alt="${escapeHtml(product.name)} — imagem ${imageIndex + 1}" loading="lazy">`).join('')}</div>`
         : '<div class="no-image">Sem imagem</div>';
       const productInStock = isInStock(product.in_stock);
-      const stock = productInStock
-        ? (p.stock_quantity != null ? `Disponível · ${escapeHtml(p.stock_quantity)}` : 'Disponível')
-        : 'Indisponível';
-      const commissionMarkup = !variants.length && includeCommission ? `<div class="commission">Comissão estimada do vendedor: ${escapeHtml(money(calculateFinalProfit(exportPrice, p.original_price).seller))}</div>` : '';
+      const productCost = p.original_price == null ? null : Number(p.original_price);
+      const productPending = productCost == null || exportPrice <= 0;
+      const productCommission = productPending ? null : calculateFinalProfit(exportPrice, productCost).seller;
+      rows.push({ id: product.id, name: product.name, status: productInStock ? 'Disponível' : 'Indisponível', cost: productCost, resale: exportPrice, commission_percent: DEFAULT_SELLER_SHARE * 100, commission_value: productCommission, images, description: product.description || '', variants: variants.map(v => ({ id: v.id, name: v.name, status: v.inStock ? 'Disponível' : 'Indisponível', cost: v.cost, resale: v.pending ? null : v.sale, commission_percent: DEFAULT_SELLER_SHARE * 100, commission_value: v.commission })) });
+      const statusLabel = productInStock ? 'Disponível' : 'Indisponível';
+      const productFinancials = `<div class="facts"><div><span>Preço de revenda</span><strong>${productPending ? 'Pendente' : escapeHtml(money(exportPrice))}</strong></div><div><span>Preço de custo</span><strong>${productCost == null ? 'Não definido' : escapeHtml(money(productCost))}</strong></div><div><span>Comissão do vendedor</span><strong>${productCommission == null ? 'Pendente' : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(productCommission))}`}</strong></div></div>`;
       const variantsMarkup = variants.length
-        ? `<div class="variants"><strong>Preços por cor/variação</strong>${variants.map(variant => `<div class="variant"><span>${escapeHtml(variant.name)}</span><strong>${variant.needsPriceReview ? 'Preço de revenda pendente' : escapeHtml(money(variant.price))}</strong>${includeCost ? `<small>Custo: ${escapeHtml(money(variant.cost))}</small>` : ''}${includeCommission ? `<small>Comissão do vendedor: ${(DEFAULT_SELLER_SHARE * 100).toFixed(0)}%${variant.needsPriceReview ? '' : ` (${escapeHtml(money(variant.commission))})`}</small>` : ''}<span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div>`).join('')}</div>`
+        ? `<div class="variants"><h3>Variações</h3>${variants.map(variant => `<div class="variant"><div class="variant-name"><strong>${escapeHtml(variant.name)}</strong><span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div><div class="variant-facts"><span>Custo: <b>${variant.cost == null ? 'Não definido' : escapeHtml(money(variant.cost))}</b></span><span>Revenda: <b>${variant.pending ? 'Pendente' : escapeHtml(money(variant.sale))}</b></span><span>Comissão: <b>${variant.commission == null ? 'Pendente' : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(variant.commission))}`}</b></span></div></div>`).join('')}</div>`
         : '';
-      const stockMarkup = variants.length ? '' : `<div class="stock ${productInStock ? 'available' : 'unavailable'}">${stock}</div>`;
-      return `<article class="product ${productInStock ? '' : 'out'}">${imageMarkup}<div class="content"><div class="eyebrow">${String(index + 1).padStart(2, '0')} · ${escapeHtml(product.category || 'Geral')}</div><h2>${escapeHtml(product.name)}</h2><div class="subcategory">Fabricante: ${escapeHtml(getExportManufacturer(product))}</div>${p.subcategory ? `<div class="subcategory">${escapeHtml(p.subcategory)}</div>` : ''}${product.description ? `<p>${escapeHtml(product.description)}</p>` : ''}${!variants.length ? `<div class="price">${escapeHtml(money(exportPrice))}</div>${includeCost && p.original_price ? `<div class="old-price">Preço de custo: ${escapeHtml(money(p.original_price))}</div>` : ''}` : ''}${commissionMarkup}${variantsMarkup}${stockMarkup}${p.unidade ? `<div class="meta">Unidade: ${escapeHtml(p.unidade)}</div>` : ''}${p.affiliate_url ? `<a class="link" href="${escapeHtml(p.affiliate_url)}">Ver produto</a>` : ''}</div></article>`;
+      const stockMarkup = `<span class="stock ${productInStock ? 'available' : 'unavailable'}">${statusLabel}</span>`;
+      return `<article class="product ${productInStock ? '' : 'out'}"><div class="product-top"><span class="eyebrow">${String(index + 1).padStart(2, '0')} · ${escapeHtml(product.category || 'Geral')}</span>${stockMarkup}</div>${imageMarkup}<div class="content"><h2>${escapeHtml(product.name)}</h2><div class="subcategory">Fabricante: ${escapeHtml(getExportManufacturer(product))}</div>${p.subcategory ? `<div class="subcategory">${escapeHtml(p.subcategory)}</div>` : ''}${product.description ? `<p class="description">${escapeHtml(product.description)}</p>` : ''}${productPending && !variants.length ? '<div class="pending">Preço de revenda pendente de definição manual</div>' : ''}${!variants.length ? productFinancials : ''}${variantsMarkup}${p.stock_quantity != null ? `<div class="meta">Quantidade cadastrada: ${escapeHtml(p.stock_quantity)}</div>` : ''}${p.unidade ? `<div class="meta">Unidade: ${escapeHtml(p.unidade)}</div>` : ''}</div></article>`;
     }).join('\n');
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="catalog-export-version" content="audit-v2"><title>Catálogo de Produtos</title><style>:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0f172a;background:#eff6ff}*{box-sizing:border-box}body{margin:0;background:linear-gradient(135deg,#eff6ff,#dbeafe);padding:32px}.wrap{max-width:1180px;margin:auto}.header{background:#fff;border-radius:24px;padding:28px 32px;margin-bottom:24px;box-shadow:0 16px 40px #1e3a8a18}.header h1{margin:0 0 8px;font-size:30px;color:#1e3a8a}.header p{margin:0;color:#64748b}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}.product{overflow:hidden;background:#fff;border-radius:20px;box-shadow:0 12px 30px #1e3a8a18;border:1px solid #dbeafe}.product.out{opacity:.72}.gallery{height:230px;display:flex;gap:8px;overflow-x:auto;padding:12px;background:#f8fafc}.gallery img{height:206px;min-width:206px;width:206px;object-fit:contain;border-radius:12px;background:white}.no-image{height:230px;display:grid;place-items:center;color:#94a3b8;background:#f8fafc}.content{padding:20px}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#2563eb;font-size:11px;font-weight:700}.product h2{font-size:19px;margin:8px 0;color:#0f172a}.subcategory,.meta{color:#64748b;font-size:13px}.product p{color:#475569;line-height:1.5;font-size:14px}.price{font-size:26px;font-weight:800;color:#1d4ed8;margin-top:16px}.old-price{font-size:12px;color:#94a3b8;margin-top:4px}.variants{margin-top:14px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:13px}.variants>strong{display:block;color:#475569;margin-bottom:6px}.variant{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0;color:#64748b}.variant strong{color:#1d4ed8}.stock,.variant-status{display:inline-block;margin-top:14px;padding:6px 10px;border-radius:999px;background:#dcfce7;color:#15803d;font-size:12px;font-weight:700}.stock.unavailable,.variant-status.unavailable{background:#fee2e2;color:#b91c1c}.variant-status{margin-top:0;padding:3px 8px;font-size:11px}.link{display:inline-block;margin-top:16px;color:#1d4ed8;font-weight:700;text-decoration:none}@media(max-width:600px){body{padding:16px}.header{padding:22px}.gallery{height:190px}.gallery img{height:166px;min-width:166px;width:166px}}</style></head><body><main class="wrap"><header class="header"><h1>Catálogo de Produtos</h1><p>${products.length} produto(s) · Gerado em ${escapeHtml(new Date().toLocaleString('pt-BR'))} · Exportação auditável · Comissão do vendedor: 20%</p></header><section class="grid">${cards}</section></main></body></html>`;
+    const exportJson = escapeHtml(JSON.stringify({ version: 'catalog-export-v3', tenant_id: tenantId, generated_at: generatedAt, seller_commission_percent: DEFAULT_SELLER_SHARE * 100, products: rows }));
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="catalog-export-version" content="catalog-export-v3"><title>Catálogo completo</title><style>:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#172033;background:#eef4fb}*{box-sizing:border-box}body{margin:0;padding:28px;background:linear-gradient(135deg,#eef4fb,#dbeafe)}.wrap{max-width:1220px;margin:auto}.header{background:#fff;border-radius:20px;padding:25px 28px;margin-bottom:20px;box-shadow:0 8px 24px #12345a18}.header h1{margin:0 0 8px;color:#123b6d}.header p{margin:0;color:#52657c}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px}.product{overflow:hidden;background:#fff;border:1px solid #d8e3f0;border-radius:18px;box-shadow:0 8px 24px #12345a12}.product.out{opacity:.78}.product-top{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 0}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#2468b1;font-size:11px;font-weight:800}.gallery{height:220px;display:flex;gap:8px;overflow-x:auto;padding:12px;background:#f6f9fc}.gallery img{height:196px;min-width:196px;width:196px;object-fit:contain;border-radius:10px;background:#fff}.no-image{height:220px;display:grid;place-items:center;color:#8292a6;background:#f6f9fc}.content{padding:18px}.product h2{font-size:20px;margin:0 0 7px;color:#12243b}.subcategory,.meta{color:#60748b;font-size:12px;margin-top:5px}.description{white-space:pre-wrap;color:#3d5269;line-height:1.55;font-size:14px;margin:15px 0}.stock,.variant-status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800}.available{background:#dcfce7;color:#16713b}.unavailable{background:#fee2e2;color:#a92929}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}.facts div{padding:10px;background:#f5f8fc;border-radius:10px}.facts span,.variant-facts span{display:block;color:#6b7d91;font-size:11px}.facts strong{display:block;margin-top:4px;color:#164d86;font-size:14px}.variants{margin-top:18px;border-top:1px solid #e2eaf3;padding-top:14px}.variants h3{margin:0 0 10px;font-size:15px;color:#294b6e}.variant{padding:12px 0;border-bottom:1px solid #edf2f7}.variant:last-child{border-bottom:0}.variant-name{display:flex;align-items:center;justify-content:space-between;gap:10px}.variant-name strong{color:#183f67}.variant-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:9px}.variant-facts b{color:#244d77;font-weight:700}.pending{margin-top:14px;padding:10px;border-radius:10px;background:#fff7d6;color:#855d00;font-size:12px;font-weight:700}@media(max-width:600px){body{padding:14px}.grid{grid-template-columns:1fr}.facts,.variant-facts{grid-template-columns:1fr}.header{padding:20px}}</style></head><body><main class="wrap"><header class="header"><h1>Catálogo completo</h1><p>${products.length} produto(s) · Gerado em ${escapeHtml(new Date(generatedAt).toLocaleString('pt-BR'))}</p><p>Exportação fiel do sistema · Comissão padrão do vendedor: ${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(2))}% · Inclui produtos e variações disponíveis e esgotados</p></header><section class="grid">${cards}</section><script type="application/json" id="catalog-data">${exportJson}</script></main></body></html>`;
     downloadBlob(html, `catalogo-${catalogSlug()}.html`, 'text/html;charset=utf-8');
-    toast.success('Catálogo HTML exportado com todas as imagens disponíveis.');
+    toast.success('Catálogo HTML completo exportado com dados fiéis do sistema.');
   };
 
   const handleRefreshAffiliatePrices = async () => {
