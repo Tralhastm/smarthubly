@@ -693,7 +693,11 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         const source = importRawText;
         const activeSuppliers = suppliers.filter(s => s.active && s.name.trim());
         const blocks: { name: string; text: string }[] = [];
-        if (importPriceType === 'color' && activeSuppliers.length > 1) {
+        // Quando duas listas são coladas juntas, cada bloco precisa ser
+        // processado pelo fornecedor correto em qualquer modo de importação.
+        // Antes isso só acontecia no seletor por cor, fazendo o modo de custo
+        // atribuir todos os produtos ao primeiro fornecedor encontrado.
+        if (activeSuppliers.length > 1) {
           const matches = activeSuppliers
             .map(s => ({ supplier: s, index: source.toLocaleLowerCase('pt-BR').indexOf(s.name.trim().toLocaleLowerCase('pt-BR')) }))
             .filter(item => item.index >= 0)
@@ -1004,30 +1008,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           await saveImportedVariants(existing.id, p, Number(existing.price) || price, Number(existing.original_price) || importedCost, isCost, shipping, margin, productSupplierId, colorOnly);
           insertedIds.push(existing.id);
         } else {
-          // Produtos que aparecem nas listas precisam entrar automaticamente no
-          // catálogo. O preço de venda fica pendente até o administrador definir
-          // a revenda; o custo e as variações vêm da lista do fornecedor.
-          const { data: created, error: createError } = await supabase
-            .from('products')
-            .insert({
-              tenant_id: tenantId,
-              name: String(p.name || '').trim(),
-              price: importedSale > 0 ? importedSale : 0,
-              original_price: importedCost > 0 ? importedCost : 0,
-              image: '',
-              category: p.category || 'Geral',
-              description: p.description || '',
-              in_stock: false,
-              supplier_id: productSupplierId || null,
-              condition: p.condition || 'new',
-            } as any)
-            .select('id')
-            .single();
-          if (createError) throw createError;
-          if (created?.id) {
-            await saveImportedVariants(created.id, p, importedSale, importedCost, isCost, shipping, margin, productSupplierId, colorOnly);
-            insertedIds.push(created.id);
-          }
+          // A lista é fonte de atualização, nunca de cadastro de produto.
+          // Produtos presentes apenas no fornecedor ficam ignorados; somente
+          // cores novas de produtos já cadastrados podem ser criadas.
+          console.info('[catalog-import] produto da lista não cadastrado ignorado:', p.name);
         }
 
         // Registra sempre na tabela de comparação multi-fornecedor
