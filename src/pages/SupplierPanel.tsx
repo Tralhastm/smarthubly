@@ -895,6 +895,10 @@ const SupplierPanel = () => {
       products.forEach(product => {
         addProductKey(product.name, product);
         addProductKey(product.name.replace(/\s*\([^)]*\)\s*$/g, ''), product);
+        if (/^samsung\s+/i.test(product.name)) addProductKey(product.name.replace(/^samsung\s+/i, ''), product);
+        if (/^xiaomi\s+/i.test(product.name)) addProductKey(product.name.replace(/^xiaomi\s+/i, ''), product);
+        if (/^motorola\s+/i.test(product.name)) addProductKey(product.name.replace(/^motorola\s+/i, 'moto '), product);
+        if (/^moto\s+/i.test(product.name)) addProductKey(product.name.replace(/^moto\s+/i, 'motorola '), product);
         if (/^iphone\b/i.test(product.name)) addProductKey(product.name.replace(/^iphone\s+/i, ''), product);
         if (/^apple\s+iphone\b/i.test(product.name)) addProductKey(product.name.replace(/^apple\s+/i, ''), product);
       });
