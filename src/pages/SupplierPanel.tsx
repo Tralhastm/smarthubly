@@ -773,6 +773,11 @@ const SupplierPanel = () => {
       const hasAvailabilityMarker = availabilityMarker.test(line);
       if (hasAvailabilityMarker) line = line.replace(availabilityMarker, ' ').replace(/\s+/g, ' ').trim();
       if (!line) {
+        if (hasAvailabilityMarker && current) {
+          current.unavailableColors = [...new Set([...current.unavailableColors, ...(current.colors.length ? current.colors : ['__all__'])])];
+          nextUnavailable = false;
+          continue;
+        }
         if (hasAvailabilityMarker && entries.length > 0) {
           const previous = entries[entries.length - 1];
           previous.unavailableColors = [...new Set([...previous.unavailableColors, ...(previous.colors.length ? previous.colors : ['__all__'])])];
