@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct, type Product } from '@/hooks/useProducts';
-import { useProductVariants } from '@/hooks/useProductExtras';
+import type { ProductVariant } from '@/hooks/useProductExtras';
 import { useSuppliers } from '@/hooks/useSuppliers';
 import { useFeeRequests, useCreateFeeRequest } from '@/hooks/useFeeRequests';
 import ImageUploadField from '@/components/shared/ImageUploadField';
@@ -150,7 +150,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         .select('id,product_id,name,suggested_price,price_delta,cost_price,in_stock,needs_price_review')
         .eq('tenant_id', tenantId);
       if (error) throw error;
-      return (data || []) as Array<{ id: string; product_id: string; name: string; suggested_price: number | null; price_delta: number | null; cost_price: number | null; in_stock: boolean; needs_price_review: boolean }>;
+      return (data || []) as ProductVariant[];
     },
     enabled: !!tenantId,
     staleTime: 30000,
@@ -1915,7 +1915,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       )}
 
       {visibleProducts.map(p => (
-        <EditableProduct key={p.id} product={p} isEditing={editing === p.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate}
+        <EditableProduct key={p.id} product={p} variants={allVariants.filter(variant => variant.product_id === p.id)} isEditing={editing === p.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate}
           suppliers={suppliers.filter(s => s.active)} tenantId={tenantId}
           soldOutVariantIds={allVariants.filter(variant => isVariantSoldOut(variant)).map(variant => variant.id)}
           feeRequests={feeRequests.filter(r => r.product_id === p.id)}
@@ -1940,8 +1940,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     </div>
   );
 };
-const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, suppliers, tenantId, feeRequests, soldOutVariantIds, onRequestFee, onEdit, onSave, onCancel, onDelete, onToggleVisibility }: {
-  product: Product; isEditing: boolean; isDropshipping?: boolean; isAffiliate?: boolean;
+const EditableProduct = ({ product, variants, isEditing, isDropshipping, isAffiliate, suppliers, tenantId, feeRequests, soldOutVariantIds, onRequestFee, onEdit, onSave, onCancel, onDelete, onToggleVisibility }: {
+  product: Product; variants: ProductVariant[]; isEditing: boolean; isDropshipping?: boolean; isAffiliate?: boolean;
   suppliers: { id: string; name: string }[];
   tenantId: string;
   feeRequests: { id: string; requested_percent: number; status: string }[];
@@ -1957,7 +1957,6 @@ const EditableProduct = ({ product, isEditing, isDropshipping, isAffiliate, supp
   const [activeSubTab, setActiveSubTab] = useState<'info' | 'suppliers'>('info');
   const supplierName = suppliers.find(s => s.id === product.supplier_id)?.name;
   const pendingReq = feeRequests.find(r => r.status === 'pending');
-  const { data: variants = [] } = useProductVariants(product.id);
   const variantPrices = variants.map(variant => ({
     ...variant,
     salePrice: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
