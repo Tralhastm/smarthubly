@@ -647,13 +647,18 @@ const SupplierPanel = () => {
       .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).map(token => aliases[token] || token).filter(Boolean).sort().join(' ');
   };
   const extractColors = (value: string) => {
-    const colorPattern = /\b(preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|black|white|blue|green|pink|silver|orange|sage|midnight|starlight|sky\s+blue|space\s+gray|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
+    const colorPattern = /\b(azul\s+(?:escuro|claro|marinho)|verde\s+(?:escuro|claro)|vermelho\s+(?:escuro|claro)|sky\s+blue|space\s+gray|preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|black|white|blue|green|pink|silver|orange|sage|midnight|starlight|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
     const colorAliases: Record<string, string> = {
       black: 'Preto', blue: 'Azul', green: 'Verde', pink: 'Rosa', silver: 'Prata',
-      orange: 'Laranja', sage: 'Verde', midnight: 'Preto', 'sky blue': 'Azul',
-      'space gray': 'Cinza', grey: 'Cinza', gray: 'Cinza', purple: 'Roxo',
-      violet: 'Roxo', brown: 'Marrom', red: 'Vermelho', gold: 'Dourado',
-      white: 'Branco', titanium: 'Titanium',
+      orange: 'Laranja', midnight: 'Preto', 'space gray': 'Cinza',
+      grey: 'Cinza', gray: 'Cinza', purple: 'Roxo', violet: 'Violeta',
+      brown: 'Marrom', red: 'Vermelho', gold: 'Dourado', white: 'Branco',
+      'azul escuro': 'Azul-escuro', 'azul claro': 'Azul-claro',
+      'azul marinho': 'Azul-marinho', 'verde escuro': 'Verde-escuro',
+      'verde claro': 'Verde-claro', 'vermelho escuro': 'Vermelho-escuro',
+      'vermelho claro': 'Vermelho-claro', 'sky blue': 'Sky Blue',
+      'space gray': 'Space Gray', sage: 'Sage', starlight: 'Starlight',
+      titanium: 'Titanium',
     };
     const emojiColors: Array<[RegExp, string]> = [
       [/🔵|💙/gu, 'Azul'], [/⚫️?|🖤/gu, 'Preto'], [/🩷|💗/gu, 'Rosa'],
