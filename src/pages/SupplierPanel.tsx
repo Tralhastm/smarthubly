@@ -648,7 +648,7 @@ const SupplierPanel = () => {
       .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).map(token => aliases[token] || token).filter(Boolean).sort().join(' ');
   };
   const extractColors = (value: string) => {
-    const colorPattern = /\b(azul\s+(?:escuro|claro|marinho)|verde\s+(?:escuro|claro)|vermelho\s+(?:escuro|claro)|sky\s+blue|space\s+gray|preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|black|white|blue|green|pink|silver|orange|sage|midnight|starlight|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
+    const colorPattern = /\b(azul\s+(?:escuro|claro|marinho)|verde\s+(?:escuro|claro)|vermelho\s+(?:escuro|claro)|sky\s+blue|space\s+gray|preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|iron\s*man|ironman|black|white|blue|green|pink|silver|orange|sage|midnight|starlight|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
     const colorAliases: Record<string, string> = {
       black: 'Preto', blue: 'Azul', green: 'Verde', pink: 'Rosa', silver: 'Prata',
       orange: 'Laranja', midnight: 'Preto', 'space gray': 'Cinza',
@@ -659,7 +659,7 @@ const SupplierPanel = () => {
       'verde claro': 'Verde-claro', 'vermelho escuro': 'Vermelho-escuro',
       'vermelho claro': 'Vermelho-claro', 'sky blue': 'Sky Blue',
       'space gray': 'Space Gray', sage: 'Sage', starlight: 'Starlight',
-      titanium: 'Titanium',
+      'titanium': 'Titanium', 'ironman': 'IronMan', 'iron man': 'IronMan',
     };
     const emojiColors: Array<[RegExp, string]> = [
       [/🔵|💙/gu, 'Azul'], [/⚫️?|🖤/gu, 'Preto'], [/🩷|💗/gu, 'Rosa'],
@@ -929,9 +929,6 @@ const SupplierPanel = () => {
         } else if (group.variants.size === 0 && group.cost != null) {
           invalid.push(`${entry.name} (produto sem cor misturado com variações no mesmo lote)`);
           continue;
-        } else if (group.cost != null && group.cost !== Number(entry.cost)) {
-          invalid.push(`${entry.name} (custos diferentes entre variações do mesmo produto)`);
-          continue;
         }
         for (const color of entry.colors) {
           const key = variantMatchKey(color);
@@ -942,7 +939,6 @@ const SupplierPanel = () => {
             invalid.push(`${entry.name} (variação ambígua ou repetida: ${color})`);
           } else {
             group.variants.set(key, { name: previous?.name || color, key, cost: Number(entry.cost), available });
-            group.cost = group.cost ?? Number(entry.cost);
           }
         }
       }
