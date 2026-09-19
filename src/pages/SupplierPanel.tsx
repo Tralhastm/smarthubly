@@ -642,20 +642,17 @@ const SupplierPanel = () => {
     .replace(/\s+/g, ' ')
     .trim();
   const variantMatchKey = (value: string) => {
-    // Apenas traduções 1:1 são equivalentes. Sage, Pink e Violet devem
-    // continuar sendo chaves próprias para que o fornecedor possa cadastrar
-    // essas cores sem reativar Verde, Rosa ou Roxo antigos.
-    const aliases: Record<string, string> = { black: 'preto', white: 'branco', blue: 'azul', green: 'verde', purple: 'roxo', pink: 'rosa', gold: 'dourado', silver: 'prata', gray: 'cinza', grey: 'cinza', orange: 'laranja', brown: 'marrom', titanium: 'titanio', violet: 'violeta' };
+    const aliases: Record<string, string> = { black: 'preto', white: 'branco', blue: 'azul', green: 'verde', purple: 'roxo', violet: 'roxo', pink: 'rosa', gold: 'dourado', silver: 'prata', gray: 'cinza', grey: 'cinza', orange: 'laranja', brown: 'marrom', titanium: 'titanio' };
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
       .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).map(token => aliases[token] || token).filter(Boolean).sort().join(' ');
   };
   const extractColors = (value: string) => {
-    const colorPattern = /\b(preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|violeta|titanium|grafite|gold|black|white|blue|green|pink|silver|orange|sage|midnight|starlight|sky\s+blue|space\s+gray|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
+    const colorPattern = /\b(preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|black|white|blue|green|pink|silver|orange|sage|midnight|starlight|sky\s+blue|space\s+gray|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
     const colorAliases: Record<string, string> = {
-      black: 'Preto', blue: 'Azul', green: 'Verde', silver: 'Prata',
-      orange: 'Laranja', pink: 'Rosa', sage: 'Sage', midnight: 'Preto', 'sky blue': 'Azul',
+      black: 'Preto', blue: 'Azul', green: 'Verde', pink: 'Rosa', silver: 'Prata',
+      orange: 'Laranja', sage: 'Verde', midnight: 'Preto', 'sky blue': 'Azul',
       'space gray': 'Cinza', grey: 'Cinza', gray: 'Cinza', purple: 'Roxo',
-      violet: 'Violeta', brown: 'Marrom', red: 'Vermelho', gold: 'Dourado',
+      violet: 'Roxo', brown: 'Marrom', red: 'Vermelho', gold: 'Dourado',
       white: 'Branco', titanium: 'Titanium',
     };
     const emojiColors: Array<[RegExp, string]> = [
@@ -882,13 +879,6 @@ const SupplierPanel = () => {
       p_content: priceText,
     });
     if (archiveError) console.warn('[supplier-panel] não foi possível arquivar a lista:', archiveError);
-    // Cada envio substitui a fotografia anterior do fornecedor. As ofertas
-    // serão reativadas somente quando aparecerem no texto atual.
-    const { error: snapshotStartError } = await (supabase as any).rpc('begin_supplier_catalog_snapshot_by_token', { _token: token });
-    if (snapshotStartError) {
-      toast.error(`Não foi possível iniciar a sincronização: ${snapshotStartError.message}`);
-      return;
-    }
     const byName = new Map<string, Product>();
     products.forEach(product => {
       const keys = [product.name, product.name.replace(/\s*\([^)]*\)\s*$/g, '')];

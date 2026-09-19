@@ -22,7 +22,6 @@ type Product = {
   category: string;
   description: string;
   condition: ProductCondition;
-  available: boolean;
   variants: Variant[];
 };
 
@@ -141,10 +140,6 @@ function parseCatalog(text: string): Product[] {
       // Eles pertencem ao último produto, mas “falta” e “verificar disponibilidade” não são cores.
       if (/falta|conferir disponibilidade/i.test(line)) {
         nextColorsUnavailable = true;
-        if (lastProduct) {
-          lastProduct.available = false;
-          for (const variant of lastProduct.variants) variant.available = false;
-        }
         continue;
       }
       if (lastProduct && !/grade\s+a/i.test(line)) {
@@ -173,7 +168,7 @@ function parseCatalog(text: string): Product[] {
     const key = `${normalize(name)}|${condition}`;
     let product = grouped.get(key);
     if (!product) {
-      product = { name, price, cost_price: price, resale_price: 0, category: category(name, section), description: "", condition, available: true, variants: [] };
+      product = { name, price, cost_price: price, resale_price: 0, category: category(name, section), description: "", condition, variants: [] };
       grouped.set(key, product);
     }
     lastProduct = product;

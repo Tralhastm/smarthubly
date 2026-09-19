@@ -653,8 +653,7 @@ Regras obrigatórias:
 - Se um produto tiver custo e venda em linhas diferentes, associe ambos ao nome imediatamente anterior até começar outro produto ou seção.
 - Normalize somente espaços e caracteres estranhos; não remova informações técnicas relevantes do nome.
 - NÃO invente itens nem preços. Se a imagem ou trecho não estiver legível, extraia apenas o que conseguir e inclua warnings.
-- available: true quando o item/variação estiver listado. As palavras "Falta", "esgotado", "indisponível" e "fora de estoque" significam available: false. "Verificar disponibilidade" mantém available: true e deve entrar em warnings; não trate isso como ausência.
-- Preserve cada produto e cor/variação explicitamente listada, inclusive quando marcada "Falta" ou quando o preço estiver vazio/for 0; nesse caso retorne o item com cost_price: 0, resale_price: 0 e available conforme o texto, pois o preço de revenda será definido manualmente. Nunca omita uma linha de produto por falta de preço.
+- available: true por padrão, a menos que esteja marcado como esgotado, indisponível ou fora de estoque.
 
 Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "cost_price": 0, "resale_price": 0, "category": "...", "available": true, "variants": [] }], "warnings": [] }`;
 
@@ -754,15 +753,12 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
         const variantName = String(rawVariant.name || '').trim();
         let variant = productVariants.get(normalizeMatch(variantName));
         const cost = Number(rawVariant.cost_price ?? rawVariant.price ?? NaN);
-        // Uma cor listada pelo fornecedor deve ser cadastrada mesmo sem custo:
-        // o preço de revenda será definido manualmente pela loja.
-        if (!variant && variantName) {
+        if (!variant && variantName && Number.isFinite(cost) && cost > 0) {
           const created = await admin.from('product_variants').insert({
             product_id: product.id,
             tenant_id: supplier.tenant_id,
             name: variantName,
             price_delta: 0,
-            cost_price: Number.isFinite(cost) && cost > 0 ? cost : null,
             suggested_price: null,
             needs_price_review: true,
             in_stock: rawVariant.available !== false,
@@ -773,7 +769,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
             productVariants.set(normalizeMatch(variantName), variant);
           }
         }
-        if (!variant || !variantName) continue;
+        if (!variant || !variantName || !Number.isFinite(cost) || cost <= 0) continue;
         await admin.from("supplier_variant_offers").upsert({
           tenant_id: supplier.tenant_id,
           product_id: product.id,
@@ -781,9 +777,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           supplier_id: supplierId,
           variant_name: variantName,
           variant_key: normalizeMatch(variantName),
-          // Custo zero/não informado ainda representa presença na lista.
-          // A reconciliação manterá a cor disponível e pendente de preço.
-          unit_cost: Number.isFinite(cost) && cost > 0 ? cost : 0,
+          unit_cost: cost,
           available: rawVariant.available !== false,
           source_archive_id: sourceArchiveId || null,
           source: 'supplier_list',
@@ -791,15 +785,6 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
         }, { onConflict: 'supplier_id,product_id,variant_key' });
       }
     };
-
-    // A lista nova é a fotografia atual do fornecedor. Ofertas antigas não
-    // são apagadas, mas ficam indisponíveis até serem reencontradas.
-    await admin.from('supplier_variant_offers')
-      .update({ available: false, updated_at: new Date().toISOString() })
-      .eq('supplier_id', supplierId);
-    await admin.from('supplier_product_prices')
-      .update({ available: false, updated_at: new Date().toISOString() })
-      .eq('supplier_id', supplierId);
 
     if (!merge) {
       await admin.from("supplier_product_prices").delete().eq("supplier_id", supplierId);
@@ -809,7 +794,6 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
         const cost = Number(it.cost_price ?? it.cost ?? it.custo ?? NaN);
         const resale = Number(it.resale_price ?? it.resale ?? it.venda_sugerida ?? it.price ?? it.unit_price ?? it.preco ?? NaN);
         const price = priceType === 'resale' ? (Number.isFinite(resale) && resale > 0 ? resale : cost) : (Number.isFinite(cost) && cost > 0 ? cost : resale);
-        await saveVariantOffers(it, name);
         if (!name || !Number.isFinite(price) || price <= 0) {
           skipped++;
           continue;
@@ -824,6 +808,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
           metadata: { profit_margin: profitMargin, shipping_fee: shippingFee, resale_price: Number.isFinite(resale) && resale > 0 ? resale : null, category: it.category ?? it.categoria ?? null, variants: Array.isArray(it.variants) ? it.variants : [] }
         });
         if (priceError) skipped++;
+        await saveVariantOffers(it, name);
       }
       const { data: reconciliation, error: reconciliationError } = await admin
         .rpc('reconcile_supplier_catalog', { p_supplier_id: supplierId });
@@ -841,7 +826,6 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
       const cost = Number(it.cost_price ?? it.cost ?? it.custo ?? NaN);
       const resale = Number(it.resale_price ?? it.resale ?? it.venda_sugerida ?? it.price ?? it.unit_price ?? it.preco ?? NaN);
       const price = priceType === 'resale' ? (Number.isFinite(resale) && resale > 0 ? resale : cost) : (Number.isFinite(cost) && cost > 0 ? cost : resale);
-      await saveVariantOffers(it, name);
       if (!name || !Number.isFinite(price) || price <= 0) {
         skipped++;
         continue;
@@ -859,6 +843,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
         console.error("[import-supplier-catalog] upsert erro:", error);
         skipped++;
       }
+      await saveVariantOffers(it, name);
     }
 
     const { data: reconciliation, error: reconciliationError } = await admin

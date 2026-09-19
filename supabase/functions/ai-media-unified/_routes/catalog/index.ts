@@ -33,6 +33,7 @@ function productMatchKey(value: string | null | undefined): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
   return normalized.split(/\s+/).filter(Boolean).sort().join(' ');
@@ -51,7 +52,6 @@ function variantMatchKey(value: string | null | undefined): string {
     green: 'verde', purple: 'roxo', violet: 'roxo', pink: 'rosa',
     gold: 'dourado', golden: 'dourado', silver: 'prata', gray: 'cinza',
     grey: 'cinza', yellow: 'amarelo', orange: 'laranja', brown: 'marrom',
-    sage: 'verde',
     beige: 'bege', navy: 'azul marinho', midnight: 'meia noite',
     graphite: 'grafite', titanium: 'titanio', natural: 'natural',
   };
@@ -251,10 +251,8 @@ Regras:
 3. Se cores, capacidades ou outras opções do mesmo modelo tiverem preços diferentes, use como \"price\" o menor preço explícito e retorne cada opção em \"variants\": [{ \"name\": \"Preto\", \"price\": 1350, \"cost_price\": 1350, \"resale_price\": 0 }].
 4. Se todas as opções tiverem o mesmo preço, também pode retornar as opções, mas não crie diferença de preço. Nunca invente cor ou preço.
 5. Informe cost_price quando o catálogo der custo e resale_price quando der venda sugerida; use 0 quando ausente. Para cada variante, faça o mesmo.
-6. "variations" antigo pode ser mantido como complemento, mas "variants" deve conter as opções que têm preço próprio.
-7. Um produto/variação listado é available=true por presença, exceto quando o texto disser explicitamente "Falta", "esgotado", "indisponível" ou "fora de estoque". "Verificar disponibilidade" continua available=true e deve gerar warning.
-8. Preserve TODAS as linhas de produto/variação, inclusive as marcadas "Falta" e as que têm preço vazio. Nunca omita um item só porque não tem preço; use cost_price: 0 e resale_price: 0 nesses casos.
-9. REGRA OBRIGATÓRIA: ignore completamente qualquer seção, produto ou variação identificada como Grade A, Grade-A, Grade A+, Grade A Premium ou A Grade. Nunca retorne esses itens, mesmo que tenham preço.`;
+6. \"variations\" antigo pode ser mantido como complemento, mas \"variants\" deve conter as opções que têm preço próprio.
+7. REGRA OBRIGATÓRIA: ignore completamente qualquer seção, produto ou variação identificada como Grade A, Grade-A, Grade A+, Grade A Premium ou A Grade. Nunca retorne esses itens, mesmo que tenham preço.`;
 
     let items: CatalogItem[] = [];
     let warnings: string[] = [];
@@ -317,17 +315,6 @@ Regras:
       list.push(variant);
       variantsByProduct.set(variant.product_id, list);
     }
-
-    // Cada importação representa o estado atual deste fornecedor. Marque as
-    // ofertas anteriores como ausentes antes de registrar a lista nova. Elas
-    // permanecem para histórico, mas não podem continuar vencendo a
-    // reconciliação depois que uma cor/produto sair da lista.
-    await admin.from('supplier_variant_offers')
-      .update({ available: false, updated_at: new Date().toISOString() })
-      .eq('supplier_id', targetSupplierId);
-    await admin.from('supplier_product_prices')
-      .update({ available: false, updated_at: new Date().toISOString() })
-      .eq('supplier_id', targetSupplierId);
 
     const results = [];
     for (const it of items) {
@@ -409,16 +396,17 @@ Regras:
         skipped++;
       } else {
         matchedProducts.push(String(catalogProduct.name));
-        // A lista controla a presença, mas nunca apaga o cadastro oficial.
-        // Variações existentes que não vieram permanecem no sistema e são
-        // marcadas como esgotadas pela reconciliação.
+        // Se a linha informa cores, ela substitui exatamente as variações
+        // atuais. Assim, cores que saíram do fornecedor deixam de aparecer.
         if (variants.length > 0) {
           const current = variantsByProduct.get(catalogProduct.id) || [];
+          const incomingNames = new Set<string>();
           for (let i = 0; i < variants.length; i++) {
             const incoming: any = variants[i];
             const variantName = String(incoming.name || '').trim();
             if (!variantName) continue;
             const variantKey = variantMatchKey(variantName);
+            incomingNames.add(variantKey);
             const variantCost = positiveNumber(incoming.cost_price) || effectiveCost || positiveNumber(incoming.price);
             const old = current.find((v: any) => variantMatchKey(v.name) === variantKey);
             const row = {
@@ -459,6 +447,10 @@ Regras:
               }, { onConflict: 'supplier_id,product_id,variant_key' });
             }
           }
+          const staleIds = current
+            .filter((v: any) => !incomingNames.has(variantMatchKey(v.name)))
+            .map((v: any) => v.id);
+          if (staleIds.length) await admin.from('product_variants').delete().in('id', staleIds);
         }
         if (marginAlert) results.push({ name: it.name, alert: marginAlert });
       }
