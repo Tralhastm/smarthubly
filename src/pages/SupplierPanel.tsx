@@ -625,6 +625,7 @@ const SupplierPanel = () => {
 
   const normalizeProductName = (value: string) => value.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/^\s*\d+\s*[.)-]\s*/, '')
+    .replace(/[\u{1F000}-\u{1FAFF}\u2600-\u27BF]/gu, ' ')
     .replace(/[|*_]/g, ' ')
     .replace(/\s+/g, ' ');
   const normalizeSupplierProductName = (value: string) => normalizeProductName(value)
@@ -903,7 +904,7 @@ const SupplierPanel = () => {
         if (/^apple\s+iphone\b/i.test(product.name)) addProductKey(product.name.replace(/^apple\s+/i, ''), product);
       });
 
-      const grouped = new Map<string, { product_id: string; product_name: string; cost: number; variants: Map<string, { name: string; key: string; available: boolean }> }>();
+      const grouped = new Map<string, { product_id: string; product_name: string; cost: number | null; variants: Map<string, { name: string; key: string; cost: number; available: boolean }> }>();
       for (const entry of entries) {
         const candidates = [...new Set(entry.aliases.flatMap(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung')) || []))];
         if (candidates.length === 0) { notFound.push(entry.name); continue; }
@@ -918,10 +919,18 @@ const SupplierPanel = () => {
         const product = candidates[0];
         let group = grouped.get(product.id);
         if (!group) {
-          group = { product_id: product.id, product_name: product.name, cost: Number(entry.cost), variants: new Map() };
+          group = { product_id: product.id, product_name: product.name, cost: entry.colors.length ? null : Number(entry.cost), variants: new Map() };
           grouped.set(product.id, group);
-        } else if (group.cost !== Number(entry.cost)) {
-          invalid.push(`${entry.name} (dois custos diferentes para o mesmo produto no mesmo lote)`);
+        } else if (entry.colors.length === 0) {
+          if (group.variants.size > 0 || group.cost !== Number(entry.cost)) {
+            invalid.push(`${entry.name} (custo de produto misturado ou divergente no mesmo lote)`);
+          }
+          continue;
+        } else if (group.variants.size === 0 && group.cost != null) {
+          invalid.push(`${entry.name} (produto sem cor misturado com variações no mesmo lote)`);
+          continue;
+        } else if (group.cost != null && group.cost !== Number(entry.cost)) {
+          invalid.push(`${entry.name} (custos diferentes entre variações do mesmo produto)`);
           continue;
         }
         for (const color of entry.colors) {
@@ -929,10 +938,11 @@ const SupplierPanel = () => {
           if (!key) { invalid.push(`${entry.name} (cor inválida: ${color})`); continue; }
           const available = !entry.unavailableColors.some(item => item === '__all__' || variantMatchKey(item) === key);
           const previous = group.variants.get(key);
-          if (previous && (previous.name !== color || previous.available !== available)) {
+          if (previous && (previous.available !== available || previous.cost !== Number(entry.cost))) {
             invalid.push(`${entry.name} (variação ambígua ou repetida: ${color})`);
           } else {
-            group.variants.set(key, { name: color, key, available });
+            group.variants.set(key, { name: previous?.name || color, key, cost: Number(entry.cost), available });
+            group.cost = group.cost ?? Number(entry.cost);
           }
         }
       }
