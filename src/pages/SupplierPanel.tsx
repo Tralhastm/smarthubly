@@ -769,7 +769,7 @@ const SupplierPanel = () => {
         nextUnavailable = false;
         continue;
       }
-      const availabilityMarker = /\b(?:falta|verificar\s+disponibilidade|indispon[ií]vel)\b/gi;
+      const availabilityMarker = /\b(?:falta|verificar\s+disponibilidade|conferir\s+disponibilidade|indispon[ií]vel)\b/gi;
       const hasAvailabilityMarker = availabilityMarker.test(line);
       if (hasAvailabilityMarker) line = line.replace(availabilityMarker, ' ').replace(/\s+/g, ' ').trim();
       if (!line) {
