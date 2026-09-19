@@ -643,15 +643,15 @@ const SupplierPanel = () => {
     .replace(/\s+/g, ' ')
     .trim();
   const variantMatchKey = (value: string) => {
-    const aliases: Record<string, string> = { black: 'preto', white: 'branco', blue: 'azul', green: 'verde', purple: 'roxo', violet: 'roxo', pink: 'rosa', gold: 'dourado', silver: 'prata', gray: 'cinza', grey: 'cinza', orange: 'laranja', brown: 'marrom', titanium: 'titanio' };
+    const aliases: Record<string, string> = { black: 'preto', white: 'branco', blue: 'azul', green: 'verde', purple: 'roxo', violet: 'roxo', pink: 'rosa', gold: 'dourado', silver: 'prata', gray: 'cinza', grey: 'cinza', orange: 'laranja', yellow: 'amarelo', brown: 'marrom', titanium: 'titanio' };
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
       .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).map(token => aliases[token] || token).filter(Boolean).sort().join(' ');
   };
   const extractColors = (value: string) => {
-    const colorPattern = /\b(azul\s+(?:escuro|claro|marinho)|verde\s+(?:escuro|claro)|vermelho\s+(?:escuro|claro)|sky\s+blue|space\s+gray|preto|preta|azul|verde|laranja|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|iron\s*man|ironman|black|white|blue|green|pink|silver|orange|sage|midnight|starlight|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
+    const colorPattern = /\b(azul\s+(?:escuro|claro|marinho)|verde\s+(?:escuro|claro)|vermelho\s+(?:escuro|claro)|sky\s+blue|space\s+gray|preto|preta|azul|verde|laranja|amarelo|amarela|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|iron\s*man|ironman|black|white|blue|green|yellow|pink|silver|orange|sage|midnight|starlight|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
     const colorAliases: Record<string, string> = {
       black: 'Preto', blue: 'Azul', green: 'Verde', pink: 'Rosa', silver: 'Prata',
-      orange: 'Laranja', midnight: 'Preto', 'space gray': 'Cinza',
+      orange: 'Laranja', yellow: 'Amarelo', midnight: 'Preto', 'space gray': 'Cinza',
       grey: 'Cinza', gray: 'Cinza', purple: 'Roxo', violet: 'Violeta',
       brown: 'Marrom', red: 'Vermelho', gold: 'Dourado', white: 'Branco',
       'azul escuro': 'Azul-escuro', 'azul claro': 'Azul-claro',
