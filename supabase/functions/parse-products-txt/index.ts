@@ -35,7 +35,7 @@ const COLOR_WORDS = new Set([
 
 const COLOR_ALIASES: Record<string, string> = {
   blue: "Azul", pink: "Rosa", black: "Preto", white: "Branco", purple: "Roxo",
-  orange: "Laranja", sage: "Sálvia", green: "Verde", yellow: "Amarelo",
+  orange: "Laranja", sage: "Sage", green: "Verde", yellow: "Amarelo",
   silver: "Prata", golden: "Dourado", gold: "Dourado", starlight: "Starlight",
   midnight: "Midnight", "space gray": "Space Gray", "sky blue": "Azul",
   citrus: "Cítrus", indigo: "Índigo",
@@ -95,7 +95,7 @@ function extractColors(raw: string): string[] {
   return [...new Set([...emojiColors, ...colors])];
 }
 
-function parseCatalog(text: string): Product[] {
+export function parseCatalog(text: string): Product[] {
   const grouped = new Map<string, Product>();
   let section = "Geral";
   let condition: ProductCondition = "new";

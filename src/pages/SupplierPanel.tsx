@@ -873,135 +873,97 @@ const SupplierPanel = () => {
     if (!supplier || importingPrices) return;
     const entries = parseImportedEntries(priceText);
     if (entries.length === 0) {
-      toast.error('Nenhuma linha válida encontrada. Use: produto - CUSTO: R$ 990,00 - REVENDA: R$ 1.199,00 - cores');
+      toast.error('Nenhuma linha válida encontrada. Use: produto - CUSTO: R$ 990,00 - cores');
       return;
     }
     setImportingPrices(true);
-    const { data: archivedList, error: archiveError } = await (supabase as any).rpc('archive_supplier_catalog', {
-      p_tenant_id: supplier.tenant_id,
-      p_supplier_name: supplier.name,
-      p_file_name: `painel-fornecedor-${supplier.name}`,
-      p_content: priceText,
-    });
-    if (archiveError) console.warn('[supplier-panel] não foi possível arquivar a lista:', archiveError);
-    const byName = new Map<string, Product>();
-    products.forEach(product => {
-      const keys = [product.name, product.name.replace(/\s*\([^)]*\)\s*$/g, '')];
-      if (/^iphone\b/i.test(product.name)) keys.push(product.name.replace(/^iphone\s+/i, ''));
-      if (/^apple\s+iphone\b/i.test(product.name)) keys.push(product.name.replace(/^apple\s+/i, ''));
-      keys.forEach(key => byName.set(normalizeSupplierProductName(key).replace(/\bsansung\b/g, 'samsung'), product));
-    });
     const updated: string[] = [];
     const notFound: string[] = [];
     const invalid: string[] = [];
     const warnings: string[] = [];
-    const incomingByProduct = new Map<string, Set<string>>();
-    const incomingProductIds = new Set<string>();
-    const incomingProductNames = new Set<string>();
     try {
+      // Uma chave pode ter aliases, mas nunca pode apontar silenciosamente para
+      // dois produtos. Ambiguidade bloqueia o lote inteiro para evitar custo no item errado.
+      const byName = new Map<string, Product[]>();
+      const addProductKey = (key: string, product: Product) => {
+        const normalized = normalizeSupplierProductName(key).replace(/\bsansung\b/g, 'samsung');
+        if (!normalized) return;
+        const list = byName.get(normalized) || [];
+        if (!list.some(item => item.id === product.id)) list.push(product);
+        byName.set(normalized, list);
+      };
+      products.forEach(product => {
+        addProductKey(product.name, product);
+        addProductKey(product.name.replace(/\s*\([^)]*\)\s*$/g, ''), product);
+        if (/^iphone\b/i.test(product.name)) addProductKey(product.name.replace(/^iphone\s+/i, ''), product);
+        if (/^apple\s+iphone\b/i.test(product.name)) addProductKey(product.name.replace(/^apple\s+/i, ''), product);
+      });
+
+      const grouped = new Map<string, { product_id: string; product_name: string; cost: number; variants: Map<string, { name: string; key: string; available: boolean }> }>();
       for (const entry of entries) {
-        const product = entry.aliases.map(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung'))).find(Boolean);
-        if (!product) { notFound.push(entry.name); continue; }
-        incomingProductIds.add(product.id);
-        incomingProductNames.add(product.name.toLowerCase().trim());
-        const patch: Record<string, any> = {};
-        // Lista de fornecedor informa exclusivamente custo. Revenda manual da
-        // loja nunca é alterada por este painel, mesmo se a lista tiver uma
-        // coluna chamada REVENDA ou o modo antigo estiver selecionado.
-        // A lista do fornecedor informa somente custo. O preço de revenda
-        // aprovado pela loja não pode ser substituído durante a sincronização.
-        if (Object.keys(patch).length === 0 && entry.colors.length === 0 && entry.cost == null) {
-          const expected = priceUpdateMode === 'color' ? 'CUSTO por cor' : priceUpdateMode === 'cost' ? 'CUSTO' : priceUpdateMode === 'resale' ? 'REVENDA' : 'CUSTO ou REVENDA';
-          invalid.push(`${entry.name} (não contém ${expected})`);
+        const candidates = [...new Set(entry.aliases.flatMap(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung')) || []))];
+        if (candidates.length === 0) { notFound.push(entry.name); continue; }
+        if (candidates.length > 1) {
+          invalid.push(`${entry.name} (correspondência ambígua: ${candidates.map(item => item.name).join(' / ')})`);
           continue;
         }
-        if (Object.keys(patch).length > 0) {
-          // O produto não fica preso ao fornecedor que recebeu esta lista.
-          // Cada fornecedor atualiza sua própria oferta; a reconciliação global
-          // escolhe depois o menor custo vigente entre todos os fornecedores.
-          const { error } = await supabase.from('products').update(patch).eq('id', product.id);
-          if (error) { invalid.push(`${entry.name} (${error.message})`); continue; }
+        if (entry.cost == null || Number(entry.cost) <= 0) {
+          invalid.push(`${entry.name} (custo ausente ou inválido)`);
+          continue;
         }
-        // Cada cor é uma oferta independente. Nunca apagamos a variante de
-        // outro fornecedor; apenas atualizamos/criamos a oferta deste fornecedor.
-        {
-          const { data: existingVariants, error: variantsReadError } = await (supabase as any).from('product_variants').select('id, name').eq('product_id', product.id).limit(100);
-          if (variantsReadError) {
-            warnings.push(`${entry.name} (cores não atualizadas: ${variantsReadError.message})`);
+        const product = candidates[0];
+        let group = grouped.get(product.id);
+        if (!group) {
+          group = { product_id: product.id, product_name: product.name, cost: Number(entry.cost), variants: new Map() };
+          grouped.set(product.id, group);
+        } else if (group.cost !== Number(entry.cost)) {
+          invalid.push(`${entry.name} (dois custos diferentes para o mesmo produto no mesmo lote)`);
+          continue;
+        }
+        for (const color of entry.colors) {
+          const key = variantMatchKey(color);
+          if (!key) { invalid.push(`${entry.name} (cor inválida: ${color})`); continue; }
+          const available = !entry.unavailableColors.some(item => item === '__all__' || variantMatchKey(item) === key);
+          const previous = group.variants.get(key);
+          if (previous && (previous.name !== color || previous.available !== available)) {
+            invalid.push(`${entry.name} (variação ambígua ou repetida: ${color})`);
           } else {
-            const incomingNames = new Set<string>();
-            for (const color of entry.colors) {
-              const normalizedColor = variantMatchKey(color);
-              const unavailable = entry.unavailableColors.some(c => variantMatchKey(c) === normalizedColor);
-              incomingNames.add(normalizedColor);
-              const old = (existingVariants || []).find((variant: any) => variantMatchKey(String(variant.name).replace(/^cor\s*:\s*/i, '')) === normalizedColor);
-              const variantPatch: Record<string, any> = { in_stock: !unavailable };
-              const { error: variantError } = old
-                ? await (supabase as any).from('product_variants').update(variantPatch).eq('id', old.id)
-                : await (supabase as any).from('product_variants').insert({ product_id: product.id, tenant_id: supplier.tenant_id, name: color, price_delta: 0, suggested_price: null, needs_price_review: true, in_stock: !unavailable, sort_order: entry.colors.indexOf(color) });
-              if (variantError) warnings.push(`${entry.name} (cor ${color} não atualizada: ${variantError.message})`);
-              const variant = old || (await (supabase as any).from('product_variants').select('id').eq('product_id', product.id).eq('name', color).limit(1).maybeSingle()).data;
-              if (variant?.id && entry.cost != null && Number(entry.cost) > 0) {
-                const { error: offerError } = await (supabase as any).rpc('upsert_supplier_variant_offer_by_token', {
-                  _token: token,
-                  _product_id: product.id,
-                  _product_variant_id: variant.id,
-                  _variant_name: color,
-                  _variant_key: normalizedColor,
-                  _unit_cost: Number(entry.cost),
-                  _available: !unavailable,
-                  _source: 'supplier_panel',
-                });
-                if (offerError) warnings.push(`${entry.name} (oferta da cor ${color} não atualizada: ${offerError.message})`);
-                else {
-                  await (supabase as any).from('supplier_variant_offers').update({
-                    source_archive_id: archivedList || null,
-                    match_confidence: 0.95,
-                    match_reason: 'produto_e_cor_reconhecidos_no_painel',
-                  }).eq('supplier_id', supplier.id).eq('product_id', product.id).eq('variant_key', normalizedColor);
-                }
-              }
-            }
-            const allIncoming = incomingByProduct.get(product.id) || new Set<string>();
-            incomingNames.forEach(name => allIncoming.add(name));
-            incomingByProduct.set(product.id, allIncoming);
+            group.variants.set(key, { name: color, key, available });
           }
         }
-        if (entry.cost != null && Number(entry.cost) > 0 && priceUpdateMode !== 'color') {
-          const { error: productOfferError } = await (supabase as any).rpc('upsert_supplier_product_price_by_token', {
-            _token: token,
-            _product_name: product.name,
-            _unit_price: Number(entry.cost),
-            _source_archive_id: archivedList || null,
-          });
-          if (productOfferError) warnings.push(`${entry.name} (preço do produto não atualizado: ${productOfferError.message})`);
-        }
-        updated.push(entry.name);
-        Object.assign(product, patch);
       }
-      const { error: snapshotError } = await (supabase as any).rpc('sync_supplier_catalog_snapshot_by_token', {
+
+      if (invalid.length > 0) {
+        setImportResult({ updated: [], notFound, invalid, warnings: ['Importação bloqueada: nenhum dado foi alterado porque o lote contém ambiguidade ou custo inválido.'] });
+        toast.error('Importação bloqueada por inconsistências; nada foi alterado');
+        return;
+      }
+      const payload = [...grouped.values()].map(group => ({
+        product_id: group.product_id,
+        product_name: group.product_name,
+        cost: group.cost,
+        variants: [...group.variants.values()],
+      }));
+      if (payload.length === 0) {
+        setImportResult({ updated: [], notFound, invalid: ['Nenhum produto da lista corresponde ao catálogo'], warnings: [] });
+        toast.error('Nenhum produto do lote corresponde ao catálogo');
+        return;
+      }
+
+      const { data, error } = await (supabase as any).rpc('import_supplier_catalog_atomic', {
         _token: token,
-        _product_ids: [...incomingProductIds],
-        _product_names: [...incomingProductNames],
+        _content: priceText,
+        _entries: payload,
       });
-      if (snapshotError) warnings.push(`Snapshot não sincronizado: ${snapshotError.message}`);
-      for (const [productId, incomingKeys] of incomingByProduct) {
-        const { error: staleError } = await (supabase as any).rpc('hide_stale_supplier_variant_offers_by_token', {
-          _token: token,
-          _product_id: productId,
-          _incoming_keys: [...incomingKeys],
-        });
-        if (staleError) {
-          warnings.push(`Produto ${productId} (cores ausentes não ocultadas: ${staleError.message})`);
-        }
+      if (error) {
+        setImportResult({ updated: [], notFound, invalid: [error.message], warnings: ['Importação atômica revertida; o banco permaneceu no snapshot anterior.'] });
+        toast.error('Importação revertida: nenhuma alteração parcial foi aplicada');
+        return;
       }
-      const { error: reconcileError } = await (supabase as any).rpc('reconcile_supplier_catalog', { p_supplier_id: supplier.id });
-      if (reconcileError) warnings.push(`Reconciliação não executada: ${reconcileError.message}`);
+      updated.push(...payload.map(item => item.product_name));
       await fetchProducts();
-      setProducts([...products]);
-      setImportResult({ updated, notFound, invalid, warnings });
-      if (updated.length) toast.success(`${updated.length} produto(s) atualizado(s)`);
-      if (!updated.length) toast.error('Nenhum produto foi atualizado');
+      setImportResult({ updated, notFound, invalid: [], warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [] });
+      toast.success(`Importação concluída com segurança: ${updated.length} produto(s)`);
     } finally {
       setImportingPrices(false);
     }
