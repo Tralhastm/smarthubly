@@ -752,7 +752,7 @@ const SupplierPanel = () => {
       line = line.replace(/R\$\s*R\$/gi, 'R$');
       if (!line) continue;
       if (/edi[cç][aã]o\s+especial\s+iron\s*man/i.test(line)) {
-        nextSpecialVariant = 'IronMan';
+        nextSpecialVariant = 'Preto (Edição Especial IronMan)';
         continue;
       }
       if (/^\*?\s*crit[eé]rio\s*:/i.test(line)) continue;
