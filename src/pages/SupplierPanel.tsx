@@ -721,6 +721,7 @@ const SupplierPanel = () => {
   const parseImportedEntries = (text: string) => {
     const entries: { name: string; cost: number | null; resale: number | null; colors: string[]; unavailableColors: string[]; aliases: string[] }[] = [];
     let brand = '';
+    let nextSpecialVariant = '';
     let nextUnavailable = false;
     let current: { name: string; cost: number | null; resale: number | null; colors: string[]; unavailableColors: string[]; generic: number | null } | null = null;
     const flush = () => {
@@ -750,6 +751,10 @@ const SupplierPanel = () => {
       let line = rawLine.trim().replace(/\*/g, '').trim();
       line = line.replace(/R\$\s*R\$/gi, 'R$');
       if (!line) continue;
+      if (/edi[cç][aã]o\s+especial\s+iron\s*man/i.test(line)) {
+        nextSpecialVariant = 'IronMan';
+        continue;
+      }
       if (/^\*?\s*crit[eé]rio\s*:/i.test(line)) continue;
       const emojiOnly = line.replace(/[\s*🔵💙⚫️🖤🩷💗🟣💜⚪️🤍🟢💚🟠🧡🩶🩵🌕🟡]/gu, '') === '' && /[🔵💙⚫️🖤🩷💗🟣💜⚪️🤍🟢💚🟠🧡🩶🩵🌕🟡]/u.test(line);
       if (emojiOnly) {
@@ -798,8 +803,10 @@ const SupplierPanel = () => {
         flush();
         if (name && vendorCost != null) {
           const colors = extractColors(remainder);
+          if (!colors.length && nextSpecialVariant) colors.push(nextSpecialVariant);
           entries.push({ name, cost: vendorCost, resale: vendorResale, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], aliases });
           nextUnavailable = false;
+          nextSpecialVariant = '';
         }
         continue;
       }
