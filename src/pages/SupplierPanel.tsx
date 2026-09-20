@@ -90,7 +90,7 @@ const SupplierPanel = () => {
   const [priceText, setPriceText] = useState('');
   const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both' | 'color'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
-  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[]; available: number; exhausted: number } | null>(null);
   const [exportIncludeCost, setExportIncludeCost] = useState(false);
   const [exportIncludeCommission, setExportIncludeCommission] = useState(false);
   const [tenant, setTenant] = useState<any>(null);
@@ -648,12 +648,12 @@ const SupplierPanel = () => {
       .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).map(token => aliases[token] || token).filter(Boolean).sort().join(' ');
   };
   const extractColors = (value: string) => {
-    const colorPattern = /\b(azul\s+(?:escuro|claro|marinho)|verde\s+(?:escuro|claro)|vermelho\s+(?:escuro|claro)|sky\s+blue|space\s+gray|preto|preta|azul|verde|laranja|amarelo|amarela|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|titanium|grafite|gold|iron\s*man|ironman|black|white|blue|green|yellow|pink|silver|orange|sage|midnight|starlight|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
+    const colorPattern = /\b(azul\s+(?:escuro|claro|marinho)|verde\s+(?:escuro|claro)|vermelho\s+(?:escuro|claro)|sky\s+blue|space\s+gray|preto|preta|azul|verde|laranja|amarelo|amarela|roxo|rosa|cinza|branco|branca|dourado|dourada|prata|marrom|vermelho|vermelha|violeta|titanium|grafite|gold|iron\s*man|ironman|black|white|blue|green|yellow|pink|silver|orange|sage|midnight|starlight|grey|gray|purple|violet|brown|red|camuflada)\b/giu;
     const colorAliases: Record<string, string> = {
       black: 'Preto', blue: 'Azul', green: 'Verde', pink: 'Rosa', silver: 'Prata',
       orange: 'Laranja', yellow: 'Amarelo', midnight: 'Preto', 'space gray': 'Cinza',
       grey: 'Cinza', gray: 'Cinza', purple: 'Roxo', violet: 'Violeta',
-      brown: 'Marrom', red: 'Vermelho', gold: 'Dourado', white: 'Branco',
+      brown: 'Marrom', red: 'Vermelho', gold: 'Dourado', white: 'Branco', violeta: 'Violeta',
       'azul escuro': 'Azul-escuro', 'azul claro': 'Azul-claro',
       'azul marinho': 'Azul-marinho', 'verde escuro': 'Verde-escuro',
       'verde claro': 'Verde-claro', 'vermelho escuro': 'Vermelho-escuro',
@@ -922,7 +922,7 @@ const SupplierPanel = () => {
         if (/^apple\s+iphone\b/i.test(product.name)) addProductKey(product.name.replace(/^apple\s+/i, ''), product);
       });
 
-      const grouped = new Map<string, { product_id: string; product_name: string; cost: number | null; variants: Map<string, { name: string; key: string; cost: number; available: boolean }> }>();
+      const grouped = new Map<string, { product_id: string; product_name: string; cost: number | null; productAvailable: boolean; variants: Map<string, { name: string; key: string; cost: number; available: boolean }> }>();
       for (const entry of entries) {
         const candidates = [...new Set(entry.aliases.flatMap(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung')) || []))];
         if (candidates.length === 0) { notFound.push(entry.name); continue; }
@@ -937,7 +937,7 @@ const SupplierPanel = () => {
         const product = candidates[0];
         let group = grouped.get(product.id);
         if (!group) {
-          group = { product_id: product.id, product_name: product.name, cost: entry.colors.length ? null : Number(entry.cost), variants: new Map() };
+          group = { product_id: product.id, product_name: product.name, cost: entry.colors.length ? null : Number(entry.cost), productAvailable: !entry.unavailableColors.includes('__all__'), variants: new Map() };
           grouped.set(product.id, group);
         } else if (entry.colors.length === 0) {
           if (group.variants.size > 0 || group.cost !== Number(entry.cost)) {
@@ -962,7 +962,7 @@ const SupplierPanel = () => {
       }
 
       if (invalid.length > 0) {
-        setImportResult({ updated: [], notFound, invalid, warnings: ['Importação bloqueada: nenhum dado foi alterado porque o lote contém ambiguidade ou custo inválido.'] });
+        setImportResult({ updated: [], notFound, invalid, warnings: ['Importação bloqueada: nenhum dado foi alterado porque o lote contém ambiguidade ou custo inválido.'], available: 0, exhausted: 0 });
         toast.error('Importação bloqueada por inconsistências; nada foi alterado');
         return;
       }
@@ -970,10 +970,11 @@ const SupplierPanel = () => {
         product_id: group.product_id,
         product_name: group.product_name,
         cost: group.cost,
+        available: group.productAvailable,
         variants: [...group.variants.values()],
       }));
       if (payload.length === 0) {
-        setImportResult({ updated: [], notFound, invalid: ['Nenhum produto da lista corresponde ao catálogo'], warnings: [] });
+        setImportResult({ updated: [], notFound, invalid: ['Nenhum produto da lista corresponde ao catálogo'], warnings: [], available: 0, exhausted: 0 });
         toast.error('Nenhum produto do lote corresponde ao catálogo');
         return;
       }
@@ -984,14 +985,16 @@ const SupplierPanel = () => {
         _entries: payload,
       });
       if (error) {
-        setImportResult({ updated: [], notFound, invalid: [error.message], warnings: ['Importação atômica revertida; o banco permaneceu no snapshot anterior.'] });
+        setImportResult({ updated: [], notFound, invalid: [error.message], warnings: ['Importação atômica revertida; o banco permaneceu no snapshot anterior.'], available: 0, exhausted: 0 });
         toast.error('Importação revertida: nenhuma alteração parcial foi aplicada');
         return;
       }
       updated.push(...payload.map(item => item.product_name));
+      const available = payload.filter(item => item.variants.length > 0 ? item.variants.some(variant => variant.available) : item.available !== false).length;
+      const exhausted = payload.length - available;
       await fetchProducts();
-      setImportResult({ updated, notFound, invalid: [], warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [] });
-      toast.success(`Importação concluída com segurança: ${updated.length} produto(s)`);
+      setImportResult({ updated, notFound, invalid: [], warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [], available, exhausted });
+      toast.success(`Importação concluída: ${updated.length} atualizados, ${available} disponíveis e ${exhausted} esgotados`);
     } finally {
       setImportingPrices(false);
     }
@@ -1444,7 +1447,7 @@ const SupplierPanel = () => {
             </div>
             {importResult && (
               <div className="rounded-lg border border-border bg-card p-4 space-y-2 text-sm">
-                <p className="font-semibold text-foreground">Resultado: {importResult.updated.length} atualizado(s), {importResult.notFound.length} não encontrado(s).</p>
+                <p className="font-semibold text-foreground">Resultado: {importResult.updated.length} atualizado(s), {importResult.available} disponível(is), {importResult.exhausted} esgotado(s) e {importResult.notFound.length} ignorado(s).</p>
                 {importResult.updated.length > 0 && <p className="text-xs text-green-400">Atualizados: {importResult.updated.join(', ')}</p>}
                 {importResult.notFound.length > 0 && <p className="text-xs text-yellow-400">Não encontrados: {importResult.notFound.join(', ')}</p>}
                 {importResult.invalid.length > 0 && <p className="text-xs text-red-400">Com erro: {importResult.invalid.join(', ')}</p>}
