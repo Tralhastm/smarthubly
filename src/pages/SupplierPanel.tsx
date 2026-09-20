@@ -90,7 +90,7 @@ const SupplierPanel = () => {
   const [priceText, setPriceText] = useState('');
   const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both' | 'color'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
-  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[]; available: number; exhausted: number } | null>(null);
   const [exportIncludeCost, setExportIncludeCost] = useState(false);
   const [exportIncludeCommission, setExportIncludeCommission] = useState(false);
   const [tenant, setTenant] = useState<any>(null);
@@ -962,7 +962,7 @@ const SupplierPanel = () => {
       }
 
       if (invalid.length > 0) {
-        setImportResult({ updated: [], notFound, invalid, warnings: ['Importação bloqueada: nenhum dado foi alterado porque o lote contém ambiguidade ou custo inválido.'] });
+        setImportResult({ updated: [], notFound, invalid, warnings: ['Importação bloqueada: nenhum dado foi alterado porque o lote contém ambiguidade ou custo inválido.'], available: 0, exhausted: 0 });
         toast.error('Importação bloqueada por inconsistências; nada foi alterado');
         return;
       }
@@ -973,7 +973,7 @@ const SupplierPanel = () => {
         variants: [...group.variants.values()],
       }));
       if (payload.length === 0) {
-        setImportResult({ updated: [], notFound, invalid: ['Nenhum produto da lista corresponde ao catálogo'], warnings: [] });
+        setImportResult({ updated: [], notFound, invalid: ['Nenhum produto da lista corresponde ao catálogo'], warnings: [], available: 0, exhausted: 0 });
         toast.error('Nenhum produto do lote corresponde ao catálogo');
         return;
       }
@@ -984,14 +984,16 @@ const SupplierPanel = () => {
         _entries: payload,
       });
       if (error) {
-        setImportResult({ updated: [], notFound, invalid: [error.message], warnings: ['Importação atômica revertida; o banco permaneceu no snapshot anterior.'] });
+        setImportResult({ updated: [], notFound, invalid: [error.message], warnings: ['Importação atômica revertida; o banco permaneceu no snapshot anterior.'], available: 0, exhausted: 0 });
         toast.error('Importação revertida: nenhuma alteração parcial foi aplicada');
         return;
       }
       updated.push(...payload.map(item => item.product_name));
+      const available = payload.filter(item => item.variants.length === 0 || item.variants.some(variant => variant.available)).length;
+      const exhausted = payload.length - available;
       await fetchProducts();
-      setImportResult({ updated, notFound, invalid: [], warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [] });
-      toast.success(`Importação concluída com segurança: ${updated.length} produto(s)`);
+      setImportResult({ updated, notFound, invalid: [], warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [], available, exhausted });
+      toast.success(`Importação concluída: ${updated.length} atualizados, ${available} disponíveis e ${exhausted} esgotados`);
     } finally {
       setImportingPrices(false);
     }
@@ -1444,7 +1446,7 @@ const SupplierPanel = () => {
             </div>
             {importResult && (
               <div className="rounded-lg border border-border bg-card p-4 space-y-2 text-sm">
-                <p className="font-semibold text-foreground">Resultado: {importResult.updated.length} atualizado(s), {importResult.notFound.length} não encontrado(s).</p>
+                <p className="font-semibold text-foreground">Resultado: {importResult.updated.length} atualizado(s), {importResult.available} disponível(is), {importResult.exhausted} esgotado(s) e {importResult.notFound.length} ignorado(s).</p>
                 {importResult.updated.length > 0 && <p className="text-xs text-green-400">Atualizados: {importResult.updated.join(', ')}</p>}
                 {importResult.notFound.length > 0 && <p className="text-xs text-yellow-400">Não encontrados: {importResult.notFound.join(', ')}</p>}
                 {importResult.invalid.length > 0 && <p className="text-xs text-red-400">Com erro: {importResult.invalid.join(', ')}</p>}
