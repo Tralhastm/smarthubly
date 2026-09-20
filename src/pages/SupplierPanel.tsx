@@ -922,7 +922,7 @@ const SupplierPanel = () => {
         if (/^apple\s+iphone\b/i.test(product.name)) addProductKey(product.name.replace(/^apple\s+/i, ''), product);
       });
 
-      const grouped = new Map<string, { product_id: string; product_name: string; cost: number | null; variants: Map<string, { name: string; key: string; cost: number; available: boolean }> }>();
+      const grouped = new Map<string, { product_id: string; product_name: string; cost: number | null; productAvailable: boolean; variants: Map<string, { name: string; key: string; cost: number; available: boolean }> }>();
       for (const entry of entries) {
         const candidates = [...new Set(entry.aliases.flatMap(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung')) || []))];
         if (candidates.length === 0) { notFound.push(entry.name); continue; }
@@ -937,7 +937,7 @@ const SupplierPanel = () => {
         const product = candidates[0];
         let group = grouped.get(product.id);
         if (!group) {
-          group = { product_id: product.id, product_name: product.name, cost: entry.colors.length ? null : Number(entry.cost), variants: new Map() };
+          group = { product_id: product.id, product_name: product.name, cost: entry.colors.length ? null : Number(entry.cost), productAvailable: !entry.unavailableColors.includes('__all__'), variants: new Map() };
           grouped.set(product.id, group);
         } else if (entry.colors.length === 0) {
           if (group.variants.size > 0 || group.cost !== Number(entry.cost)) {
@@ -970,6 +970,7 @@ const SupplierPanel = () => {
         product_id: group.product_id,
         product_name: group.product_name,
         cost: group.cost,
+        available: group.productAvailable,
         variants: [...group.variants.values()],
       }));
       if (payload.length === 0) {
@@ -989,7 +990,7 @@ const SupplierPanel = () => {
         return;
       }
       updated.push(...payload.map(item => item.product_name));
-      const available = payload.filter(item => item.variants.length === 0 || item.variants.some(variant => variant.available)).length;
+      const available = payload.filter(item => item.variants.length > 0 ? item.variants.some(variant => variant.available) : item.available !== false).length;
       const exhausted = payload.length - available;
       await fetchProducts();
       setImportResult({ updated, notFound, invalid: [], warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [], available, exhausted });
