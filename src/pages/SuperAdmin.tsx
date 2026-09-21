@@ -26,6 +26,8 @@ import { useAuthReady } from '@/hooks/useAuthReady';
 
 type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'workers' | 'users' | 'health' | 'financial' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test' | 'whatsapp_bots';
 
+const ROLE_CHECK_TIMEOUT_MS = 8000;
+
 const SuperAdmin = () => {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
@@ -51,18 +53,29 @@ const SuperAdmin = () => {
   }, [theme]);
 
   const checkSuperAdmin = useCallback(async (userId?: string | null) => {
-    if (userId) {
-      const { data } = await supabase
+    try {
+      if (!userId) {
+        setIsSuperAdmin(false);
+        return;
+      }
+
+      const roleCheck = supabase
         .from('platform_roles')
         .select('role')
         .eq('user_id', userId)
         .eq('role', 'super_admin')
         .maybeSingle();
+      const timeout = new Promise<never>((_, reject) => {
+        window.setTimeout(() => reject(new Error('role check timeout')), ROLE_CHECK_TIMEOUT_MS);
+      });
+      const { data } = await Promise.race([roleCheck, timeout]);
       setIsSuperAdmin(!!data);
-    } else {
+    } catch {
+      // Falha de rede não pode deixar o painel preso em carregamento.
       setIsSuperAdmin(false);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
