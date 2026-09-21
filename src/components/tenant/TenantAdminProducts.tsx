@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct, type Product } from '@/hooks/useProducts';
 import type { ProductVariant } from '@/hooks/useProductExtras';
@@ -235,7 +236,11 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         priceDelta: variant.price_delta,
         variantCost: variant.cost_price,
       });
-      const cost = variant.cost_price == null ? null : Number(variant.cost_price);
+      // Variações esgotadas podem não ter uma oferta específica vigente. Nesse
+      // caso, usa o custo-base do produto para continuar calculando a comissão;
+      // nunca substitui um custo específico já salvo na variação.
+      const rawCost = variant.cost_price ?? (product as any).original_price;
+      const cost = rawCost == null ? null : Number(rawCost);
       // Supabase pode devolver flags booleanas como texto. Boolean('false') é
       // true em JavaScript e fazia a comissão aparecer como pendente mesmo
       // quando havia custo e preço de revenda válidos.
@@ -339,13 +344,13 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         : '<div class="no-image">Sem imagem</div>';
       const facts = [`<div><span>Preço de revenda</span><strong>${productPending ? 'Pendente' : escapeHtml(money(exportPrice))}</strong></div>`];
       if (includeCost) facts.push(`<div><span>Preço de custo</span><strong>${productCost == null ? 'Não definido' : escapeHtml(money(productCost))}</strong></div>`);
-      if (includeCommission) facts.push(`<div><span>Comissão do vendedor</span><strong>${productCommission == null ? 'Pendente' : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(productCommission))}`}</strong></div>`);
+      if (includeCommission) facts.push(`<div><span>Comissão do vendedor</span><strong>${productCommission == null ? (productCost == null ? 'Custo não definido' : 'Preço de revenda pendente') : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(productCommission))}`}</strong></div>`);
       const productFinancials = `<div class="facts">${facts.join('')}</div>`;
       const variantsMarkup = variants.length
         ? `<div class="variants"><h3>Variações</h3>${variants.map(variant => {
             const variantFacts = [`<span>Revenda: <b>${variant.pending ? 'Pendente' : escapeHtml(money(variant.sale))}</b></span>`];
             if (includeCost) variantFacts.unshift(`<span>Custo: <b>${variant.cost == null ? 'Não definido' : escapeHtml(money(variant.cost))}</b></span>`);
-            if (includeCommission) variantFacts.push(`<span>Comissão: <b>${variant.commission == null ? 'Pendente' : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(variant.commission))}`}</b></span>`);
+            if (includeCommission) variantFacts.push(`<span>Comissão: <b>${variant.commission == null ? (variant.cost == null ? 'Custo não definido' : 'Preço de revenda pendente') : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(variant.commission))}`}</b></span>`);
             return `<div class="variant"><div class="variant-name"><strong>${escapeHtml(variant.name)}</strong><span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div><div class="variant-facts">${variantFacts.join('')}</div></div>`;
           }).join('')}</div>` : '';
       const statusLabel = productInStock ? 'Disponível' : 'Indisponível';
@@ -1434,7 +1439,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           title="Escolha se o catálogo deve mostrar custo e comissão antes de baixar">
           <Download className="h-4 w-4" /> Exportar HTML
         </button>
-        {showHtmlExportOptions && (
+        {showHtmlExportOptions && typeof document !== 'undefined' && createPortal((
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true" aria-labelledby="html-export-title">
             <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-2xl">
               <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="html-export-title" className="text-lg font-bold">Exportar catálogo HTML</h2><p className="mt-1 text-sm text-muted-foreground">Escolha o nível de informação para quem vai receber o arquivo.</p></div><button type="button" onClick={() => setShowHtmlExportOptions(false)} className="rounded-lg p-1 text-muted-foreground hover:bg-secondary" aria-label="Fechar"><X className="h-5 w-5" /></button></div>
@@ -1446,7 +1451,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setShowHtmlExportOptions(false)} className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-secondary">Cancelar</button><button type="button" onClick={() => { setShowHtmlExportOptions(false); generateCatalogHtml({ includeCommission: htmlExportIncludeCommission, includeCost: htmlExportIncludeCost }); }} className="flex items-center gap-2 rounded-lg gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"><Download className="h-4 w-4" /> Baixar catálogo</button></div>
             </div>
           </div>
-        )}
+        ), document.body)}
         <button onClick={exportCatalogTxt} disabled={!products.length}
           className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50"
           title="Baixa um TXT com informações, preços e URLs de todas as imagens">
