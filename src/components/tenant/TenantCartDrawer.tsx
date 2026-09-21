@@ -817,7 +817,11 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           const match = variations.find((v: any) => normalizeVariant(v?.name) === selectedVariant);
           const variantPrice = Number(match?.cost_price ?? match?.price ?? match?.resale_price ?? 0);
           if (Number.isFinite(variantPrice) && variantPrice > 0) return variantPrice;
+          return null;
         }
+        // Uma oferta sem variações não confirma nenhuma cor cadastrada.
+        // Para um item com cor selecionada, ela não pode ser usada como fallback.
+        if (selectedVariant) return null;
         return Number(sp.unit_price);
       };
       const bestSuppliers = new Map<string, { supplier_id: string; price: number }>();
