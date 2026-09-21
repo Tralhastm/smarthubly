@@ -191,9 +191,8 @@ const SupplierPanel = () => {
 
   const fetchProducts = useCallback(async () => {
     if (!supplier) return;
-    // O produto não fica preso a um fornecedor: qualquer fornecedor ativo
-    // precisa conseguir encontrar todo o catálogo da loja para registrar sua
-    // própria oferta. A reconciliação escolhe depois o menor custo vigente.
+    // A RPC permite consultar o catálogo da loja para registrar ofertas, mas
+    // a tela de estoque deve mostrar somente os itens deste fornecedor.
     const [{ data: catalog }, { data: offers }] = await Promise.all([
       (supabase as any).rpc('get_supplier_catalog_by_token', { _token: token }),
       (supabase as any).from('supplier_variant_offers').select('product_id, product_variant_id, unit_cost')
@@ -203,8 +202,21 @@ const SupplierPanel = () => {
     const catalogVariants = Array.isArray(catalog?.variants) ? catalog.variants : [];
     const ids = Array.from(new Set(((offers || []) as any[]).map(o => o.product_id).filter(Boolean)));
     const variantIds = Array.from(new Set(((offers || []) as any[]).map(o => o.product_variant_id).filter(Boolean)));
-    const offered = ids.length ? own.filter((p: any) => ids.includes(p.id)) : [];
-    const variants = variantIds.length ? catalogVariants.filter((v: any) => variantIds.includes(v.id)) : [];
+    // A RPC deliberately returns the full tenant catalog so a supplier can
+    // register a new offer. The panel itself must not show that full catalog:
+    // only products/variants already assigned to this supplier or offered by it
+    // belong in the supplier's stock view.
+    const ownProductIds = own
+      .filter((p: any) => p.supplier_id === supplier.id)
+      .map((p: any) => p.id);
+    const ownVariantProductIds = catalogVariants
+      .filter((v: any) => v.supplier_id === supplier.id)
+      .map((v: any) => v.product_id);
+    const visibleProductIds = new Set([...ids, ...ownProductIds, ...ownVariantProductIds]);
+    const visibleProducts = own.filter((p: any) => visibleProductIds.has(p.id));
+    const variants = catalogVariants.filter((v: any) =>
+      visibleProductIds.has(v.product_id) && (variantIds.includes(v.id) || v.supplier_id === supplier.id)
+    );
     const costByVariant = new Map(((offers || []) as any[]).map(o => [o.product_variant_id, Number(o.unit_cost)]));
     const variantsByProduct = new Map<string, Product['supplierVariants']>();
     ((variants || []) as any[]).forEach(v => {
@@ -213,7 +225,7 @@ const SupplierPanel = () => {
       variantsByProduct.set(v.product_id, list);
     });
     const merged = new Map<string, Product>();
-    [...((own as any[]) || []), ...((offered as any[]) || [])].forEach(p => merged.set(p.id, { ...(p as Product), supplierVariants: variantsByProduct.get(p.id) || [] }));
+    (visibleProducts as any[]).forEach(p => merged.set(p.id, { ...(p as Product), supplierVariants: variantsByProduct.get(p.id) || [] }));
     setProducts([...merged.values()]);
   }, [supplier]);
 
