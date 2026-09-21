@@ -255,7 +255,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         pending,
       };
     })
-    .filter(variant => variant.name);
+    .filter(variant => variant.name)
+    .sort((a, b) => Number(b.inStock) - Number(a.inStock) || a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
 
   const getExportPrice = (product: Product) => Number(product.price) || 0;
 
@@ -318,7 +319,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     if (!products.length) { toast.error('Não há produtos para exportar.'); return; }
     const generatedAt = new Date().toISOString();
     const rows: Array<Record<string, unknown>> = [];
-    const cards = products.map((product, index) => {
+    // O catálogo começa pelo que pode ser vendido; indisponíveis ficam no final.
+    const exportProducts = [...products].sort((a, b) => {
+      const availability = Number(isInStock(b.in_stock)) - Number(isInStock(a.in_stock));
+      return availability || String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR', { sensitivity: 'base', numeric: true });
+    });
+    const cards = exportProducts.map((product, index) => {
       const p = product as any;
       const images = getProductImageUrls(product);
       const variants = getExportVariants(product);
@@ -344,13 +350,13 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         : '<div class="no-image">Sem imagem</div>';
       const facts = [`<div><span>Preço de revenda</span><strong>${productPending ? 'Pendente' : escapeHtml(money(exportPrice))}</strong></div>`];
       if (includeCost) facts.push(`<div><span>Preço de custo</span><strong>${productCost == null ? 'Não definido' : escapeHtml(money(productCost))}</strong></div>`);
-      if (includeCommission) facts.push(`<div><span>Comissão do vendedor</span><strong>${productCommission == null ? (productCost == null ? 'Custo não definido' : 'Preço de revenda pendente') : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(productCommission))}`}</strong></div>`);
+      if (includeCommission) facts.push(`<div><span>Comissão do vendedor</span><strong>${productCommission == null ? (productCost == null ? (productInStock ? 'Custo não cadastrado' : 'Indisponível — não calculada') : 'Preço de revenda pendente') : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(productCommission))}`}</strong></div>`);
       const productFinancials = `<div class="facts">${facts.join('')}</div>`;
       const variantsMarkup = variants.length
         ? `<div class="variants"><h3>Variações</h3>${variants.map(variant => {
             const variantFacts = [`<span>Revenda: <b>${variant.pending ? 'Pendente' : escapeHtml(money(variant.sale))}</b></span>`];
             if (includeCost) variantFacts.unshift(`<span>Custo: <b>${variant.cost == null ? 'Não definido' : escapeHtml(money(variant.cost))}</b></span>`);
-            if (includeCommission) variantFacts.push(`<span>Comissão: <b>${variant.commission == null ? (variant.cost == null ? 'Custo não definido' : 'Preço de revenda pendente') : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(variant.commission))}`}</b></span>`);
+            if (includeCommission) variantFacts.push(`<span>Comissão: <b>${variant.commission == null ? (variant.cost == null ? (variant.inStock ? 'Custo não cadastrado' : 'Indisponível — não calculada') : 'Preço de revenda pendente') : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(variant.commission))}`}</b></span>`);
             return `<div class="variant"><div class="variant-name"><strong>${escapeHtml(variant.name)}</strong><span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div><div class="variant-facts">${variantFacts.join('')}</div></div>`;
           }).join('')}</div>` : '';
       const statusLabel = productInStock ? 'Disponível' : 'Indisponível';
