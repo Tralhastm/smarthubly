@@ -206,16 +206,17 @@ const SupplierPanel = () => {
     // register a new offer. The panel itself must not show that full catalog:
     // only products/variants already assigned to this supplier or offered by it
     // belong in the supplier's stock view.
+    const supplierId = String(supplier.id);
     const ownProductIds = own
-      .filter((p: any) => p.supplier_id === supplier.id)
+      .filter((p: any) => String(p.supplier_id || '') === supplierId)
       .map((p: any) => p.id);
     const ownVariantProductIds = catalogVariants
-      .filter((v: any) => v.supplier_id === supplier.id)
+      .filter((v: any) => String(v.supplier_id || '') === supplierId)
       .map((v: any) => v.product_id);
     const visibleProductIds = new Set([...ids, ...ownProductIds, ...ownVariantProductIds]);
     const visibleProducts = own.filter((p: any) => visibleProductIds.has(p.id));
     const variants = catalogVariants.filter((v: any) =>
-      visibleProductIds.has(v.product_id) && (variantIds.includes(v.id) || v.supplier_id === supplier.id)
+      visibleProductIds.has(v.product_id) && (variantIds.includes(v.id) || String(v.supplier_id || '') === supplierId)
     );
     const costByVariant = new Map(((offers || []) as any[]).map(o => [o.product_variant_id, Number(o.unit_cost)]));
     const variantsByProduct = new Map<string, Product['supplierVariants']>();
