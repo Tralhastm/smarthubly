@@ -357,12 +357,15 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     return amount;
   };
   const productSubtotal = items.reduce((sum, item) => sum + getCartLineUnitPrice(item) * item.quantity, 0);
+  // Frete grátis/descontado só pode ser liberado após um cupom promocional
+  // ou código de vendedor válido ser aplicado no checkout.
+  const shippingDiscountAuthorized = Boolean(appliedCoupon);
   const appliedShippingTotal = deliveryType !== 'delivery' ? 0 : items.reduce((sum, item) => {
     const lineShare = productSubtotal > 0 ? quotedShippingTotal * (getCartLineUnitPrice(item) * item.quantity / productSubtotal) : 0;
     const product = item.product as any;
     const hasProductRule = product.shipping_discount_enabled === true;
     const enabled = hasProductRule || globalDiscountEnabled;
-    if (!enabled) return sum + lineShare;
+    if (!enabled || !shippingDiscountAuthorized) return sum + lineShare;
     const type = hasProductRule ? product.shipping_discount_type : ((tenant as any).shipping_discount_type || 'free');
     const value = hasProductRule ? Number(product.shipping_discount_value || 0) : Number((tenant as any).shipping_discount_value || 0);
     return sum + applyShippingRule(lineShare, type, value);

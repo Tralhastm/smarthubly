@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct, type Product } from '@/hooks/useProducts';
 import type { ProductVariant } from '@/hooks/useProductExtras';
@@ -191,10 +190,6 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const [bulkDescriptionProgress, setBulkDescriptionProgress] = useState({ done: 0, total: 0, failed: 0 });
   const [bulkDescriptionRules, setBulkDescriptionRules] = useState(DEFAULT_BULK_DESCRIPTION_RULES);
   const [bulkDescriptionOverwrite, setBulkDescriptionOverwrite] = useState(false);
-  const [showHtmlExportOptions, setShowHtmlExportOptions] = useState(false);
-  const [htmlExportIncludeCommission, setHtmlExportIncludeCommission] = useState(false);
-  const [htmlExportIncludeCost, setHtmlExportIncludeCost] = useState(false);
-  const [htmlExportIncludeUnavailable, setHtmlExportIncludeUnavailable] = useState(true);
   const bulkDescriptionCancelled = useRef(false);
 
   const escapeHtml = (value: unknown) => String(value ?? '')
@@ -225,8 +220,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     Number(value || 0)
       .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
       .replace(/\u00a0/g, ' ');
-  const isTrueFlag = (value: unknown) => value === true || value === 'true' || value === 1 || value === '1';
-  const isInStock = isTrueFlag;
+  const isInStock = (value: unknown) => value === true || value === 'true' || value === 1 || value === '1';
 
   const getExportVariants = (product: Product) => allVariants
     .filter(variant => variant.product_id === product.id)
@@ -237,15 +231,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         priceDelta: variant.price_delta,
         variantCost: variant.cost_price,
       });
-      // Variações esgotadas podem não ter uma oferta específica vigente. Nesse
-      // caso, usa o custo-base do produto para continuar calculando a comissão;
-      // nunca substitui um custo específico já salvo na variação.
-      const rawCost = variant.cost_price ?? (product as any).original_price;
-      const cost = rawCost == null ? null : Number(rawCost);
-      // Supabase pode devolver flags booleanas como texto. Boolean('false') é
-      // true em JavaScript e fazia a comissão aparecer como pendente mesmo
-      // quando havia custo e preço de revenda válidos.
-      const pending = isTrueFlag((variant as any).needs_price_review) || sale <= 0;
+      const cost = variant.cost_price == null ? null : Number(variant.cost_price);
+      const pending = Boolean((variant as any).needs_price_review) || sale <= 0;
       return {
         id: String((variant as any).id || ''),
         name: String(variant.name || '').trim(),
@@ -256,8 +243,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         pending,
       };
     })
-    .filter(variant => variant.name)
-    .sort((a, b) => Number(b.inStock) - Number(a.inStock) || a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+    .filter(variant => variant.name);
 
   const getExportPrice = (product: Product) => Number(product.price) || 0;
 
@@ -316,64 +302,39 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     toast.success('Catálogo TXT exportado.');
   };
 
-  const generateCatalogHtml = ({ includeCommission, includeCost, includeUnavailable }: { includeCommission: boolean; includeCost: boolean; includeUnavailable: boolean }) => {
+  const exportCatalogHtml = () => {
     if (!products.length) { toast.error('Não há produtos para exportar.'); return; }
+    const { includeCost, includeCommission } = askExportOptions();
+    // A versão para cliente é limpa por padrão: custo e comissão só entram
+    // quando o usuário escolhe explicitamente incluí-los.
     const generatedAt = new Date().toISOString();
     const rows: Array<Record<string, unknown>> = [];
-    // O catálogo começa pelo que pode ser vendido; indisponíveis ficam no final.
-    const exportProducts = [...products]
-      .filter(product => includeUnavailable || isInStock(product.in_stock))
-      .sort((a, b) => {
-      const availability = Number(isInStock(b.in_stock)) - Number(isInStock(a.in_stock));
-      return availability || String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR', { sensitivity: 'base', numeric: true });
-    });
-    const cards = exportProducts.map((product, index) => {
+    const cards = products.map((product, index) => {
       const p = product as any;
       const images = getProductImageUrls(product);
       const variants = getExportVariants(product);
       const exportPrice = getExportPrice(product);
-      const productInStock = isInStock(product.in_stock);
-      const productCost = p.original_price == null ? null : Number(p.original_price);
-      const productPending = exportPrice <= 0;
-      const productCommission = includeCommission && !productPending && productCost != null
-        ? calculateFinalProfit(exportPrice, productCost).seller : null;
-      const variantRows = variants.map(v => {
-        const row: Record<string, unknown> = { id: v.id, name: v.name, status: v.inStock ? 'Disponível' : 'Indisponível', resale: v.pending ? null : v.sale };
-        if (includeCost) row.cost = v.cost;
-        if (includeCommission) { row.commission_percent = DEFAULT_SELLER_SHARE * 100; row.commission_value = v.commission; }
-        return row;
-      });
-      const productRow: Record<string, unknown> = { id: product.id, name: product.name, status: productInStock ? 'Disponível' : 'Indisponível', resale: exportPrice, images, description: product.description || '', variants: variantRows };
-      if (includeCost) productRow.cost = productCost;
-      if (includeCommission) { productRow.commission_percent = DEFAULT_SELLER_SHARE * 100; productRow.commission_value = productCommission; }
-      rows.push(productRow);
-
       const imageMarkup = images.length
         ? `<div class="gallery">${images.map((url: string, imageIndex: number) => `<img src="${escapeHtml(url)}" alt="${escapeHtml(product.name)} — imagem ${imageIndex + 1}" loading="lazy">`).join('')}</div>`
         : '<div class="no-image">Sem imagem</div>';
-      const facts = [`<div><span>Preço de revenda</span><strong>${productPending ? 'Pendente' : escapeHtml(money(exportPrice))}</strong></div>`];
-      if (includeCost) facts.push(`<div><span>Preço de custo</span><strong>${productCost == null ? 'Não definido' : escapeHtml(money(productCost))}</strong></div>`);
-      if (includeCommission) facts.push(`<div><span>Comissão do vendedor</span><strong>${productCommission == null ? (productCost == null ? (productInStock ? 'Custo não cadastrado' : 'Indisponível — não calculada') : 'Preço de revenda pendente') : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(productCommission))}`}</strong></div>`);
-      const productFinancials = `<div class="facts">${facts.join('')}</div>`;
-      const variantsMarkup = variants.length
-        ? `<div class="variants"><h3>Variações</h3>${variants.map(variant => {
-            const variantFacts = [`<span>Revenda: <b>${variant.pending ? 'Pendente' : escapeHtml(money(variant.sale))}</b></span>`];
-            if (includeCost) variantFacts.unshift(`<span>Custo: <b>${variant.cost == null ? 'Não definido' : escapeHtml(money(variant.cost))}</b></span>`);
-            if (includeCommission) variantFacts.push(`<span>Comissão: <b>${variant.commission == null ? (variant.cost == null ? (variant.inStock ? 'Custo não cadastrado' : 'Indisponível — não calculada') : 'Preço de revenda pendente') : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(variant.commission))}`}</b></span>`);
-            return `<div class="variant"><div class="variant-name"><strong>${escapeHtml(variant.name)}</strong><span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div><div class="variant-facts">${variantFacts.join('')}</div></div>`;
-          }).join('')}</div>` : '';
+      const productInStock = isInStock(product.in_stock);
+      const productCost = p.original_price == null ? null : Number(p.original_price);
+      const productPending = productCost == null || exportPrice <= 0;
+      const productCommission = productPending ? null : calculateFinalProfit(exportPrice, productCost).seller;
+      rows.push({ id: product.id, name: product.name, status: productInStock ? 'Disponível' : 'Indisponível', ...(includeCost ? { cost: productCost } : {}), resale: exportPrice, ...(includeCommission ? { commission_percent: DEFAULT_SELLER_SHARE * 100, commission_value: productCommission } : {}), images, description: product.description || '', variants: variants.map(v => ({ id: v.id, name: v.name, status: v.inStock ? 'Disponível' : 'Indisponível', ...(includeCost ? { cost: v.cost } : {}), resale: v.pending ? null : v.sale, ...(includeCommission ? { commission_percent: DEFAULT_SELLER_SHARE * 100, commission_value: v.commission } : {}) })) });
       const statusLabel = productInStock ? 'Disponível' : 'Indisponível';
+      const productFinancials = `<div class="facts"><div><span>Preço de revenda</span><strong>${productPending ? 'Pendente' : escapeHtml(money(exportPrice))}</strong></div>${includeCost ? `<div><span>Preço de custo</span><strong>${productCost == null ? 'Não definido' : escapeHtml(money(productCost))}</strong></div>` : ''}${includeCommission ? `<div><span>Comissão do vendedor</span><strong>${productCommission == null ? 'Pendente' : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(productCommission))}`}</strong></div>` : ''}</div>`;
+      const variantsMarkup = variants.length
+        ? `<div class="variants"><h3>Variações</h3>${variants.map(variant => `<div class="variant"><div class="variant-name"><strong>${escapeHtml(variant.name)}</strong><span class="variant-status ${variant.inStock ? 'available' : 'unavailable'}">${variant.inStock ? 'Disponível' : 'Indisponível'}</span></div><div class="variant-facts">${includeCost ? `<span>Custo: <b>${variant.cost == null ? 'Não definido' : escapeHtml(money(variant.cost))}</b></span>` : ''}<span>Revenda: <b>${variant.pending ? 'Pendente' : escapeHtml(money(variant.sale))}</b></span>${includeCommission ? `<span>Comissão: <b>${variant.commission == null ? 'Pendente' : `${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(0))}% · ${escapeHtml(money(variant.commission))}`}</b></span>` : ''}</div></div>`).join('')}</div>`
+        : '';
       const stockMarkup = `<span class="stock ${productInStock ? 'available' : 'unavailable'}">${statusLabel}</span>`;
       return `<article class="product ${productInStock ? '' : 'out'}"><div class="product-top"><span class="eyebrow">${String(index + 1).padStart(2, '0')} · ${escapeHtml(product.category || 'Geral')}</span>${stockMarkup}</div>${imageMarkup}<div class="content"><h2>${escapeHtml(product.name)}</h2><div class="subcategory">Fabricante: ${escapeHtml(getExportManufacturer(product))}</div>${p.subcategory ? `<div class="subcategory">${escapeHtml(p.subcategory)}</div>` : ''}${product.description ? `<p class="description">${escapeHtml(product.description)}</p>` : ''}${productPending && !variants.length ? '<div class="pending">Preço de revenda pendente de definição manual</div>' : ''}${!variants.length ? productFinancials : ''}${variantsMarkup}${p.stock_quantity != null ? `<div class="meta">Quantidade cadastrada: ${escapeHtml(p.stock_quantity)}</div>` : ''}${p.unidade ? `<div class="meta">Unidade: ${escapeHtml(p.unidade)}</div>` : ''}</div></article>`;
     }).join('\n');
-    const exportJson = escapeHtml(JSON.stringify({ version: 'catalog-export-v4', tenant_id: tenantId, generated_at: generatedAt, options: { include_cost: includeCost, include_commission: includeCommission, include_unavailable: includeUnavailable }, seller_commission_percent: includeCommission ? DEFAULT_SELLER_SHARE * 100 : null, products: rows }));
-    const included = ['preços de revenda', includeCost ? 'custos' : '', includeCommission ? 'comissão do vendedor' : ''].filter(Boolean).join(', ');
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="catalog-export-version" content="catalog-export-v4"><title>Catálogo Mobiletec</title><style>:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;color:#172033;background:#eef4fb}*{box-sizing:border-box}body{margin:0;padding:28px;background:linear-gradient(135deg,#eef4fb,#dbeafe)}.wrap{max-width:1220px;margin:auto}.header{background:#fff;border-radius:20px;padding:25px 28px;margin-bottom:20px;box-shadow:0 8px 24px #12345a18}.header h1{margin:0 0 8px;color:#123b6d}.header p{margin:4px 0;color:#52657c}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px}.product{overflow:hidden;background:#fff;border:1px solid #d8e3f0;border-radius:18px;box-shadow:0 8px 24px #12345a12}.product.out{opacity:.78}.product-top{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 0}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#2468b1;font-size:11px;font-weight:800}.gallery{height:220px;display:flex;gap:8px;overflow-x:auto;padding:12px;background:#f6f9fc}.gallery img{height:196px;min-width:196px;width:196px;object-fit:contain;border-radius:10px;background:#fff}.no-image{height:220px;display:grid;place-items:center;color:#8292a6;background:#f6f9fc}.content{padding:18px}.product h2{font-size:20px;margin:0 0 7px;color:#12243b}.subcategory,.meta{color:#60748b;font-size:12px;margin-top:5px}.description{white-space:pre-wrap;color:#3d5269;line-height:1.55;font-size:14px;margin:15px 0}.stock,.variant-status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800}.available{background:#dcfce7;color:#16713b}.unavailable{background:#fee2e2;color:#a92929}.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:16px}.facts div{padding:10px;background:#f5f8fc;border-radius:10px}.facts span,.variant-facts span{display:block;color:#6b7d91;font-size:11px}.facts strong{display:block;margin-top:4px;color:#164d86;font-size:14px}.variants{margin-top:18px;border-top:1px solid #e2eaf3;padding-top:14px}.variants h3{margin:0 0 10px;font-size:15px;color:#294b6e}.variant{padding:12px 0;border-bottom:1px solid #edf2f7}.variant:last-child{border-bottom:0}.variant-name{display:flex;align-items:center;justify-content:space-between;gap:10px}.variant-name strong{color:#183f67}.variant-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:9px}.variant-facts b{color:#244d77;font-weight:700}.pending{margin-top:14px;padding:10px;border-radius:10px;background:#fff7d6;color:#855d00;font-size:12px;font-weight:700}@media(max-width:600px){body{padding:14px}.grid{grid-template-columns:1fr}.facts,.variant-facts{grid-template-columns:1fr}.header{padding:20px}}</style></head><body><main class="wrap"><header class="header"><h1>Catálogo Mobiletec</h1><p>${products.length} produto(s) · Gerado em ${escapeHtml(new Date(generatedAt).toLocaleString('pt-BR'))}</p><p>Informações incluídas: ${escapeHtml(included)}. Status, fotos, descrições e variações seguem o sistema.</p></header><section class="grid">${cards}</section><script type="application/json" id="catalog-data">${exportJson}</script></main></body></html>`;
+    const exportJson = escapeHtml(JSON.stringify({ version: 'catalog-export-v4', tenant_id: tenantId, generated_at: generatedAt, include_cost: includeCost, include_commission: includeCommission, ...(includeCommission ? { seller_commission_percent: DEFAULT_SELLER_SHARE * 100 } : {}), products: rows }));
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="catalog-export-version" content="catalog-export-v4"><title>Catálogo completo</title><style>:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#172033;background:#eef4fb}*{box-sizing:border-box}body{margin:0;padding:28px;background:linear-gradient(135deg,#eef4fb,#dbeafe)}.wrap{max-width:1220px;margin:auto}.header{background:#fff;border-radius:20px;padding:25px 28px;margin-bottom:20px;box-shadow:0 8px 24px #12345a18}.header h1{margin:0 0 8px;color:#123b6d}.header p{margin:0;color:#52657c}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px}.product{overflow:hidden;background:#fff;border:1px solid #d8e3f0;border-radius:18px;box-shadow:0 8px 24px #12345a12}.product.out{opacity:.78}.product-top{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 0}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#2468b1;font-size:11px;font-weight:800}.gallery{height:220px;display:flex;gap:8px;overflow-x:auto;padding:12px;background:#f6f9fc}.gallery img{height:196px;min-width:196px;width:196px;object-fit:contain;border-radius:10px;background:#fff}.no-image{height:220px;display:grid;place-items:center;color:#8292a6;background:#f6f9fc}.content{padding:18px}.product h2{font-size:20px;margin:0 0 7px;color:#12243b}.subcategory,.meta{color:#60748b;font-size:12px;margin-top:5px}.description{white-space:pre-wrap;color:#3d5269;line-height:1.55;font-size:14px;margin:15px 0}.stock,.variant-status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800}.available{background:#dcfce7;color:#16713b}.unavailable{background:#fee2e2;color:#a92929}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}.facts div{padding:10px;background:#f5f8fc;border-radius:10px}.facts span,.variant-facts span{display:block;color:#6b7d91;font-size:11px}.facts strong{display:block;margin-top:4px;color:#164d86;font-size:14px}.variants{margin-top:18px;border-top:1px solid #e2eaf3;padding-top:14px}.variants h3{margin:0 0 10px;font-size:15px;color:#294b6e}.variant{padding:12px 0;border-bottom:1px solid #edf2f7}.variant:last-child{border-bottom:0}.variant-name{display:flex;align-items:center;justify-content:space-between;gap:10px}.variant-name strong{color:#183f67}.variant-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:9px}.variant-facts b{color:#244d77;font-weight:700}.pending{margin-top:14px;padding:10px;border-radius:10px;background:#fff7d6;color:#855d00;font-size:12px;font-weight:700}@media(max-width:600px){body{padding:14px}.grid{grid-template-columns:1fr}.facts,.variant-facts{grid-template-columns:1fr}.header{padding:20px}}</style></head><body><main class="wrap"><header class="header"><h1>Catálogo completo</h1><p>${products.length} produto(s) · Gerado em ${escapeHtml(new Date(generatedAt).toLocaleString('pt-BR'))}</p><p>Catálogo profissional · ${includeCost ? 'Inclui custos internos' : 'Valores de custo ocultos'} · ${includeCommission ? `Comissão do vendedor: ${escapeHtml((DEFAULT_SELLER_SHARE * 100).toFixed(2))}%` : 'Comissão do vendedor ocultada'} · Inclui produtos e variações disponíveis e esgotados</p></header><section class="grid">${cards}</section><script type="application/json" id="catalog-data">${exportJson}</script></main></body></html>`;
     downloadBlob(html, `catalogo-${catalogSlug()}.html`, 'text/html;charset=utf-8');
-    toast.success(`Catálogo HTML exportado ${includeCost || includeCommission ? 'com opções selecionadas' : 'para envio ao cliente'}.`);
+    toast.success('Catálogo HTML completo exportado com dados fiéis do sistema.');
   };
-
-  const exportCatalogHtml = () => setShowHtmlExportOptions(true);
 
   const handleRefreshAffiliatePrices = async () => {
     if (refreshingPrices) return;
@@ -658,32 +619,16 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     return created.id;
   };
 
-  // Grava o preço de cada produto na tabela do fornecedor (comparação multi-fornecedor).
-  // A tabela também possui uma chave única funcional por nome normalizado; por isso
-  // não usamos upsert apenas por (supplier_id, product_name), pois emojis, pontuação
-  // e variações de espaços podem representar o mesmo produto para o banco.
+  // Grava o preço de cada produto na tabela do fornecedor (comparação multi-fornecedor)
+  // price_types é uma coluna jsonb: ["cost"] | ["resale"] | ["cost","resale"] — preserva o tipo escolhido sem alterar o unique key
   const recordSupplierPrice = async (supplierId: string, productName: string, price: number, priceType: 'cost' | 'resale' | 'both'): Promise<void> => {
     const types = priceType === 'both' ? ['cost', 'resale'] : [priceType];
-    const normalizedName = normalizeProductName(productName).replace(/[^a-z0-9]+/g, '');
-    const { data: existingRows, error: lookupError } = await supabase
+    const { error } = await supabase
       .from('supplier_product_prices')
-      .select('id, product_name')
-      .eq('supplier_id', supplierId)
-      .limit(500);
-    if (lookupError) throw lookupError;
-    const existing = (existingRows || []).find((row: any) =>
-      normalizeProductName(row.product_name).replace(/[^a-z0-9]+/g, '') === normalizedName,
-    );
-    const payload = {
-      product_name: productName.toLowerCase(),
-      unit_price: price,
-      price_types: types,
-      available: true,
-      updated_at: new Date().toISOString(),
-    };
-    const { error } = existing
-      ? await supabase.from('supplier_product_prices').update(payload).eq('id', existing.id)
-      : await supabase.from('supplier_product_prices').insert({ supplier_id: supplierId, ...payload });
+      .upsert(
+        { supplier_id: supplierId, product_name: productName.toLowerCase(), unit_price: price, price_types: types, available: true },
+        { onConflict: 'supplier_id,product_name' },
+      );
     if (error) {
       console.error('[catalog-import] Falha ao gravar preço principal do fornecedor', {
         supplierId,
@@ -1460,24 +1405,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           Gerar descrições em massa
         </button>
         <button onClick={exportCatalogHtml} disabled={!products.length}
-          className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50"
-          title="Escolha se o catálogo deve mostrar custo e comissão antes de baixar">
+          className="flex items-center gap-2 rounded-lg bg-primary/15 text-primary px-4 py-2 text-sm font-medium hover:bg-primary/25 disabled:opacity-50"
+          title="Baixa um HTML visual com todas as imagens e informações dos produtos">
           <Download className="h-4 w-4" /> Exportar HTML
         </button>
-        {showHtmlExportOptions && typeof document !== 'undefined' && createPortal((
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" role="dialog" aria-modal="true" aria-labelledby="html-export-title">
-            <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-2xl">
-              <div className="mb-5 flex items-start justify-between gap-4"><div><h2 id="html-export-title" className="text-lg font-bold">Exportar catálogo HTML</h2><p className="mt-1 text-sm text-muted-foreground">Escolha o nível de informação para quem vai receber o arquivo.</p></div><button type="button" onClick={() => setShowHtmlExportOptions(false)} className="rounded-lg p-1 text-muted-foreground hover:bg-secondary" aria-label="Fechar"><X className="h-5 w-5" /></button></div>
-              <div className="space-y-3">
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 hover:bg-secondary/60"><input type="checkbox" checked={htmlExportIncludeCommission} onChange={e => setHtmlExportIncludeCommission(e.target.checked)} className="mt-1 h-4 w-4 accent-primary" /><span><strong className="block text-sm">Incluir comissão do vendedor</strong><span className="text-xs text-muted-foreground">Mostra o percentual de 20% e o valor calculado.</span></span></label>
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 hover:bg-secondary/60"><input type="checkbox" checked={htmlExportIncludeCost} onChange={e => setHtmlExportIncludeCost(e.target.checked)} className="mt-1 h-4 w-4 accent-primary" /><span><strong className="block text-sm">Incluir preço de custo</strong><span className="text-xs text-muted-foreground">Mostra o custo interno de cada produto e variação.</span></span></label>
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border p-3 hover:bg-secondary/60"><input type="checkbox" checked={htmlExportIncludeUnavailable} onChange={e => setHtmlExportIncludeUnavailable(e.target.checked)} className="mt-1 h-4 w-4 accent-primary" /><span><strong className="block text-sm">Incluir produtos indisponíveis</strong><span className="text-xs text-muted-foreground">Desmarque para exportar somente produtos disponíveis.</span></span></label>
-              </div>
-              <div className="mt-5 rounded-xl bg-primary/10 p-3 text-xs text-muted-foreground"><strong className="text-foreground">Modo cliente:</strong> deixe comissão, custo e produtos indisponíveis desmarcados para enviar somente itens disponíveis com preço de revenda.</div>
-              <div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setShowHtmlExportOptions(false)} className="rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-secondary">Cancelar</button><button type="button" onClick={() => { setShowHtmlExportOptions(false); generateCatalogHtml({ includeCommission: htmlExportIncludeCommission, includeCost: htmlExportIncludeCost, includeUnavailable: htmlExportIncludeUnavailable }); }} className="flex items-center gap-2 rounded-lg gradient-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"><Download className="h-4 w-4" /> Baixar catálogo</button></div>
-            </div>
-          </div>
-        ), document.body)}
         <button onClick={exportCatalogTxt} disabled={!products.length}
           className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50"
           title="Baixa um TXT com informações, preços e URLs de todas as imagens">
