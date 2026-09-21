@@ -136,6 +136,21 @@ export const useUpdateProduct = () => {
         duration_minutes: (product as any).duration_minutes ?? null,
       } as any).eq('id', product.id);
       if (error) throw error;
+      // “Liberar” não força estoque: remove o bloqueio e recalcula a verdade
+      // das listas. Sem oferta vigente, o produto/variações continuam esgotados.
+      if (product.tenant_id && !(product as any).manual_blocked) {
+        const { error: conflictError } = await supabase.rpc('clear_catalog_product_conflict', { _product_id: product.id });
+        if (conflictError) throw conflictError;
+        const { data: suppliers, error: suppliersError } = await supabase
+          .from('suppliers')
+          .select('id')
+          .eq('tenant_id', product.tenant_id);
+        if (suppliersError) throw suppliersError;
+        for (const supplier of suppliers || []) {
+          const { error: reconcileError } = await supabase.rpc('reconcile_supplier_catalog', { p_supplier_id: supplier.id });
+          if (reconcileError) throw reconcileError;
+        }
+      }
       if (product.tenant_id) triggerSync(product.tenant_id, 'product_upsert', product);
       return product;
     },
