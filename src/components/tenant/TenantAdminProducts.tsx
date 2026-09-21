@@ -223,7 +223,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     Number(value || 0)
       .toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
       .replace(/\u00a0/g, ' ');
-  const isInStock = (value: unknown) => value === true || value === 'true' || value === 1 || value === '1';
+  const isTrueFlag = (value: unknown) => value === true || value === 'true' || value === 1 || value === '1';
+  const isInStock = isTrueFlag;
 
   const getExportVariants = (product: Product) => allVariants
     .filter(variant => variant.product_id === product.id)
@@ -235,7 +236,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         variantCost: variant.cost_price,
       });
       const cost = variant.cost_price == null ? null : Number(variant.cost_price);
-      const pending = Boolean((variant as any).needs_price_review) || sale <= 0;
+      // Supabase pode devolver flags booleanas como texto. Boolean('false') é
+      // true em JavaScript e fazia a comissão aparecer como pendente mesmo
+      // quando havia custo e preço de revenda válidos.
+      const pending = isTrueFlag((variant as any).needs_price_review) || sale <= 0;
       return {
         id: String((variant as any).id || ''),
         name: String(variant.name || '').trim(),
