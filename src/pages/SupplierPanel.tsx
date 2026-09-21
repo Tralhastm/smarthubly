@@ -67,6 +67,11 @@ const SupplierPanel = () => {
   const { data: supplier, isLoading } = useSupplierByToken(token);
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  // O estoque exibido continua restrito ao fornecedor, mas a importação precisa
+  // comparar a lista contra todo o catálogo do tenant para descobrir quando a
+  // Hi Phone passa a ser a oferta vencedora de um produto ainda atribuído à
+  // Mania Digital (ou a qualquer outro fornecedor).
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [tab, setTab] = useState<'orders' | 'deliveries' | 'stock' | 'import-export' | 'chats' | 'reviews' | 'lalamove' | 'shipping' | 'drivers' | 'profile'>('orders');
   const [group, setGroup] = useState<'operacao' | 'catalogo' | 'config'>('operacao');
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -200,6 +205,7 @@ const SupplierPanel = () => {
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).eq('available', true).limit(500),
     ]);
     const own = Array.isArray(catalog?.products) ? catalog.products : [];
+    setCatalogProducts(own as Product[]);
     const catalogVariants = Array.isArray(catalog?.variants) ? catalog.variants : [];
     const ids = Array.from(new Set(((offers || []) as any[]).map(o => o.product_id).filter(Boolean)));
     const variantIds = Array.from(new Set(((offers || []) as any[]).map(o => o.product_variant_id).filter(Boolean)));
@@ -940,7 +946,8 @@ const SupplierPanel = () => {
         if (!list.some(item => item.id === product.id)) list.push(product);
         byName.set(normalized, list);
       };
-      products.forEach(product => {
+      const productsForMatching = catalogProducts.length > 0 ? catalogProducts : products;
+      productsForMatching.forEach(product => {
         addProductKey(product.name, product);
         addProductKey(product.name.replace(/\s*\([^)]*\)\s*$/g, ''), product);
         if (/^samsung\s+/i.test(product.name)) addProductKey(product.name.replace(/^samsung\s+/i, ''), product);
