@@ -273,11 +273,17 @@ const SupplierPanel = () => {
         .select('order_id, items').eq('supplier_id', supplier.id).limit(500);
       const fragmentByOrder = new Map<string, any>();
       ((fragments || []) as any[]).forEach(f => fragmentByOrder.set(f.order_id, f));
-      const relevantOrders = allOrders.filter(o =>
-        o.supplier_id === supplier.id ||
-        fragmentByOrder.has(o.id) ||
-        (o.order_items || []).some((i: any) => i.supplier_id === supplier.id)
-      )
+      const relevantOrders = allOrders.filter(o => {
+        const hasFragmentMap = Object.keys(o.metadata?.fragmentation_map || {}).length > 0;
+        const hasRoutedItems = (o.order_items || []).some((i: any) => i.supplier_id);
+        // Quando existe roteamento explícito, a coluna legada orders.supplier_id
+        // não é confiável: ela pode conter o fornecedor original do pedido,
+        // enquanto os itens/fragmentos já foram destinados a outro fornecedor.
+        if (hasFragmentMap || hasRoutedItems) {
+          return fragmentByOrder.has(o.id) || (o.order_items || []).some((i: any) => i.supplier_id === supplier.id);
+        }
+        return o.supplier_id === supplier.id || fragmentByOrder.has(o.id);
+      })
         .map(o => {
           const fragment = fragmentByOrder.get(o.id);
           if (fragment?.items) {
