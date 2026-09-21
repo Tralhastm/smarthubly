@@ -316,15 +316,32 @@ export default async function handler(req: Request, payload: any) {
     const products = parseCatalog(txtContent, priceType || "resale");
     if (targetSupplierId && products.length > 0) {
       const priceTypes = priceType === "both" ? ["cost", "resale"] : [priceType || "resale"];
+      const { data: existingPrices, error: existingPricesError } = await supabase
+        .from("supplier_product_prices")
+        .select("id, product_name")
+        .eq("supplier_id", targetSupplierId)
+        .limit(500);
+      if (existingPricesError) throw existingPricesError;
+      const normalizePriceKey = (value: string) => normalize(value).replace(/[^a-z0-9]+/g, "");
+      const existingByKey = new Map(
+        (existingPrices || []).map((row: any) => [normalizePriceKey(row.product_name), row]),
+      );
       for (const p of products) {
-        await supabase.from("supplier_product_prices").upsert({
-          supplier_id: targetSupplierId,
+        const payload = {
           product_name: p.name.toLowerCase(),
           unit_price: priceType === 'resale' ? (p.resale_price || p.price) : (p.cost_price || p.price),
           available: true,
           price_types: priceTypes,
           metadata: { resale_price: p.resale_price || null, profit_margin: Number(profitMargin) || 0, shipping_fee: Number(shippingFee) || 0, variants: p.variants || [], needs_price_review: Boolean(p.needs_price_review) },
-        }, { onConflict: "supplier_id,product_name" });
+          updated_at: new Date().toISOString(),
+        };
+        const key = normalizePriceKey(p.name);
+        const existing = existingByKey.get(key);
+        const { data, error } = existing
+          ? await supabase.from("supplier_product_prices").update(payload).eq("id", existing.id).select("id, product_name").maybeSingle()
+          : await supabase.from("supplier_product_prices").insert({ supplier_id: targetSupplierId, ...payload }).select("id, product_name").maybeSingle();
+        if (error) throw error;
+        if (data) existingByKey.set(key, data);
       }
     }
 

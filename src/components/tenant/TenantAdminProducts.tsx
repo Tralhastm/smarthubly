@@ -658,16 +658,32 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     return created.id;
   };
 
-  // Grava o preço de cada produto na tabela do fornecedor (comparação multi-fornecedor)
-  // price_types é uma coluna jsonb: ["cost"] | ["resale"] | ["cost","resale"] — preserva o tipo escolhido sem alterar o unique key
+  // Grava o preço de cada produto na tabela do fornecedor (comparação multi-fornecedor).
+  // A tabela também possui uma chave única funcional por nome normalizado; por isso
+  // não usamos upsert apenas por (supplier_id, product_name), pois emojis, pontuação
+  // e variações de espaços podem representar o mesmo produto para o banco.
   const recordSupplierPrice = async (supplierId: string, productName: string, price: number, priceType: 'cost' | 'resale' | 'both'): Promise<void> => {
     const types = priceType === 'both' ? ['cost', 'resale'] : [priceType];
-    const { error } = await supabase
+    const normalizedName = normalizeProductName(productName).replace(/[^a-z0-9]+/g, '');
+    const { data: existingRows, error: lookupError } = await supabase
       .from('supplier_product_prices')
-      .upsert(
-        { supplier_id: supplierId, product_name: productName.toLowerCase(), unit_price: price, price_types: types, available: true },
-        { onConflict: 'supplier_id,product_name' },
-      );
+      .select('id, product_name')
+      .eq('supplier_id', supplierId)
+      .limit(500);
+    if (lookupError) throw lookupError;
+    const existing = (existingRows || []).find((row: any) =>
+      normalizeProductName(row.product_name).replace(/[^a-z0-9]+/g, '') === normalizedName,
+    );
+    const payload = {
+      product_name: productName.toLowerCase(),
+      unit_price: price,
+      price_types: types,
+      available: true,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = existing
+      ? await supabase.from('supplier_product_prices').update(payload).eq('id', existing.id)
+      : await supabase.from('supplier_product_prices').insert({ supplier_id: supplierId, ...payload });
     if (error) {
       console.error('[catalog-import] Falha ao gravar preço principal do fornecedor', {
         supplierId,
