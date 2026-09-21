@@ -1474,7 +1474,7 @@ const SupplierPanel = () => {
             </div>
             {importResult && (
               <div className="rounded-lg border border-border bg-card p-4 space-y-2 text-sm">
-                <p className="font-semibold text-foreground">Resultado: {importResult.updated.length} atualizado(s), {importResult.available} disponível(is), {importResult.exhausted} esgotado(s) e {importResult.notFound.length} ignorado(s).</p>
+                <p className="font-semibold text-foreground">Resultado: {importResult.updated.length} atualizado(s), {importResult.available} disponível(is), {importResult.exhausted} esgotado(s), {importResult.conflicts?.length ?? 0} bloqueado(s) por conflito e {importResult.notFound.length} ignorado(s).</p>
                 {importResult.updated.length > 0 && <p className="text-xs text-green-400">Atualizados: {importResult.updated.join(', ')}</p>}
                 {importResult.notFound.length > 0 && <p className="text-xs text-yellow-400">Não encontrados: {importResult.notFound.join(', ')}</p>}
                 {importResult.invalid.length > 0 && <p className="text-xs text-red-400">Com erro: {importResult.invalid.join(', ')}</p>}
