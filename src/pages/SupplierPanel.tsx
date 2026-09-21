@@ -39,6 +39,7 @@ type OrderWithItems = {
 
 type Product = {
   id: string; name: string; price: number; original_price?: number | null; in_stock: boolean; category: string; supplier_id: string | null;
+  catalog_conflict?: boolean; catalog_conflict_reason?: string | null; catalog_conflict_at?: string | null;
   subcategory?: string | null; subcategory_ids?: string[] | null;
   stock_quantity: number | null;
   supplierVariants?: { id: string; name: string; in_stock: boolean; unit_cost: number | null }[];
@@ -90,7 +91,7 @@ const SupplierPanel = () => {
   const [priceText, setPriceText] = useState('');
   const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both' | 'color'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
-  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[]; available: number; exhausted: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[]; available: number; exhausted: number; conflicts?: string[] } | null>(null);
   const [exportIncludeCost, setExportIncludeCost] = useState(false);
   const [exportIncludeCommission, setExportIncludeCommission] = useState(false);
   const [tenant, setTenant] = useState<any>(null);
@@ -239,10 +240,10 @@ const SupplierPanel = () => {
       const { data: offerRows } = await (supabase as any).from('supplier_variant_offers')
         .select('product_id').eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).limit(500);
       const offeredIds = Array.from(new Set(((offerRows || []) as any[]).map(o => o.product_id).filter(Boolean)));
-      const ownQuery = supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity')
+      const ownQuery = supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity, catalog_conflict, catalog_conflict_reason, catalog_conflict_at')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
       const offeredQuery = offeredIds.length
-        ? supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity').in('id', offeredIds)
+        ? supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity, catalog_conflict, catalog_conflict_reason, catalog_conflict_at').in('id', offeredIds)
         : Promise.resolve({ data: [] as any[], error: null } as any);
       const [{ data: ownProducts }, { data: offeredProducts }] = await Promise.all([ownQuery, offeredQuery]);
       const productsById = new Map<string, Product>();
@@ -629,6 +630,7 @@ const SupplierPanel = () => {
   };
 
   const toggleStock = async (p: Product) => {
+    if (p.catalog_conflict) { toast.error('Item conflitante bloqueado. Corrija o conflito antes de reativar.'); return; }
     await supabase.from('products').update({ in_stock: !p.in_stock }).eq('id', p.id);
     setProducts(prev => prev.map(x => x.id === p.id ? { ...x, in_stock: !x.in_stock } : x));
     toast.success(p.in_stock ? 'Marcado como sem estoque' : 'Marcado como em estoque');
@@ -919,6 +921,14 @@ const SupplierPanel = () => {
     const notFound: string[] = [];
     const invalid: string[] = [];
     const warnings: string[] = [];
+    const conflicts: string[] = [];
+    const conflictIds = new Set<string>();
+    const markConflict = async (product: Product, reason: string) => {
+      if (conflictIds.has(product.id)) return;
+      conflictIds.add(product.id);
+      conflicts.push(`${product.name} — ${reason}`);
+      await (supabase as any).rpc('mark_catalog_product_conflict', { _product_id: product.id, _reason: reason });
+    };
     try {
       // Uma chave pode ter aliases, mas nunca pode apontar silenciosamente para
       // dois produtos. Ambiguidade bloqueia o lote inteiro para evitar custo no item errado.
@@ -946,11 +956,12 @@ const SupplierPanel = () => {
         const candidates = [...new Set(entry.aliases.flatMap(alias => byName.get(normalizeSupplierProductName(alias).replace(/\bsansung\b/g, 'samsung')) || []))];
         if (candidates.length === 0) { notFound.push(entry.name); continue; }
         if (candidates.length > 1) {
-          invalid.push(`${entry.name} (correspondência ambígua: ${candidates.map(item => item.name).join(' / ')})`);
+          await markConflict(candidates[0], `Correspondência ambígua: ${candidates.map(item => item.name).join(' / ')}`);
           continue;
         }
         if (entry.cost == null || Number(entry.cost) <= 0) {
-          invalid.push(`${entry.name} (custo ausente ou inválido)`);
+          if (candidates[0]) await markConflict(candidates[0], 'Custo ausente ou inválido');
+          else invalid.push(`${entry.name} (custo ausente ou inválido)`);
           continue;
         }
         const product = candidates[0];
@@ -960,32 +971,27 @@ const SupplierPanel = () => {
           grouped.set(product.id, group);
         } else if (entry.colors.length === 0) {
           if (group.variants.size > 0 || group.cost !== Number(entry.cost)) {
-            invalid.push(`${entry.name} (custo de produto misturado ou divergente no mesmo lote)`);
+            await markConflict(product, 'Custo de produto misturado ou divergente no mesmo lote');
           }
           continue;
         } else if (group.variants.size === 0 && group.cost != null) {
-          invalid.push(`${entry.name} (produto sem cor misturado com variações no mesmo lote)`);
+          await markConflict(product, 'Produto sem cor misturado com variações no mesmo lote');
           continue;
         }
         for (const color of entry.colors) {
           const key = variantMatchKey(color);
-          if (!key) { invalid.push(`${entry.name} (cor inválida: ${color})`); continue; }
+          if (!key) { await markConflict(product, `Cor inválida: ${color}`); continue; }
           const available = !entry.unavailableColors.some(item => item === '__all__' || variantMatchKey(item) === key);
           const previous = group.variants.get(key);
           if (previous && (previous.available !== available || previous.cost !== Number(entry.cost))) {
-            invalid.push(`${entry.name} (variação ambígua ou repetida: ${color})`);
+            await markConflict(product, `Variação ambígua ou repetida: ${color}`);
           } else {
             group.variants.set(key, { name: previous?.name || color, key, cost: Number(entry.cost), available });
           }
         }
       }
 
-      if (invalid.length > 0) {
-        setImportResult({ updated: [], notFound, invalid, warnings: ['Importação bloqueada: nenhum dado foi alterado porque o lote contém ambiguidade ou custo inválido.'], available: 0, exhausted: 0 });
-        toast.error('Importação bloqueada por inconsistências; nada foi alterado');
-        return;
-      }
-      const payload = [...grouped.values()].map(group => ({
+      const payload = [...grouped.values()].filter(group => !conflictIds.has(group.product_id)).map(group => ({
         product_id: group.product_id,
         product_name: group.product_name,
         cost: group.cost,
@@ -993,7 +999,7 @@ const SupplierPanel = () => {
         variants: [...group.variants.values()],
       }));
       if (payload.length === 0) {
-        setImportResult({ updated: [], notFound, invalid: ['Nenhum produto da lista corresponde ao catálogo'], warnings: [], available: 0, exhausted: 0 });
+        setImportResult({ updated: [], notFound, invalid: ['Nenhum produto válido da lista corresponde ao catálogo'], warnings: [], available: 0, exhausted: 0, conflicts });
         toast.error('Nenhum produto do lote corresponde ao catálogo');
         return;
       }
@@ -1012,7 +1018,7 @@ const SupplierPanel = () => {
       const available = payload.filter(item => item.variants.length > 0 ? item.variants.some(variant => variant.available) : item.available !== false).length;
       const exhausted = payload.length - available;
       await fetchProducts();
-      setImportResult({ updated, notFound, invalid: [], warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [], available, exhausted });
+      setImportResult({ updated, notFound, invalid, warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [], available, exhausted, conflicts });
       toast.success(`Importação concluída: ${updated.length} atualizados, ${available} disponíveis e ${exhausted} esgotados`);
     } finally {
       setImportingPrices(false);
@@ -1348,13 +1354,15 @@ const SupplierPanel = () => {
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <span className="text-sm font-medium text-foreground">{p.name}</span>
+                    {p.catalog_conflict && <span className="ml-2 rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">ITEM CONFLITANTE — PENDENTE</span>}
                     <span className="text-xs text-muted-foreground ml-2">{p.category} · R${p.price.toFixed(2)}</span>
                   </div>
                   <button onClick={() => toggleStock(p)} className={`shrink-0 flex items-center gap-1 text-xs rounded-full px-3 py-1 font-medium ${p.in_stock ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                     {p.in_stock ? <PackageCheck className="h-3 w-3" /> : <PackageX className="h-3 w-3" />}
-                    {p.in_stock ? 'Em estoque' : 'Sem estoque'}
+                    {p.catalog_conflict ? 'ESGOTADO — CONFLITO' : p.in_stock ? 'Em estoque' : 'Sem estoque'}
                   </button>
                 </div>
+                {p.catalog_conflict_reason && <p className="rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-300">Motivo: {p.catalog_conflict_reason}</p>}
                 {(p.supplierVariants?.length ?? 0) > 0 && (
                   <div className="rounded-md border border-border/60 bg-secondary/30 px-2.5 py-2 space-y-1.5">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1470,6 +1478,7 @@ const SupplierPanel = () => {
                 {importResult.updated.length > 0 && <p className="text-xs text-green-400">Atualizados: {importResult.updated.join(', ')}</p>}
                 {importResult.notFound.length > 0 && <p className="text-xs text-yellow-400">Não encontrados: {importResult.notFound.join(', ')}</p>}
                 {importResult.invalid.length > 0 && <p className="text-xs text-red-400">Com erro: {importResult.invalid.join(', ')}</p>}
+                {(importResult.conflicts?.length ?? 0) > 0 && <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300"><strong>Conflitos bloqueados — pendentes de correção:</strong> {importResult.conflicts!.join('; ')}</div>}
                 {importResult.warnings.length > 0 && <p className="text-xs text-orange-300">Avisos auxiliares: {importResult.warnings.join(', ')}</p>}
               </div>
             )}
