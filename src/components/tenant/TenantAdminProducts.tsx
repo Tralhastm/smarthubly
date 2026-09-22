@@ -105,6 +105,7 @@ const COMPLETE_GUARANTEE = 'Garantia de 30 dias contra defeitos de funcionamento
 
 const isVariantSoldOut = (variant: { in_stock?: unknown }) =>
   variant.in_stock === false || String(variant.in_stock).toLowerCase() === 'false';
+const isStockAvailable = (value: unknown) => value === true || value === 'true' || value === 1 || value === '1';
 
 const variantMatchKey = (value: unknown) => {
   const aliases: Record<string, string> = {
@@ -2418,7 +2419,7 @@ const EditableProduct = ({ product, variants, isEditing, isDropshipping, isAffil
             )}
             {(product as any).platform_fee_percent != null && <span className="text-primary"> · Taxa: {(product as any).platform_fee_percent}%</span>}
             {(product as any).stock_quantity != null && <span className="text-primary"> · Estoque: {(product as any).stock_quantity}</span>}
-            {!isInStock(product.in_stock) && <span className="text-destructive"> · {(product as any).manual_blocked ? 'Bloqueado manualmente' : 'Esgotado'}</span>}
+            {!isStockAvailable(product.in_stock) && <span className="text-destructive"> · {(product as any).manual_blocked ? 'Bloqueado manualmente' : 'Esgotado'}</span>}
             {supplierName && <span className="text-primary"> · {supplierName}</span>}
             {(product as any).auto_categorize === false && <span className="text-muted-foreground"> · 🚫 IA off</span>}
           </p>
@@ -2426,7 +2427,7 @@ const EditableProduct = ({ product, variants, isEditing, isDropshipping, isAffil
             <div className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-primary/80">Preço por cor</p>
               {variantPrices.map(variant => {
-                const variantUnavailable = !isInStock(product.in_stock)
+                const variantUnavailable = !isStockAvailable(product.in_stock)
                   || isVariantSoldOut(variant)
                   || soldOutVariantIds.includes(variant.id);
                 return (
