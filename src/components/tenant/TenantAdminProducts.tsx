@@ -2005,6 +2005,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           onEdit={() => setEditing(p.id)} onSave={(prod) => { updateMutation.mutate(prod); setEditing(null); }}
           onToggleVariantStock={async (variant, manualSupplierId) => {
             const currentlyInStock = isInStock(variant.in_stock);
+            const nextInStock = !currentlyInStock;
             const salePrice = getVariantSalePrice({
               productPrice: Number(p.price),
               productCost: Number((p as any).original_price || 0),
@@ -2024,21 +2025,39 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               toast.error('Item conflitante bloqueado. Corrija o conflito antes de liberar a cor.');
               return;
             }
-            const { error } = await supabase.from('product_variants' as any)
-              .update({ in_stock: !currentlyInStock, manual_supplier_id: currentlyInStock ? null : manualSupplierId, updated_at: new Date().toISOString() })
-              .eq('id', variant.id).eq('tenant_id', tenantId);
-            if (error) {
-              toast.error(`Não foi possível atualizar a cor: ${error.message}`);
-              return;
-            }
-            const { data: siblingVariants } = await supabase.from('product_variants' as any)
-              .select('in_stock').eq('product_id', p.id).limit(100);
-            const productShouldBeInStock = ((siblingVariants || []) as any[]).some(sibling => isInStock(sibling.in_stock));
-            await supabase.from('products').update({ in_stock: productShouldBeInStock, updated_at: new Date().toISOString() } as any)
-              .eq('id', p.id).eq('tenant_id', tenantId);
-            await queryClient.invalidateQueries({ queryKey: ['tenant-product-variants', tenantId] });
-            await refetch();
+            const previousVariants = queryClient.getQueryData<ProductVariant[]>(['tenant-product-variants', tenantId]) || [];
+            const previousProducts = queryClient.getQueryData<Product[]>(['products', tenantId]) || [];
+            const productShouldBeInStock = previousVariants
+              .filter(sibling => sibling.product_id === p.id)
+              .some(sibling => sibling.id === variant.id ? nextInStock : isInStock(sibling.in_stock));
+
+            // Atualiza a tela imediatamente. A gravação segue em segundo plano.
+            queryClient.setQueryData<ProductVariant[]>(['tenant-product-variants', tenantId], current =>
+              (current || previousVariants).map(item => item.id === variant.id
+                ? { ...item, in_stock: nextInStock, manual_supplier_id: nextInStock ? manualSupplierId : null }
+                : item));
+            queryClient.setQueryData<Product[]>(['products', tenantId], current =>
+              (current || previousProducts).map(item => item.id === p.id
+                ? { ...item, in_stock: productShouldBeInStock }
+                : item));
             toast.success(!currentlyInStock ? `Cor ${variant.name} liberada.` : `Cor ${variant.name} marcada como esgotada.`);
+
+            try {
+              const [{ error: variantError }, { error: productError }] = await Promise.all([
+                supabase.from('product_variants' as any)
+                  .update({ in_stock: nextInStock, manual_supplier_id: nextInStock ? manualSupplierId : null, updated_at: new Date().toISOString() })
+                  .eq('id', variant.id).eq('tenant_id', tenantId),
+                supabase.from('products').update({ in_stock: productShouldBeInStock, updated_at: new Date().toISOString() } as any)
+                  .eq('id', p.id).eq('tenant_id', tenantId),
+              ]);
+              if (variantError || productError) throw variantError || productError;
+              void queryClient.invalidateQueries({ queryKey: ['tenant-product-variants', tenantId] });
+              void queryClient.invalidateQueries({ queryKey: ['products', tenantId] });
+            } catch (error) {
+              queryClient.setQueryData(['tenant-product-variants', tenantId], previousVariants);
+              queryClient.setQueryData(['products', tenantId], previousProducts);
+              toast.error(`Não foi possível salvar a alteração: ${error instanceof Error ? error.message : 'tente novamente'}`);
+            }
           }}
           onCancel={() => setEditing(null)} onDelete={() => deleteMutation.mutate(p.id)}
           onToggleVisibility={async () => {
