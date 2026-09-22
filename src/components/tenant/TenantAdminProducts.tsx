@@ -1995,6 +1995,39 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             });
           }}
           onEdit={() => setEditing(p.id)} onSave={(prod) => { updateMutation.mutate(prod); setEditing(null); }}
+          onToggleVariantStock={async (variant) => {
+            const currentlyInStock = isInStock(variant.in_stock);
+            const salePrice = getVariantSalePrice({
+              productPrice: Number(p.price),
+              productCost: Number((p as any).original_price || 0),
+              suggestedPrice: variant.suggested_price,
+              priceDelta: variant.price_delta,
+              variantCost: variant.cost_price,
+            });
+            if (!currentlyInStock && salePrice <= 0) {
+              toast.error(`Defina o preço de revenda da cor ${variant.name} antes de liberar.`);
+              return;
+            }
+            if (!currentlyInStock && isTrueFlag((p as any).catalog_conflict)) {
+              toast.error('Item conflitante bloqueado. Corrija o conflito antes de liberar a cor.');
+              return;
+            }
+            const { error } = await supabase.from('product_variants' as any)
+              .update({ in_stock: !currentlyInStock, updated_at: new Date().toISOString() })
+              .eq('id', variant.id).eq('tenant_id', tenantId);
+            if (error) {
+              toast.error(`Não foi possível atualizar a cor: ${error.message}`);
+              return;
+            }
+            const { data: siblingVariants } = await supabase.from('product_variants' as any)
+              .select('in_stock').eq('product_id', p.id).limit(100);
+            const productShouldBeInStock = ((siblingVariants || []) as any[]).some(sibling => isInStock(sibling.in_stock));
+            await supabase.from('products').update({ in_stock: productShouldBeInStock, updated_at: new Date().toISOString() } as any)
+              .eq('id', p.id).eq('tenant_id', tenantId);
+            await queryClient.invalidateQueries({ queryKey: ['tenant-product-variants', tenantId] });
+            await refetch();
+            toast.success(!currentlyInStock ? `Cor ${variant.name} liberada.` : `Cor ${variant.name} marcada como esgotada.`);
+          }}
           onCancel={() => setEditing(null)} onDelete={() => deleteMutation.mutate(p.id)}
           onToggleVisibility={async () => {
             const nextVisible = (p as any).store_visible === false;
@@ -2017,6 +2050,7 @@ const EditableProduct = ({ product, variants, isEditing, isDropshipping, isAffil
   soldOutVariantIds: string[];
   onRequestFee: (productId: string, percent: number) => void;
   onEdit: () => void; onSave: (p: Product) => void; onCancel: () => void; onDelete: () => void; onToggleVisibility: () => void;
+  onToggleVariantStock: (variant: ProductVariant) => Promise<void>;
 }) => {
   const [form, setForm] = useState(product);
   const [media, setMedia] = useState<MediaItem[]>((product as any).media || []);
@@ -2398,7 +2432,9 @@ const EditableProduct = ({ product, variants, isEditing, isDropshipping, isAffil
                 return (
                   <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
                     <span className="font-medium text-foreground">{variant.name}</span>
-                    {variantUnavailable && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">Esgotada</span>}
+                    <button type="button" onClick={() => onToggleVariantStock(variant)} className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${variantUnavailable ? 'bg-amber-500/15 text-amber-600 hover:bg-amber-500/25' : 'bg-green-500/15 text-green-600 hover:bg-green-500/25'}`} title={variantUnavailable ? 'Liberar esta cor manualmente' : 'Marcar esta cor como esgotada'}>
+                      {variantUnavailable ? 'Esgotada · Liberar' : 'Disponível · Esgotar'}
+                    </button>
                     <span>Custo: {variant.costPrice > 0 ? `R$${variant.costPrice.toFixed(2)}` : '—'}</span>
                     <span className="text-primary">Revenda: {hasExplicitVariantSale(variant) ? `R$${variant.salePrice.toFixed(2)}` : 'Pendente'}</span>
                   </p>
