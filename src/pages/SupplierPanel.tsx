@@ -1439,7 +1439,7 @@ const SupplierPanel = () => {
                     {productConflict ? 'ESGOTADO — CONFLITO' : productInStock ? 'Em estoque' : 'Sem estoque'}
                   </button>
                 </div>
-                {p.catalog_conflict_reason && <p className="rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-300">Motivo: {p.catalog_conflict_reason}</p>}
+                {p.catalog_conflict && p.catalog_conflict_reason && <p className="rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-300">Motivo: {p.catalog_conflict_reason}</p>}
                 {(p.supplierVariants?.length ?? 0) > 0 && (
                   <div className="rounded-md border border-border/60 bg-secondary/30 px-2.5 py-2 space-y-1.5">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
