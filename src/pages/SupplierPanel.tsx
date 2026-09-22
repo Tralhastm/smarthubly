@@ -1407,7 +1407,10 @@ const SupplierPanel = () => {
         {tab === 'stock' && (
           <div className="space-y-2">
             {products.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhum produto associado a você.</p>}
-            {products.map(p => (
+            {products.map(p => {
+              const productInStock = p.in_stock === true || String(p.in_stock).toLowerCase() === 'true';
+              const productConflict = p.catalog_conflict === true || String(p.catalog_conflict).toLowerCase() === 'true';
+              return (
               <div key={p.id} className="rounded-lg border border-border bg-card p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
@@ -1415,9 +1418,9 @@ const SupplierPanel = () => {
                     {p.catalog_conflict && <span className="ml-2 rounded-full bg-red-500/20 px-2 py-0.5 text-[10px] font-bold text-red-300">ITEM CONFLITANTE — PENDENTE</span>}
                     <span className="text-xs text-muted-foreground ml-2">{p.category} · R${p.price.toFixed(2)}</span>
                   </div>
-                  <button onClick={() => toggleStock(p)} className={`shrink-0 flex items-center gap-1 text-xs rounded-full px-3 py-1 font-medium ${p.in_stock ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                    {p.in_stock ? <PackageCheck className="h-3 w-3" /> : <PackageX className="h-3 w-3" />}
-                    {p.catalog_conflict ? 'ESGOTADO — CONFLITO' : p.in_stock ? 'Em estoque' : 'Sem estoque'}
+                  <button onClick={() => toggleStock(p)} className={`shrink-0 flex items-center gap-1 text-xs rounded-full px-3 py-1 font-medium ${productInStock ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {productInStock ? <PackageCheck className="h-3 w-3" /> : <PackageX className="h-3 w-3" />}
+                    {productConflict ? 'ESGOTADO — CONFLITO' : productInStock ? 'Em estoque' : 'Sem estoque'}
                   </button>
                 </div>
                 {p.catalog_conflict_reason && <p className="rounded-md bg-red-500/10 px-2 py-1 text-xs text-red-300">Motivo: {p.catalog_conflict_reason}</p>}
@@ -1490,7 +1493,8 @@ const SupplierPanel = () => {
                   </button>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

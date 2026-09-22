@@ -541,9 +541,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       setDeletingAll(false);
     }
   };
-  const availableProductCount = products.filter(product => product.in_stock !== false).length;
+  const availableProductCount = products.filter(product => isInStock(product.in_stock)).length;
   const unavailableProductCount = products.length - availableProductCount;
-  const hiddenUnavailableCount = products.filter(product => product.in_stock === false && (product as any).store_visible === false).length;
+  const hiddenUnavailableCount = products.filter(product => !isInStock(product.in_stock) && (product as any).store_visible === false).length;
   const handleToggleUnavailableVisibility = async () => {
     if (unavailableProductCount === 0) {
       toast.info('Não há produtos indisponíveis para alterar.');
@@ -2384,21 +2384,26 @@ const EditableProduct = ({ product, variants, isEditing, isDropshipping, isAffil
             )}
             {(product as any).platform_fee_percent != null && <span className="text-primary"> · Taxa: {(product as any).platform_fee_percent}%</span>}
             {(product as any).stock_quantity != null && <span className="text-primary"> · Estoque: {(product as any).stock_quantity}</span>}
-            {!product.in_stock && <span className="text-destructive"> · {(product as any).manual_blocked ? 'Bloqueado manualmente' : 'Esgotado'}</span>}
+            {!isInStock(product.in_stock) && <span className="text-destructive"> · {(product as any).manual_blocked ? 'Bloqueado manualmente' : 'Esgotado'}</span>}
             {supplierName && <span className="text-primary"> · {supplierName}</span>}
             {(product as any).auto_categorize === false && <span className="text-muted-foreground"> · 🚫 IA off</span>}
           </p>
           {variantPrices.length > 0 && (
             <div className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-primary/80">Preço por cor</p>
-              {variantPrices.map(variant => (
-                <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
-                  <span className="font-medium text-foreground">{variant.name}</span>
-                  {isVariantSoldOut(variant) && soldOutVariantIds.includes(variant.id) && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">Esgotada</span>}
-                  <span>Custo: {variant.costPrice > 0 ? `R$${variant.costPrice.toFixed(2)}` : '—'}</span>
-                  <span className="text-primary">Revenda: {hasExplicitVariantSale(variant) ? `R$${variant.salePrice.toFixed(2)}` : 'Pendente'}</span>
-                </p>
-              ))}
+              {variantPrices.map(variant => {
+                const variantUnavailable = !isInStock(product.in_stock)
+                  || isVariantSoldOut(variant)
+                  || soldOutVariantIds.includes(variant.id);
+                return (
+                  <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
+                    <span className="font-medium text-foreground">{variant.name}</span>
+                    {variantUnavailable && <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600">Esgotada</span>}
+                    <span>Custo: {variant.costPrice > 0 ? `R$${variant.costPrice.toFixed(2)}` : '—'}</span>
+                    <span className="text-primary">Revenda: {hasExplicitVariantSale(variant) ? `R$${variant.salePrice.toFixed(2)}` : 'Pendente'}</span>
+                  </p>
+                );
+              })}
             </div>
           )}
           {(unavailableVariants.length > 0 || resaleReviewVariants.length > 0) && (
