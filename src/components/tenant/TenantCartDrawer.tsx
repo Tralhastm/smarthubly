@@ -1126,6 +1126,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                   <div>
                     <label className="text-sm font-medium text-foreground">Telefone</label>
                     <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full mt-1 rounded-lg border border-border bg-secondary px-3 py-2 text-foreground text-sm" placeholder="(00) 00000-0000" />
+                    <p className="mt-1 text-xs text-muted-foreground">Informe um número correto para nossa equipe entrar em contato sobre a atualização do pedido. Se o celular comprado não estiver disponível com nenhum fornecedor, usaremos este telefone para avisar e providenciar o reembolso.</p>
                   </div>
                   {isAsaasActive && <div>
                     <label className="text-sm font-medium text-foreground">CPF/CNPJ <span className="text-destructive">*</span></label>
