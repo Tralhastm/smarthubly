@@ -966,15 +966,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
 
       if (orderResult?.id) {
         if (appliedCoupon?.seller_id && appliedCoupon?.seller_code_id) {
-          const grossSubtotal = items.reduce((sum, item) => sum + getCartLineUnitPrice(item) * item.quantity, 0);
-          const sellerRows = items.map((item) => {
-            const gross = getCartLineUnitPrice(item) * item.quantity;
-            const itemDiscount = grossSubtotal > 0 ? discountAmount * gross / grossSubtotal : 0;
-            const net = Math.max(0, gross - itemDiscount);
-            const commissionPercent = 20;
-            return { tenant_id: tenant.id, order_id: orderResult.id, order_item_id: null, product_id: item.product.id, seller_id: appliedCoupon.seller_id, seller_code_id: appliedCoupon.seller_code_id, product_name: item.product.name, quantity: item.quantity, unit_price_before_discount: getCartLineUnitPrice(item), unit_price_after_discount: item.quantity ? net / item.quantity : 0, discount_amount: itemDiscount, line_total: net, commission_percent: commissionPercent, commission_amount: 0 };
-          });
-          try { await (supabase as any).from('seller_order_items').insert(sellerRows); } catch (e) { console.error('seller commission error', e); }
+          // O checkout_place_order já materializa as linhas do vendedor no servidor,
+          // vinculadas aos order_items reais. Não inserir novamente pelo navegador:
+          // isso criava cópias sem order_item_id e duplicava as vendas no painel.
           await incrementSellerCodeUse(appliedCoupon.seller_code_id, appliedCoupon.uses_count);
         }
         await logOrderEvent({
