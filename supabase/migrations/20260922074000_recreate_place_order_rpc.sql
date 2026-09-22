@@ -35,7 +35,7 @@ BEGIN
       SELECT 1
       FROM public.product_variants pv
       JOIN public.products p ON p.id = pv.product_id
-      WHERE p.tenant_id = (_order->>'tenant_id')::uuid
+      WHERE p.tenant_id = (_order->>'tenant_id')
         AND public.catalog_product_match_key(p.name) = public.catalog_product_match_key(product_name)
     ) INTO has_variants;
 
@@ -46,13 +46,13 @@ BEGIN
       JOIN public.supplier_catalog_snapshots cs
         ON cs.id = o.snapshot_id
        AND cs.status = 'completed'
-      WHERE o.tenant_id = (_order->>'tenant_id')::uuid
+        AND o.tenant_id = (_order->>'tenant_id')
         AND o.available = true
         AND o.product_variant_id = (
           SELECT pv.id
           FROM public.product_variants pv
           JOIN public.products p ON p.id = pv.product_id
-          WHERE p.tenant_id = (_order->>'tenant_id')::uuid
+          WHERE p.tenant_id = (_order->>'tenant_id')
             AND public.catalog_product_match_key(p.name) = public.catalog_product_match_key(product_name)
             AND lower(trim(pv.name)) = lower(variant_name)
           LIMIT 1
@@ -123,8 +123,8 @@ BEGIN
     INSERT INTO public.order_fragments(order_id, tenant_id, supplier_id, items, total, status)
     VALUES (
       order_id,
-      (_order->>'tenant_id')::uuid,
-      fragment_key::uuid,
+      _order->>'tenant_id',
+      fragment_key,
       fragment_items,
       (SELECT SUM(COALESCE((x->>'supplier_cost')::numeric, 0) * COALESCE((x->>'quantity')::numeric, 0))
        FROM jsonb_array_elements(fragment_items) x),
@@ -132,8 +132,8 @@ BEGIN
     );
 
     UPDATE public.order_items oi
-    SET supplier_id = fragment_key::uuid
-    WHERE oi.order_id = order_id::uuid
+    SET supplier_id = fragment_key
+    WHERE oi.order_id = order_id
       AND EXISTS (
         SELECT 1
         FROM jsonb_array_elements(fragment_items) x
