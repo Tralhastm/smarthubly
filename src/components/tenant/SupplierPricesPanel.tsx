@@ -20,6 +20,7 @@ type Props = {
 const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 type ExtractedItem = { name?: string; product_name?: string; price?: number; unit_price?: number; preco?: number; available?: boolean };
+type ManualBlockedItem = { id: string; name: string };
 
 const SupplierPricesPanel = ({ supplierId }: Props) => {
   const [rows, setRows] = useState<PriceRow[]>([]);
@@ -29,6 +30,8 @@ const SupplierPricesPanel = ({ supplierId }: Props) => {
   // Upload de catálogo com IA
   const [uploading, setUploading] = useState(false);
   const [extracted, setExtracted] = useState<ExtractedItem[] | null>(null);
+  const [manualBlockedItems, setManualBlockedItems] = useState<ManualBlockedItem[]>([]);
+  const [unlockIds, setUnlockIds] = useState<string[]>([]);
   const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
   const [merge, setMerge] = useState(true);
   const [fileReady, setFileReady] = useState<{ name: string; kind: 'pdf' | 'image' | 'txt'; content: string } | null>(null);
@@ -126,6 +129,8 @@ const SupplierPricesPanel = ({ supplierId }: Props) => {
     }
     try {
       setExtracted(null);
+      setManualBlockedItems([]);
+      setUnlockIds([]);
       setUploadWarnings([]);
       setFileReady(await readFileAsContent(f));
       toast.info(`${f.name} carregado. Clique em "Extrair com IA" para ler os preços.`);
@@ -157,6 +162,9 @@ const SupplierPricesPanel = ({ supplierId }: Props) => {
         return;
       }
       setExtracted(data.items || []);
+      const blocked = (data.manualBlockedItems || []) as ManualBlockedItem[];
+      setManualBlockedItems(blocked);
+      setUnlockIds([]);
       setUploadWarnings(data.warnings || []);
       toast.success(`IA extraiu ${data.total ?? 0} itens do catálogo`);
     } catch {
@@ -175,10 +183,24 @@ const SupplierPricesPanel = ({ supplierId }: Props) => {
       return name && Number.isFinite(p) && p > 0;
     });
     
+    if (unlockIds.length > 0) {
+      const { error } = await supabase
+        .from('products')
+        .update({ manual_blocked: false, catalog_conflict: false, in_stock: true, updated_at: new Date().toISOString() } as any)
+        .in('id', unlockIds);
+      if (error) {
+        toast.error(`Não foi possível desbloquear os produtos: ${error.message}`);
+        return;
+      }
+      toast.success(`${unlockIds.length} produto(s) desbloqueado(s) e reavaliado(s) na vitrine.`);
+    }
+
     // As variações e descrições agora são processadas pela IA e salvas na tabela
     // supplier_product_prices para permitir o matching inteligente durante o pedido.
     toast.success(`${good.length} itens processados com detalhes de variação (cor/memória).`);
     setExtracted(null);
+    setManualBlockedItems([]);
+    setUnlockIds([]);
     setFileReady(null);
     setUploadWarnings([]);
     await load();
@@ -279,6 +301,25 @@ const SupplierPricesPanel = ({ supplierId }: Props) => {
                   <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {uploadWarnings.join(' · ')}
                 </p>
               )}
+              {manualBlockedItems.length > 0 && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+                  <p className="text-sm font-medium text-amber-300">⚠ Os seguintes itens da lista estão bloqueados manualmente. Deseja desbloquear?</p>
+                  <p className="text-xs text-muted-foreground">Selecione apenas os produtos que devem voltar para a vitrine. O desbloqueio remove também o bloqueio de conflito e respeita as ofertas válidas do fornecedor.</p>
+                  <div className="space-y-1">
+                    {manualBlockedItems.map(item => (
+                      <label key={item.id} className="flex items-center gap-2 rounded border border-border bg-card px-2 py-1.5 text-xs text-foreground">
+                        <input
+                          type="checkbox"
+                          checked={unlockIds.includes(item.id)}
+                          onChange={e => setUnlockIds(current => e.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))}
+                          className="accent-primary"
+                        />
+                        <span>{item.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="max-h-56 overflow-y-auto rounded-md border border-border divide-y divide-border">
                 {extracted.map((it, i) => {
                   const name = String(it.name || it.product_name || '').trim();
@@ -299,7 +340,7 @@ const SupplierPricesPanel = ({ supplierId }: Props) => {
                   <CheckCircle2 className="h-4 w-4" /> Confirmar
                 </button>
                 <button
-                  onClick={() => { setExtracted(null); setFileReady(null); setUploadWarnings([]); }}
+                  onClick={() => { setExtracted(null); setFileReady(null); setUploadWarnings([]); setManualBlockedItems([]); setUnlockIds([]); }}
                   className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-4 w-4" /> Descartar

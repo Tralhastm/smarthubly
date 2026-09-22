@@ -297,7 +297,7 @@ Regras:
     // da loja é fonte de verdade para os itens que podem ser atualizados.
     const { data: catalogProducts, error: catalogError } = await admin
       .from('products')
-      .select('id, name, price')
+      .select('id, name, price, manual_blocked')
       .eq('tenant_id', targetTenantId);
     if (catalogError) return json({ error: 'catalog_products_query_failed', detail: catalogError.message }, 500);
     const productsByKey = new Map<string, any>();
@@ -305,6 +305,13 @@ Regras:
       const key = productMatchKey(product.name);
       if (key && !productsByKey.has(key)) productsByKey.set(key, product);
     }
+    const manualBlockedItems = items
+      .map((it: CatalogItem) => {
+        const sourceName = String(it.name || it.product_name || '').trim();
+        const product = productsByKey.get(productMatchKey(sourceName));
+        return product?.manual_blocked === true ? { id: product.id, name: product.name } : null;
+      })
+      .filter(Boolean);
     const catalogIds = [...productsByKey.values()].map((p: any) => p.id);
     const { data: existingVariants } = catalogIds.length
       ? await admin.from('product_variants').select('*').in('product_id', catalogIds)
@@ -462,7 +469,7 @@ Regras:
       warnings.push(`Falha ao recalcular fornecedores e estoque: ${reconciliationError.message}`);
     }
 
-    return json({ total: items.length, updated: matchedProducts.length, skipped, reconciliation, skippedProducts: skippedProducts.slice(0, 100), matchedProducts: matchedProducts.slice(0, 100), warnings, alerts: results.slice(0, 20), items: items.slice(0, 100), products: items.slice(0, 100) });
+    return json({ total: items.length, updated: matchedProducts.length, skipped, reconciliation, skippedProducts: skippedProducts.slice(0, 100), matchedProducts: matchedProducts.slice(0, 100), manualBlockedItems, warnings, alerts: results.slice(0, 20), items: items.slice(0, 100), products: items.slice(0, 100) });
 
   } catch (e) {
     console.error("[catalog] error", e);

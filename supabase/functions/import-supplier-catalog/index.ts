@@ -587,22 +587,6 @@ Deno.serve(async (req) => {
       return json({ error: "forbidden" }, 403);
     }
 
-    // Cada lista representa o estado atual do fornecedor. Itens que não
-    // aparecem na nova lista deixam de ser ofertas ativas antes do recálculo.
-    // Isso evita manter associações antigas e impede que um único fornecedor
-    // fique majoritariamente preso aos produtos da loja.
-    if (merge) {
-      await admin.from("supplier_product_prices")
-        .update({ available: false })
-        .eq("supplier_id", supplierId);
-    }
-    {
-      await admin.from("supplier_variant_offers")
-        .update({ available: false, last_seen_at: new Date().toISOString() })
-        .eq("supplier_id", supplierId)
-        .eq("tenant_id", supplier.tenant_id);
-    }
-
     let text = "";
     let imageData: { data: string; mimeType: string } | undefined;
 
@@ -687,17 +671,56 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
       return json({ error: "no_items_extracted", warnings }, 422);
     }
 
+    // A lista só pode substituir a fotografia anterior depois que a leitura
+    // terminou com sucesso. Antes disso, um erro da IA ou um PDF ilegível
+    // desativava todas as ofertas do fornecedor e fazia os iPhones aparecerem
+    // como esgotados mesmo sem uma nova fotografia válida.
+    //
+    // Proteção adicional: se o arquivo contém iPhone, mas a IA não devolveu
+    // nenhum iPhone, não aceitamos uma extração parcial silenciosa.
+    const sourceMentionsIPhone = /iphone/i.test(text || String(content));
+    const extractedIPhoneCount = items.filter((it: any) => /iphone/i.test(String(it?.name || it?.product_name || ''))).length;
+    if (sourceMentionsIPhone && extractedIPhoneCount === 0) {
+      return json({
+        error: "catalog_parse_incomplete",
+        detail: "A lista contém iPhone, mas a leitura não retornou nenhum iPhone. As ofertas anteriores foram preservadas.",
+        warnings,
+      }, 422);
+    }
+
+    // Cada lista representa o estado atual do fornecedor. Itens que não
+    // aparecem na nova lista deixam de ser ofertas ativas, mas somente depois
+    // da extração válida acima, evitando esgotamento falso por falha de leitura.
+    if (merge) {
+      await admin.from("supplier_product_prices")
+        .update({ available: false })
+        .eq("supplier_id", supplierId);
+    }
+    await admin.from("supplier_variant_offers")
+      .update({ available: false, last_seen_at: new Date().toISOString() })
+      .eq("supplier_id", supplierId)
+      .eq("tenant_id", supplier.tenant_id);
+
     let skipped = 0;
 
     const { data: catalogProducts } = await admin
       .from("products")
-      .select("id, name")
+      .select("id, name, manual_blocked")
       .eq("tenant_id", supplier.tenant_id);
     const { data: catalogVariants } = await admin
       .from("product_variants")
       .select("id, product_id, name")
       .eq("tenant_id", supplier.tenant_id);
     const productsByName = new Map((catalogProducts || []).map((p: any) => [normalizeMatch(p.name), p]));
+    const manualBlockedItems = items
+      .map((it: CatalogItem) => {
+        const itemName = String(it.name || it.product_name || '').trim();
+        const product = productsByName.get(normalizeMatch(itemName));
+        return product && product.manual_blocked === true
+          ? { id: product.id, name: product.name }
+          : null;
+      })
+      .filter(Boolean);
     const variantsByProduct = new Map<string, Map<string, any>>();
     for (const v of catalogVariants || []) {
       if (!variantsByProduct.has(v.product_id)) variantsByProduct.set(v.product_id, new Map());
@@ -816,7 +839,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
         console.error('[import-supplier-catalog] reconciliação erro:', reconciliationError);
         return json({ error: 'supplier_reconciliation_failed', detail: reconciliationError.message }, 500);
       }
-      return json({ total: items.length, skipped, reconciliation, warnings, items: items.slice(0, 100) });
+      return json({ total: items.length, skipped, reconciliation, warnings, manualBlockedItems, items: items.slice(0, 100) });
     }
 
     // merge=true: upsert (conflito supplier_id,product_name) — preserva preços manuais
@@ -859,7 +882,7 @@ Responda APENAS com JSON no formato: { "items": [{ "name": "...", "price": 0, "c
       .eq("supplier_id", supplierId);
     if (cErr) console.error("[import-supplier-catalog] count erro:", cErr);
 
-    return json({ total: items.length, saved: saved || 0, skipped, reconciliation, warnings, items: items.slice(0, 100) });
+    return json({ total: items.length, saved: saved || 0, skipped, reconciliation, warnings, manualBlockedItems, items: items.slice(0, 100) });
   } catch (e: any) {
     console.error("[import-supplier-catalog] erro:", e);
     return json({ error: String(e?.message || e) }, 500);
