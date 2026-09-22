@@ -956,6 +956,13 @@ const SupplierPanel = () => {
       await (supabase as any).rpc('mark_catalog_product_conflict', { _product_id: product.id, _reason: reason });
     };
     try {
+      // Uma nova lista sempre encerra liberações manuais anteriores e devolve
+      // a decisão ao fluxo normal de ofertas vigentes e menor custo.
+      const { error: manualOverrideError } = await supabase.from('product_variants' as any)
+        .update({ manual_supplier_id: null })
+        .eq('tenant_id', supplier.tenant_id)
+        .not('manual_supplier_id', 'is', null);
+      if (manualOverrideError) throw manualOverrideError;
       // Uma chave pode ter aliases, mas nunca pode apontar silenciosamente para
       // dois produtos. Ambiguidade bloqueia o lote inteiro para evitar custo no item errado.
       const byName = new Map<string, Product[]>();

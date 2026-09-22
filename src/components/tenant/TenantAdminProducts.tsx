@@ -149,7 +149,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     queryFn: async () => {
       const { data, error } = await supabase
         .from('product_variants' as any)
-        .select('id,product_id,name,suggested_price,price_delta,cost_price,in_stock,needs_price_review')
+        .select('id,product_id,name,suggested_price,price_delta,cost_price,in_stock,needs_price_review,manual_supplier_id')
         .eq('tenant_id', tenantId);
       if (error) throw error;
       return (data || []) as ProductVariant[];
@@ -999,6 +999,13 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     // ocultamos as ofertas antigas dele; as linhas encontradas neste upload
     // serão reativadas durante o processamento. Assim, produto/cor ausente
     // fica esgotado sem apagar o histórico nem afetar o outro fornecedor.
+    // Liberações manuais são temporárias: uma nova lista sempre devolve a
+    // decisão ao fluxo normal de ofertas vigentes e menor custo.
+    const { error: manualOverrideError } = await supabase.from('product_variants' as any)
+      .update({ manual_supplier_id: null })
+      .eq('tenant_id', tenantId)
+      .not('manual_supplier_id', 'is', null);
+    if (manualOverrideError) throw manualOverrideError;
     if (currentSupplierId) {
       const { error } = await supabase.from('supplier_product_prices')
         .update({ available: false })
@@ -1996,7 +2003,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             });
           }}
           onEdit={() => setEditing(p.id)} onSave={(prod) => { updateMutation.mutate(prod); setEditing(null); }}
-          onToggleVariantStock={async (variant) => {
+          onToggleVariantStock={async (variant, manualSupplierId) => {
             const currentlyInStock = isInStock(variant.in_stock);
             const salePrice = getVariantSalePrice({
               productPrice: Number(p.price),
@@ -2009,12 +2016,16 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               toast.error(`Defina o preço de revenda da cor ${variant.name} antes de liberar.`);
               return;
             }
+            if (!currentlyInStock && !manualSupplierId) {
+              toast.error(`Escolha o fornecedor responsável pela cor ${variant.name} antes de liberar.`);
+              return;
+            }
             if (!currentlyInStock && isTrueFlag((p as any).catalog_conflict)) {
               toast.error('Item conflitante bloqueado. Corrija o conflito antes de liberar a cor.');
               return;
             }
             const { error } = await supabase.from('product_variants' as any)
-              .update({ in_stock: !currentlyInStock, updated_at: new Date().toISOString() })
+              .update({ in_stock: !currentlyInStock, manual_supplier_id: currentlyInStock ? null : manualSupplierId, updated_at: new Date().toISOString() })
               .eq('id', variant.id).eq('tenant_id', tenantId);
             if (error) {
               toast.error(`Não foi possível atualizar a cor: ${error.message}`);
@@ -2051,7 +2062,7 @@ const EditableProduct = ({ product, variants, isEditing, isDropshipping, isAffil
   soldOutVariantIds: string[];
   onRequestFee: (productId: string, percent: number) => void;
   onEdit: () => void; onSave: (p: Product) => void; onCancel: () => void; onDelete: () => void; onToggleVisibility: () => void;
-  onToggleVariantStock: (variant: ProductVariant) => Promise<void>;
+  onToggleVariantStock: (variant: ProductVariant, manualSupplierId?: string) => Promise<void>;
 }) => {
   const [form, setForm] = useState(product);
   const [media, setMedia] = useState<MediaItem[]>((product as any).media || []);
@@ -2430,12 +2441,20 @@ const EditableProduct = ({ product, variants, isEditing, isDropshipping, isAffil
                 const variantUnavailable = !isStockAvailable(product.in_stock)
                   || isVariantSoldOut(variant)
                   || soldOutVariantIds.includes(variant.id);
+                const manualSupplierId = String((variant as any).manual_supplier_id || '');
                 return (
                   <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
                     <span className="font-medium text-foreground">{variant.name}</span>
-                    <button type="button" onClick={() => onToggleVariantStock(variant)} className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${variantUnavailable ? 'bg-amber-500/15 text-amber-600 hover:bg-amber-500/25' : 'bg-green-500/15 text-green-600 hover:bg-green-500/25'}`} title={variantUnavailable ? 'Liberar esta cor manualmente' : 'Marcar esta cor como esgotada'}>
-                      {variantUnavailable ? 'Esgotada · Liberar' : 'Disponível · Esgotar'}
+                    {variantUnavailable && (
+                      <select value={manualSupplierId} onChange={e => onToggleVariantStock(variant, e.target.value)} className="rounded border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-foreground" title="Fornecedor temporário desta liberação">
+                        <option value="">Escolher fornecedor</option>
+                        {suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                      </select>
+                    )}
+                    <button type="button" onClick={() => onToggleVariantStock(variant, manualSupplierId || undefined)} className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${variantUnavailable ? 'bg-amber-500/15 text-amber-600 hover:bg-amber-500/25' : 'bg-green-500/15 text-green-600 hover:bg-green-500/25'}`} title={variantUnavailable ? 'Liberar esta cor manualmente' : 'Marcar esta cor como esgotada'}>
+                      {variantUnavailable ? 'Liberar' : 'Esgotar'}
                     </button>
+                    {manualSupplierId && variantUnavailable && <span className="text-[10px] text-muted-foreground">({suppliers.find(s => s.id === manualSupplierId)?.name || 'fornecedor manual'})</span>}
                     <span>Custo: {variant.costPrice > 0 ? `R$${variant.costPrice.toFixed(2)}` : '—'}</span>
                     <span className="text-primary">Revenda: {hasExplicitVariantSale(variant) ? `R$${variant.salePrice.toFixed(2)}` : 'Pendente'}</span>
                   </p>
