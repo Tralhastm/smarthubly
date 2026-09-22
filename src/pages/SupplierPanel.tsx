@@ -233,7 +233,16 @@ const SupplierPanel = () => {
       variantsByProduct.set(v.product_id, list);
     });
     const merged = new Map<string, Product>();
-    (visibleProducts as any[]).forEach(p => merged.set(p.id, { ...(p as Product), supplierVariants: variantsByProduct.get(p.id) || [] }));
+    (visibleProducts as any[]).forEach(p => {
+      const parentAvailable = !(['true', true].includes(p.catalog_conflict as any))
+        && (p.in_stock === true || String(p.in_stock) === 'true');
+      const supplierVariants = (variantsByProduct.get(p.id) || []).map(v => ({
+        ...v,
+        // Um conflito ou produto esgotado bloqueia também as cores no painel.
+        in_stock: parentAvailable && v.in_stock,
+      }));
+      merged.set(p.id, { ...(p as Product), supplierVariants });
+    });
     setProducts([...merged.values()]);
   }, [supplier]);
 
