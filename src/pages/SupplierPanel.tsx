@@ -726,6 +726,8 @@ const SupplierPanel = () => {
     .replace(/\*/g, '').replace(/[_~`]/g, '').replace(/[🇧🇷🇨🇳☀️😍🤩🟢⚠️‼️]/gu, '')
     .replace(/^[^A-Za-zÀ-ÿ0-9]+/, '')
     .replace(/\(\s*R?\$?.*$/i, '').replace(/\s*[-–—,:;]+\s*$/, '').replace(/[：:]+$/, '').trim();
+  const normalizeAppleShortName = (value: string) =>
+    /^\d{2}\s+pro(?:\s+max)?\b/i.test(value.trim()) ? `iPhone ${value.trim()}` : value;
 
   const sectionBrand = (line: string) => {
     const upper = line.toLocaleUpperCase('pt-BR');
@@ -825,7 +827,7 @@ const SupplierPanel = () => {
 
       const vendorPrice = line.match(/\(\s*R?\$\s*([^)]*)\)/i);
       if (vendorPrice) {
-        const name = cleanImportedName(line.slice(0, vendorPrice.index ?? 0));
+        const name = normalizeAppleShortName(cleanImportedName(line.slice(0, vendorPrice.index ?? 0)));
         const vendorCost = parsePrice(vendorPrice[1]);
         const remainder = line.slice((vendorPrice.index ?? 0) + vendorPrice[0].length);
         const vendorResale = numberFromLine(remainder, ['venda sugerida', 'venda', 'revenda', 'resale', 'preço de venda', 'preco de venda']);
@@ -859,7 +861,7 @@ const SupplierPanel = () => {
       }
 
       if (cost != null || resale != null) {
-        const name = cleanImportedName(line.split(/\b(?:custo|venda sugerida|venda|revenda|resale|preço de custo|preco de custo|preço de venda|preco de venda)\b/i)[0].replace(/[-–—:]+\s*$/, ''));
+        const name = normalizeAppleShortName(cleanImportedName(line.split(/\b(?:custo|venda sugerida|venda|revenda|resale|preço de custo|preco de custo|preço de venda|preco de venda)\b/i)[0].replace(/[-–—:]+\s*$/, '')));
         if (name && !/^(?:custo|venda|revenda|resale|preço|preco)$/i.test(name)) {
           const aliases = [name];
           if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
@@ -878,7 +880,7 @@ const SupplierPanel = () => {
           continue;
         }
         flush();
-        const name = cleanImportedName(oneLine[1]);
+          const name = normalizeAppleShortName(cleanImportedName(oneLine[1]));
         const price = parsePrice(oneLine[2]);
         if (name && price > 0) {
           const aliases = [name];
