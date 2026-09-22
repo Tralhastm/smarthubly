@@ -402,12 +402,17 @@ const SupplierPanel = () => {
         lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', `Pedido: #${order.id.slice(0, 8).toUpperCase()}`, `CÓDIGO DO MOTOBOY: ${getCourierCode(order)}`, '');
         items.forEach((item: any) => {
           const qty = Number(item.quantity || 0);
-          const cost = costs.get(item.variantId) ?? Number(item.product?.original_price ?? 0);
+          const cost = Number(item.supplier_cost ?? item.supplierCost ?? costs.get(item.variantId) ?? item.product?.original_price ?? 0);
           const subtotal = cost * qty;
           totalUnits += qty; totalDue += subtotal;
-          lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', `Quantidade: ${qty} unidade(s)`, `Produto: ${item.product?.name || 'Não identificado'}`, `Variação: ${item.variantName || 'Única'}`, `Custo unitário: ${cost > 0 ? money(cost) : 'NÃO LOCALIZADO'}`, `Subtotal: ${cost > 0 ? money(subtotal) : 'CONFERIR'}`, '');
+          const productName = item.product?.name || item.product_name || 'Não identificado';
+          const variantName = item.variantName || item.variant_name || 'Única';
+          lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', `Quantidade: ${qty} unidade(s)`, `Produto: ${productName}`, `Variação: ${variantName}`, `Custo unitário: ${cost > 0 ? money(cost) : 'NÃO LOCALIZADO'}`, `Subtotal: ${cost > 0 ? money(subtotal) : 'CONFERIR'}`, '');
         });
       });
+      if (orders.some(({ items }) => items.some((item: any) => Number(item.supplier_cost ?? item.supplierCost ?? costs.get(item.variantId) ?? item.product?.original_price ?? 0) <= 0))) {
+        throw new Error('Não foi possível localizar o custo de todos os itens. O lote não foi enviado.');
+      }
       const batchCode = `LOTE-${start.toISOString().slice(0, 10).replace(/-/g, '')}-${String(supplier.id).slice(0, 6).toUpperCase()}`;
       lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'TOTAL DO LOTE', `Quantidade total: ${totalUnits} unidade(s)`, `VALOR TOTAL DEVIDO AO FORNECEDOR: ${money(totalDue)}`, '', `REFERÊNCIA DO LOTE: ${batchCode}`, 'Os códigos do motoboy estão informados junto de cada pedido acima.', '', 'Conferir quantidade, variação, custo unitário e total antes de separar.');
       const text = lines.join('\n');
