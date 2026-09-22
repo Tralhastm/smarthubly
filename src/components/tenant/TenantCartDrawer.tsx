@@ -969,7 +969,13 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           // O checkout_place_order já materializa as linhas do vendedor no servidor,
           // vinculadas aos order_items reais. Não inserir novamente pelo navegador:
           // isso criava cópias sem order_item_id e duplicava as vendas no painel.
-          await incrementSellerCodeUse(appliedCoupon.seller_code_id, appliedCoupon.uses_count);
+          try {
+            await incrementSellerCodeUse(appliedCoupon.seller_code_id, appliedCoupon.uses_count);
+          } catch (e) {
+            // O pedido já foi confirmado; falha de contador não pode convertê-lo
+            // em falso erro para o cliente.
+            console.warn('seller code counter update failed:', e);
+          }
         }
         await logOrderEvent({
           order_id: orderResult.id,
@@ -992,7 +998,12 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           });
         }
         if (appliedCoupon) {
-          await incrementCouponUse(appliedCoupon.id, appliedCoupon.uses_count);
+          try {
+            await incrementCouponUse(appliedCoupon.id, appliedCoupon.uses_count);
+          } catch (e) {
+            // Atualização estatística não altera o pedido já registrado.
+            console.warn('coupon counter update failed:', e);
+          }
         }
         // #21 — Anti-fraude (fire-and-forget; bloqueia pedido se score muito alto)
         try {
