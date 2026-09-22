@@ -11,6 +11,7 @@ AS $$
 DECLARE
   v_visibility integer := 0;
   v_reasons integer := 0;
+  v_variants integer := 0;
 BEGIN
   -- Um motivo sem conflito ativo é apenas resíduo histórico e não deve ser exibido.
   UPDATE public.products
@@ -21,6 +22,28 @@ BEGIN
     AND catalog_conflict IS FALSE
     AND catalog_conflict_reason IS NOT NULL;
   GET DIAGNOSTICS v_reasons = ROW_COUNT;
+
+  -- Um vínculo de fornecedor sem oferta vigente não pode continuar aparecendo
+  -- no painel do fornecedor. Não toca em liberações manuais temporárias.
+  UPDATE public.product_variants pv
+  SET supplier_id = NULL,
+      price_source = NULL,
+      in_stock = 'false',
+      updated_at = now()
+  WHERE pv.tenant_id = _tenant_id
+    AND pv.manual_supplier_id IS NULL
+    AND pv.supplier_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.supplier_variant_offers o
+      JOIN public.supplier_catalog_snapshots cs
+        ON cs.id = o.snapshot_id
+       AND cs.status = 'completed'
+      WHERE o.tenant_id = _tenant_id
+        AND o.product_variant_id = pv.id
+        AND o.available IS TRUE
+    );
+  GET DIAGNOSTICS v_variants = ROW_COUNT;
 
   -- Produto disponível com oferta/variação vigente não pode ficar oculto por resíduo.
   -- Bloqueios manuais e conflitos ativos ficam intocados.
@@ -55,6 +78,7 @@ BEGIN
 
   RETURN jsonb_build_object(
     'stale_reasons_cleared', v_reasons,
+    'stale_variants_cleared', v_variants,
     'hidden_available_products_revealed', v_visibility
   );
 END;
