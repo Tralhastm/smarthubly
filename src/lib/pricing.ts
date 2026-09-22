@@ -40,7 +40,7 @@ export function classifyCatalogPrice(
   shippingCost = DEFAULT_SHIPPING_COST,
   discount = DEFAULT_CUSTOMER_DISCOUNT,
 ): CatalogPricingMode {
-  return calculateOperatingProfit(salePrice, costPrice, shippingCost, discount) < SAFE_MARGIN_THRESHOLD
+  return calculateOperatingProfit(salePrice, costPrice, shippingCost, discount) <= SAFE_MARGIN_THRESHOLD
     ? 'margem_segura'
     : 'carro_chefe';
 }
