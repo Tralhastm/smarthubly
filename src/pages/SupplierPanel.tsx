@@ -96,7 +96,8 @@ const SupplierPanel = () => {
   const [priceText, setPriceText] = useState('');
   const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both' | 'color'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
-  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[]; available: number; exhausted: number; conflicts?: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[]; available: number; exhausted: number; conflicts?: string[]; manualBlocked?: { id: string; name: string }[] } | null>(null);
+  const [unlockIds, setUnlockIds] = useState<string[]>([]);
   const [exportIncludeCost, setExportIncludeCost] = useState(false);
   const [exportIncludeCommission, setExportIncludeCommission] = useState(false);
   const [tenant, setTenant] = useState<any>(null);
@@ -1049,6 +1050,13 @@ const SupplierPanel = () => {
         return;
       }
 
+      const manualBlocked = payload
+        .map(item => {
+          const product = productsForMatching.find(candidate => candidate.id === item.product_id) as any;
+          return product?.manual_blocked ? { id: product.id, name: product.name } : null;
+        })
+        .filter(Boolean) as { id: string; name: string }[];
+
       const { data, error } = await (supabase as any).rpc('import_supplier_catalog_atomic', {
         _token: token,
         _content: priceText,
@@ -1063,7 +1071,8 @@ const SupplierPanel = () => {
       const available = payload.filter(item => item.variants.length > 0 ? item.variants.some(variant => variant.available) : item.available !== false).length;
       const exhausted = payload.length - available;
       await fetchProducts();
-      setImportResult({ updated, notFound, invalid, warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [], available, exhausted, conflicts });
+      setUnlockIds([]);
+      setImportResult({ updated, notFound, invalid, warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [], available, exhausted, conflicts, manualBlocked });
       toast.success(`Importação concluída: ${updated.length} atualizados, ${available} disponíveis e ${exhausted} esgotados`);
     } finally {
       setImportingPrices(false);
@@ -1547,6 +1556,33 @@ const SupplierPanel = () => {
                 {importResult.updated.length > 0 && <p className="text-xs text-green-400">Atualizados: {importResult.updated.join(', ')}</p>}
                 {importResult.notFound.length > 0 && <p className="text-xs text-yellow-400">Não encontrados: {importResult.notFound.join(', ')}</p>}
                 {importResult.invalid.length > 0 && <p className="text-xs text-red-400">Com erro: {importResult.invalid.join(', ')}</p>}
+                {(importResult.manualBlocked?.length ?? 0) > 0 && (
+                  <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 space-y-2 text-xs">
+                    <p className="font-semibold text-amber-200">⚠ Os seguintes itens da lista estão bloqueados manualmente. Deseja desbloquear?</p>
+                    <p className="text-muted-foreground">Selecione somente os produtos que devem voltar à vitrine. O sistema ainda exige uma oferta válida do fornecedor.</p>
+                    {importResult.manualBlocked!.map(item => (
+                      <label key={item.id} className="flex items-center gap-2 rounded border border-border bg-card px-2 py-1.5 text-foreground">
+                        <input type="checkbox" checked={unlockIds.includes(item.id)} onChange={e => setUnlockIds(current => e.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))} className="accent-primary" />
+                        {item.name}
+                      </label>
+                    ))}
+                    <button
+                      type="button"
+                      disabled={unlockIds.length === 0}
+                      onClick={async () => {
+                        const { error } = await supabase.from('products').update({ manual_blocked: false, catalog_conflict: false, in_stock: true, updated_at: new Date().toISOString() } as any).in('id', unlockIds).eq('tenant_id', supplier.tenant_id);
+                        if (error) { toast.error(`Não foi possível desbloquear: ${error.message}`); return; }
+                        await fetchProducts();
+                        setImportResult(current => current ? { ...current, manualBlocked: current.manualBlocked?.filter(item => !unlockIds.includes(item.id)) } : current);
+                        setUnlockIds([]);
+                        toast.success('Produtos selecionados desbloqueados e reavaliados.');
+                      }}
+                      className="rounded-md bg-primary px-3 py-1.5 font-semibold text-primary-foreground disabled:opacity-50"
+                    >
+                      Desbloquear selecionados
+                    </button>
+                  </div>
+                )}
                 {(importResult.conflicts?.length ?? 0) > 0 && <div className="rounded-md border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300"><strong>Conflitos bloqueados — pendentes de correção:</strong> {importResult.conflicts!.join('; ')}</div>}
                 {importResult.warnings.length > 0 && <p className="text-xs text-orange-300">Avisos auxiliares: {importResult.warnings.join(', ')}</p>}
               </div>
