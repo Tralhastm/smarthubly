@@ -995,10 +995,17 @@ const SupplierPanel = () => {
           if (!key) { await markConflict(product, `Cor inválida: ${color}`); continue; }
           const available = !entry.unavailableColors.some(item => item === '__all__' || variantMatchKey(item) === key);
           const previous = group.variants.get(key);
-          if (previous && (previous.available !== available || previous.cost !== Number(entry.cost))) {
-            await markConflict(product, `Variação ambígua ou repetida: ${color}`);
+          if (previous && previous.available !== available) {
+            // A mesma cor pode aparecer em linhas distintas com condições/preços
+            // diferentes. Uma oferta disponível vence uma indisponível; em caso
+            // de empate, a menor custo vence. Isso evita bloquear o produto todo.
+            if (available && !previous.available) {
+              group.variants.set(key, { name: previous.name, key, cost: Number(entry.cost), available });
+            }
+          } else if (previous && Number(entry.cost) < previous.cost) {
+            group.variants.set(key, { name: previous.name, key, cost: Number(entry.cost), available });
           } else {
-            group.variants.set(key, { name: previous?.name || color, key, cost: Number(entry.cost), available });
+            group.variants.set(key, { name: previous?.name || color, key, cost: previous?.cost ?? Number(entry.cost), available });
           }
         }
       }
