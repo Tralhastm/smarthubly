@@ -726,8 +726,11 @@ const SupplierPanel = () => {
     .replace(/\*/g, '').replace(/[_~`]/g, '').replace(/[🇧🇷🇨🇳☀️😍🤩🟢⚠️‼️]/gu, '')
     .replace(/^[^A-Za-zÀ-ÿ0-9]+/, '')
     .replace(/\(\s*R?\$?.*$/i, '').replace(/\s*[-–—,:;]+\s*$/, '').replace(/[：:]+$/, '').trim();
-  const normalizeAppleShortName = (value: string) =>
-    /^\d{2}\s+pro(?:\s+max)?\b/i.test(value.trim()) ? `iPhone ${value.trim()}` : value;
+  const normalizeAppleShortName = (value: string) => {
+    const normalized = value.trim().replace(/\b(azul|silver|prata|preto|branco|bordô|bordo)\b/giu, '').replace(/\s+/g, ' ').trim();
+    const withStorage = normalized.replace(/\b(\d{3,4})$/i, '$1GB');
+    return /^\d{2}\s+pro(?:\s+max)?\b/i.test(withStorage) ? `iPhone ${withStorage}` : value;
+  };
 
   const sectionBrand = (line: string) => {
     const upper = line.toLocaleUpperCase('pt-BR');
@@ -767,7 +770,7 @@ const SupplierPanel = () => {
       const match = line.match(new RegExp(`(?:${label})\\s*:?\\s*R?\\$?\\s*([\\d.]+(?:,\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?)`, 'i'));
       return match ? parsePrice(match[1]) : null;
     };
-    const genericMatch = (line: string) => line.match(/^(.*?)(?:\s*[-–—:]\s*|\s+)(?:R?\$\s*)?([\d.]+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*$/i);
+    const genericMatch = (line: string) => line.match(/^(.*?)(?:\s*[-–—:…]+\s*|\s+)(?:R?\$\s*)?([\d.]+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*$/i);
 
     const sourceLines = text.split(/\r?\n/);
     for (let lineIndex = 0; lineIndex < sourceLines.length; lineIndex++) {
