@@ -982,13 +982,17 @@ const SupplierPanel = () => {
           group = { product_id: product.id, product_name: product.name, cost: entry.colors.length ? null : Number(entry.cost), productAvailable: !entry.unavailableColors.includes('__all__'), variants: new Map() };
           grouped.set(product.id, group);
         } else if (entry.colors.length === 0) {
-          if (group.variants.size > 0 || group.cost !== Number(entry.cost)) {
+          // Uma linha sem cor não deve invalidar um lote que já foi separado
+          // por variações. Ela não pode preencher cores automaticamente.
+          if (group.variants.size === 0 && group.cost !== Number(entry.cost)) {
             await markConflict(product, 'Custo de produto misturado ou divergente no mesmo lote');
           }
           continue;
         } else if (group.variants.size === 0 && group.cost != null) {
-          await markConflict(product, 'Produto sem cor misturado com variações no mesmo lote');
-          continue;
+          // Se o parser encontrar primeiro uma linha genérica e depois linhas
+          // coloridas, preservar apenas as cores explícitas é mais seguro do
+          // que bloquear todas as variações por custo divergente.
+          group.cost = null;
         }
         for (const color of entry.colors) {
           const key = variantMatchKey(color);
