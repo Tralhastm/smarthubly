@@ -333,7 +333,6 @@ const SupplierPanel = () => {
         const next = new Set(prev);
         relevantOrders.forEach((o: any) => {
           if (!o.supplier_batch_sent?.[supplier.id]) next.add(o.id);
-          else next.delete(o.id);
         });
         return next;
       });
@@ -413,16 +412,18 @@ const SupplierPanel = () => {
       if (orders.some(({ items }) => items.some((item: any) => Number(item.supplier_cost ?? item.supplierCost ?? costs.get(item.variantId) ?? item.product?.original_price ?? 0) <= 0))) {
         throw new Error('Não foi possível localizar o custo de todos os itens. O lote não foi enviado.');
       }
-      const batchCode = `LOTE-${start.toISOString().slice(0, 10).replace(/-/g, '')}-${String(supplier.id).slice(0, 6).toUpperCase()}`;
+      const sentAt = new Date();
+      const resendSuffix = `${String(sentAt.getHours()).padStart(2, '0')}${String(sentAt.getMinutes()).padStart(2, '0')}${String(sentAt.getSeconds()).padStart(2, '0')}`;
+      const batchCode = `LOTE-${start.toISOString().slice(0, 10).replace(/-/g, '')}-${String(supplier.id).slice(0, 6).toUpperCase()}-${resendSuffix}`;
       lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'TOTAL DO LOTE', `Quantidade total: ${totalUnits} unidade(s)`, `VALOR TOTAL DEVIDO AO FORNECEDOR: ${money(totalDue)}`, '', `REFERÊNCIA DO LOTE: ${batchCode}`, 'Os códigos do motoboy estão informados junto de cada pedido acima.', '', 'Conferir quantidade, variação, custo unitário e total antes de separar.');
       const text = lines.join('\n');
       await navigator.clipboard?.writeText(text);
       const phone = String((supplier as any).phone || '').replace(/\D/g, '');
       if (!phone) { toast.success('Lote copiado. Cadastre o telefone do fornecedor para abrir o WhatsApp.'); return; }
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
-      const sentAt = new Date().toISOString();
+      const sentAtIso = sentAt.toISOString();
       await Promise.all(orders.map(({ order }) => supabase.from('orders').update({
-        supplier_batch_sent: { ...(order.supplier_batch_sent || {}), [supplier.id]: sentAt },
+        supplier_batch_sent: { ...(order.supplier_batch_sent || {}), [supplier.id]: sentAtIso },
       } as any).eq('id', order.id)));
       setSelectedBatchOrders(new Set());
       toast.success('Lote diário preparado e copiado para o WhatsApp.');
@@ -1224,7 +1225,22 @@ const SupplierPanel = () => {
                   />
                   Selecionar tudo
                 </label>
-                <span className="text-xs text-muted-foreground">{selectedBatchOrders.size} selecionado(s)</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBatchOrders(prev => {
+                      const next = new Set(prev);
+                      orders.forEach(order => {
+                        if (order.supplier_batch_sent?.[supplier.id]) next.add(order.id);
+                      });
+                      return next;
+                    })}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Selecionar já enviados
+                  </button>
+                  <span className="text-xs text-muted-foreground">{selectedBatchOrders.size} selecionado(s)</span>
+                </div>
               </div>
             )}
             <button
@@ -1234,6 +1250,11 @@ const SupplierPanel = () => {
             >
               {batchSending ? 'Montando lote diário...' : '📲 Enviar lote do dia pelo WhatsApp'}
             </button>
+            {orders.some(order => order.supplier_batch_sent?.[supplier.id]) && (
+              <p className="text-xs text-muted-foreground">
+                Pedidos com <strong>✓ Já enviado</strong> podem ser marcados novamente para reenviar o pedido ou o lote.
+              </p>
+            )}
             {orders.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhum pedido ativo.</p>}
             {orders.map(order => {
               const cfg = statusConfig[order.status] || statusConfig.received;
