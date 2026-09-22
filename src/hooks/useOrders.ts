@@ -129,7 +129,7 @@ export const useAddOrder = () => {
     }) => {
       // Usa RPC segura: cliente anônimo não tem permissão de leitura em orders,
       // então o insert com .select() falhava por RLS.
-      const { data: newId, error: rpcError } = await (supabase as any).rpc('place_order', {
+      const { data: newId, error: rpcError } = await (supabase as any).rpc('checkout_place_order', {
         _order: params.order as any,
         _items: params.items as any,
       });
