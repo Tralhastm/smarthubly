@@ -472,7 +472,10 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
         )}
       </div>
 
-      <div className="lg:hidden fixed bottom-4 left-4 right-24 z-[65]">
+      <div
+        className="lg:hidden"
+        style={{ position: 'fixed', left: 16, right: 96, bottom: 16, zIndex: 65 }}
+      >
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           ref={mobileSearchInputRef}
