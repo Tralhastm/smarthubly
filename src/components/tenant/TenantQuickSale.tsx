@@ -397,33 +397,36 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
     <div className="grid lg:grid-cols-[1fr_380px] gap-4 min-h-[70vh] w-full max-w-full overflow-x-hidden">
       {/* === COLUNA PRODUTOS === */}
       <div className="space-y-3 min-w-0">
-        {/* Busca */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar produto…"
-            className="w-full rounded-xl border border-border bg-card pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary outline-none"
-          />
-        </div>
-
-        {/* Categorias */}
-        {categories.length > 1 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
-            {categories.map(c => (
-              <button
-                key={c}
-                onClick={() => setActiveCat(c)}
-                className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-all shrink-0 ${
-                  activeCat === c ? 'gradient-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {c === 'all' ? 'Todos' : c}
-              </button>
-            ))}
+        <div className="sticky top-0 z-20 -mx-1 space-y-2 bg-background/95 px-1 pb-2 pt-1 backdrop-blur-sm">
+          {/* Busca fixa: continua acessível mesmo no fim da lista no celular */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar produto…"
+              aria-label="Buscar produto"
+              className="w-full rounded-xl border border-border bg-card pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary outline-none"
+            />
           </div>
-        )}
+
+          {/* Categorias */}
+          {categories.length > 1 && (
+            <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+              {categories.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setActiveCat(c)}
+                  className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-all shrink-0 ${
+                    activeCat === c ? 'gradient-primary text-primary-foreground' : 'bg-secondary text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {c === 'all' ? 'Todos' : c}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Grid de produtos COMPACTO — 3 col em mobile, até 6 em desktop */}
         {filtered.length === 0 ? (
