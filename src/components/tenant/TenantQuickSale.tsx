@@ -473,7 +473,7 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
         )}
       </div>
 
-      {typeof document !== 'undefined' && createPortal(
+      {!selectedProduct && typeof document !== 'undefined' && createPortal(
         <div
           className="lg:hidden"
           style={{ position: 'fixed', left: 16, right: 96, bottom: 16, zIndex: 65 }}
