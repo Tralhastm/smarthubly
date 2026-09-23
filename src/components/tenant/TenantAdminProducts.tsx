@@ -229,7 +229,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const isTrueFlag = (value: unknown) => value === true || value === 'true' || value === 1 || value === '1';
   const isInStock = isTrueFlag;
 
-  const getExportVariants = (product: Product) => allVariants
+  const getExportVariants = (product: Product, variantSource: ProductVariant[] = allVariants) => variantSource
     .filter(variant => variant.product_id === product.id)
     .map(variant => {
       const sale = getVariantSalePrice({
@@ -279,14 +279,40 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     includeCommission: window.confirm('Deseja incluir a comissão estimada do vendedor em cada produto?'),
   });
 
-  const exportCatalogTxt = () => {
+  const syncCatalogInventory = async () => {
+    toast.loading('Sincronizando estoque e menor fornecedor antes da exportação...', { id: 'catalog-inventory-sync' });
+    try {
+      const { data: syncResult, error: syncError } = await supabase.rpc('sync_supplier_variant_inventory', { _tenant_id: tenantId });
+      if (syncError) throw syncError;
+      const { data: freshVariants, error: variantsError } = await supabase
+        .from('product_variants' as any)
+        .select('id,product_id,name,suggested_price,price_delta,cost_price,in_stock,needs_price_review,manual_supplier_id')
+        .eq('tenant_id', tenantId);
+      if (variantsError) throw variantsError;
+      const refreshedProducts = await refetch();
+      toast.success('Estoque e fornecedores sincronizados.', { id: 'catalog-inventory-sync', duration: 2500 });
+      return {
+        products: (refreshedProducts.data || products) as Product[],
+        variants: (freshVariants || []) as ProductVariant[],
+        result: syncResult as { variants_synced_available?: number; variants_marked_unavailable?: number } | null,
+      };
+    } catch (error: any) {
+      toast.error(`Não foi possível sincronizar o catálogo: ${error?.message || error}`, { id: 'catalog-inventory-sync', duration: 6000 });
+      return null;
+    }
+  };
+
+  const exportCatalogTxt = async () => {
     if (!products.length) { toast.error('Não há produtos para exportar.'); return; }
     const { includeCost, includeCommission } = askExportOptions();
-    const lines = [`CATÁLOGO DE PRODUTOS`, `Gerado em: ${new Date().toLocaleString('pt-BR')}`, `Total de produtos: ${products.length}`, ''];
-    products.forEach((product, index) => {
+    const synced = await syncCatalogInventory();
+    if (!synced) return;
+    const exportProducts = synced.products;
+    const lines = [`CATÁLOGO DE PRODUTOS`, `Gerado em: ${new Date().toLocaleString('pt-BR')}`, `Total de produtos: ${exportProducts.length}`, ''];
+    exportProducts.forEach((product, index) => {
       const p = product as any;
       const images = getProductImageUrls(product);
-      const variants = getExportVariants(product);
+      const variants = getExportVariants(product, synced.variants);
       const exportPrice = getExportPrice(product, variants);
       lines.push(`${index + 1}. ${product.name}`, `Categoria: ${product.category || 'Geral'}`);
       lines.push(`Fabricante: ${getExportManufacturer(product)}`);
@@ -314,15 +340,19 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     // BOM ajuda WhatsApp, Windows e editores simples a reconhecerem UTF-8,
     // evitando textos como "CATÃLOGO" e "R$Â" ao abrir o arquivo.
     downloadBlob(`\uFEFF${lines.join('\n')}`, `catalogo-${catalogSlug()}.txt`, 'text/plain;charset=utf-8');
-    toast.success('Catálogo TXT exportado.');
+    toast.success('Catálogo TXT exportado após sincronização.');
   };
 
   const generateCatalogHtml = async ({ includeCommission, includeCost, includeUnavailable }: { includeCommission: boolean; includeCost: boolean; includeUnavailable: boolean }) => {
     if (!products.length) { toast.error('Não há produtos para exportar.'); return; }
+    const synced = await syncCatalogInventory();
+    if (!synced) return;
+    const exportProducts = synced.products;
+    const exportVariants = synced.variants;
     const generatedAt = new Date().toISOString();
     const rows: Array<Record<string, unknown>> = [];
     // O catálogo começa pelo que pode ser vendido; indisponíveis ficam no final.
-    const exportProducts = [...products]
+    const exportableProducts = [...exportProducts]
       .filter(product => includeUnavailable || isInStock(product.in_stock))
       .sort((a, b) => {
       const availability = Number(isInStock(b.in_stock)) - Number(isInStock(a.in_stock));
@@ -367,10 +397,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         }
       }
     };
-    const cards = (await Promise.all(exportProducts.map(async (product, index) => {
+    const cards = (await Promise.all(exportableProducts.map(async (product, index) => {
       const p = product as any;
       const images = await Promise.all(getProductImageUrls(product).map(embedImage));
-      const variants = getExportVariants(product);
+      const variants = getExportVariants(product, exportVariants);
       const exportPrice = getExportPrice(product);
       const productInStock = isInStock(product.in_stock);
       const productCost = p.original_price == null ? null : Number(p.original_price);
@@ -408,7 +438,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     }))).join('\n');
     const exportJson = escapeHtml(JSON.stringify({ version: 'catalog-export-v4', tenant_id: tenantId, generated_at: generatedAt, options: { include_cost: includeCost, include_commission: includeCommission, include_unavailable: includeUnavailable }, seller_commission_percent: includeCommission ? DEFAULT_SELLER_SHARE * 100 : null, products: rows }));
     const included = ['preços de revenda', includeCost ? 'custos' : '', includeCommission ? 'comissão do vendedor' : ''].filter(Boolean).join(', ');
-    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="catalog-export-version" content="catalog-export-v4"><title>Catálogo Mobiletec</title><style>:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;color:#172033;background:#eef4fb}*{box-sizing:border-box}body{margin:0;padding:28px;background:linear-gradient(135deg,#eef4fb,#dbeafe)}.wrap{max-width:1220px;margin:auto}.header{background:#fff;border-radius:20px;padding:25px 28px;margin-bottom:20px;box-shadow:0 8px 24px #12345a18}.header h1{margin:0 0 8px;color:#123b6d}.header p{margin:4px 0;color:#52657c}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px}.product{overflow:hidden;background:#fff;border:1px solid #d8e3f0;border-radius:18px;box-shadow:0 8px 24px #12345a12}.product.out{opacity:.78}.product-top{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 0}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#2468b1;font-size:11px;font-weight:800}.gallery{height:220px;display:flex;gap:8px;overflow-x:auto;padding:12px;background:#f6f9fc}.gallery img{height:196px;min-width:196px;width:196px;object-fit:contain;border-radius:10px;background:#fff}.no-image{height:220px;display:grid;place-items:center;color:#8292a6;background:#f6f9fc}.content{padding:18px}.product h2{font-size:20px;margin:0 0 7px;color:#12243b}.subcategory,.meta{color:#60748b;font-size:12px;margin-top:5px}.description{white-space:pre-wrap;color:#3d5269;line-height:1.55;font-size:14px;margin:15px 0}.stock,.variant-status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800}.available{background:#dcfce7;color:#16713b}.unavailable{background:#fee2e2;color:#a92929}.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:16px}.facts div{padding:10px;background:#f5f8fc;border-radius:10px}.facts span,.variant-facts span{display:block;color:#6b7d91;font-size:11px}.facts strong{display:block;margin-top:4px;color:#164d86;font-size:14px}.variants{margin-top:18px;border-top:1px solid #e2eaf3;padding-top:14px}.variants h3{margin:0 0 10px;font-size:15px;color:#294b6e}.variant{padding:12px 0;border-bottom:1px solid #edf2f7}.variant:last-child{border-bottom:0}.variant-name{display:flex;align-items:center;justify-content:space-between;gap:10px}.variant-name strong{color:#183f67}.variant-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:9px}.variant-facts b{color:#244d77;font-weight:700}.pending{margin-top:14px;padding:10px;border-radius:10px;background:#fff7d6;color:#855d00;font-size:12px;font-weight:700}@media(max-width:600px){body{padding:14px}.grid{grid-template-columns:1fr}.facts,.variant-facts{grid-template-columns:1fr}.header{padding:20px}}</style></head><body><main class="wrap"><header class="header"><h1>Catálogo Mobiletec</h1><p>${products.length} produto(s) · Gerado em ${escapeHtml(new Date(generatedAt).toLocaleString('pt-BR'))}</p><p>Informações incluídas: ${escapeHtml(included)}. Status, fotos, descrições e variações seguem o sistema.</p></header><section class="grid">${cards}</section><script type="application/json" id="catalog-data">${exportJson}</script></main></body></html>`;
+    const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="catalog-export-version" content="catalog-export-v4"><title>Catálogo Mobiletec</title><style>:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;color:#172033;background:#eef4fb}*{box-sizing:border-box}body{margin:0;padding:28px;background:linear-gradient(135deg,#eef4fb,#dbeafe)}.wrap{max-width:1220px;margin:auto}.header{background:#fff;border-radius:20px;padding:25px 28px;margin-bottom:20px;box-shadow:0 8px 24px #12345a18}.header h1{margin:0 0 8px;color:#123b6d}.header p{margin:4px 0;color:#52657c}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:20px}.product{overflow:hidden;background:#fff;border:1px solid #d8e3f0;border-radius:18px;box-shadow:0 8px 24px #12345a12}.product.out{opacity:.78}.product-top{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 0}.eyebrow{text-transform:uppercase;letter-spacing:.08em;color:#2468b1;font-size:11px;font-weight:800}.gallery{height:220px;display:flex;gap:8px;overflow-x:auto;padding:12px;background:#f6f9fc}.gallery img{height:196px;min-width:196px;width:196px;object-fit:contain;border-radius:10px;background:#fff}.no-image{height:220px;display:grid;place-items:center;color:#8292a6;background:#f6f9fc}.content{padding:18px}.product h2{font-size:20px;margin:0 0 7px;color:#12243b}.subcategory,.meta{color:#60748b;font-size:12px;margin-top:5px}.description{white-space:pre-wrap;color:#3d5269;line-height:1.55;font-size:14px;margin:15px 0}.stock,.variant-status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800}.available{background:#dcfce7;color:#16713b}.unavailable{background:#fee2e2;color:#a92929}.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:16px}.facts div{padding:10px;background:#f5f8fc;border-radius:10px}.facts span,.variant-facts span{display:block;color:#6b7d91;font-size:11px}.facts strong{display:block;margin-top:4px;color:#164d86;font-size:14px}.variants{margin-top:18px;border-top:1px solid #e2eaf3;padding-top:14px}.variants h3{margin:0 0 10px;font-size:15px;color:#294b6e}.variant{padding:12px 0;border-bottom:1px solid #edf2f7}.variant:last-child{border-bottom:0}.variant-name{display:flex;align-items:center;justify-content:space-between;gap:10px}.variant-name strong{color:#183f67}.variant-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:9px}.variant-facts b{color:#244d77;font-weight:700}.pending{margin-top:14px;padding:10px;border-radius:10px;background:#fff7d6;color:#855d00;font-size:12px;font-weight:700}@media(max-width:600px){body{padding:14px}.grid{grid-template-columns:1fr}.facts,.variant-facts{grid-template-columns:1fr}.header{padding:20px}}</style></head><body><main class="wrap"><header class="header"><h1>Catálogo Mobiletec</h1><p>${exportableProducts.length} produto(s) · Gerado em ${escapeHtml(new Date(generatedAt).toLocaleString('pt-BR'))}</p><p>Informações incluídas: ${escapeHtml(included)}. Status, fotos, descrições e variações seguem o sistema.</p></header><section class="grid">${cards}</section><script type="application/json" id="catalog-data">${exportJson}</script></main></body></html>`;
     downloadBlob(html, `catalogo-${catalogSlug()}.html`, 'text/html;charset=utf-8');
     toast.success(`Catálogo HTML exportado ${includeCost || includeCommission ? 'com opções selecionadas' : 'para envio ao cliente'}. As fotos foram embutidas no arquivo.`, { id: 'catalog-html-export', duration: 6000 });
   };
