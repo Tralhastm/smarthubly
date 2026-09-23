@@ -41,7 +41,6 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
 
   const [search, setSearch] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const [activeCat, setActiveCat] = useState<string>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [pay, setPay] = useState<PayMethod>('cash');
@@ -473,33 +472,43 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
         )}
       </div>
 
-      {!selectedProduct && typeof document !== 'undefined' && createPortal(
+      {selectedProduct && typeof document !== 'undefined' && createPortal(
         <div
-          className="lg:hidden"
+          className="lg:hidden rounded-2xl border border-border bg-card p-3 shadow-2xl"
           style={{
             position: 'fixed',
             left: '50%',
             bottom: 16,
-            width: 'min(220px, calc(100vw - 120px))',
+            width: 'min(320px, calc(100vw - 32px))',
             transform: 'translateX(-50%)',
             zIndex: 65,
           }}
         >
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            ref={mobileSearchInputRef}
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-            placeholder="Buscar produto…"
-            aria-label="Buscar produto"
-            className="h-10 w-full rounded-full border border-primary/40 bg-card/95 pl-9 pr-4 text-sm text-foreground shadow-2xl backdrop-blur-sm outline-none focus:border-primary"
-          />
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="min-w-0">
+              <p className="text-[10px] text-muted-foreground">Escolha a cor/variação</p>
+              <p className="truncate text-xs font-semibold text-foreground">{selectedProduct.name}</p>
+            </div>
+            <button type="button" className="shrink-0 p-1 text-muted-foreground" onClick={() => setSelectedProduct(null)} aria-label="Fechar variações"><X className="h-4 w-4" /></button>
+          </div>
+          {loadingVariants ? <div className="py-2 text-center text-xs text-muted-foreground">Carregando...</div> : selectedVariants.length === 0 ? (
+            <div className="py-2 text-center text-xs text-destructive">Nenhuma variação disponível.</div>
+          ) : (
+            <div className="grid grid-cols-3 gap-1.5">
+              {selectedVariants.map(variant => (
+                <button key={variant.id} type="button" onClick={() => { addToCart(selectedProduct, variant); setSelectedProduct(null); }} className="rounded-lg border border-border bg-background px-2 py-2 text-left active:scale-[0.98]">
+                  <span className="block truncate text-xs font-medium text-foreground">{variant.name}</span>
+                  <span className="mt-0.5 block truncate text-[10px] font-bold text-primary">R$ {variantPrice(selectedProduct, variant).toFixed(2)}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>,
         document.body,
       )}
 
       {selectedProduct && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={() => setSelectedProduct(null)}>
+        <div className="fixed inset-0 z-[80] hidden items-center justify-center bg-black/60 p-4 lg:flex" onClick={() => setSelectedProduct(null)}>
           <div className="w-full max-w-lg max-h-[85dvh] overflow-y-auto rounded-2xl border border-border bg-card p-4 space-y-3 shadow-2xl" onClick={event => event.stopPropagation()}>
             <div className="flex items-center justify-between gap-3">
               <div>
