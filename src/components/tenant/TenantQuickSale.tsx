@@ -394,7 +394,7 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
   );
 
   return (
-    <div className="grid lg:grid-cols-[1fr_380px] gap-4 min-h-[70vh] w-full max-w-full overflow-x-hidden">
+    <div className="grid lg:grid-cols-[1fr_380px] gap-4 min-h-[70vh] w-full max-w-full overflow-x-clip">
       {/* === COLUNA PRODUTOS === */}
       <div className="space-y-3 min-w-0">
         <div className="sticky top-0 z-20 -mx-1 space-y-2 bg-background/95 px-1 pb-2 pt-1 backdrop-blur-sm">
