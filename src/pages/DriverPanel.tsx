@@ -241,34 +241,37 @@ const DriverPanel = () => {
   const setStatus = async (id: string, status: string, note?: string) => {
     const currentOrder = orders.find(o => o.id === id);
     if (!currentOrder || !driver) return;
+    const noteValue = note?.trim() || '';
+    const noteOnly = Boolean(noteValue) && status === currentOrder.status;
 
     // Impede concluir antes de iniciar a rota ou alterar um pedido que já
     // saiu. O fornecedor apenas atribui; a saída é responsabilidade do motoboy.
-    if (status === 'out-for-delivery' && !['received', 'preparing'].includes(currentOrder.status)) {
+    if (!noteOnly && status === 'out-for-delivery' && !['received', 'preparing'].includes(currentOrder.status)) {
       toast.error('Este pedido já está em rota ou não está pronto para sair.');
       return;
     }
-    if (status === 'delivered' && currentOrder.status !== 'out-for-delivery') {
+    if (!noteOnly && status === 'delivered' && currentOrder.status !== 'out-for-delivery') {
       toast.error('Primeiro marque "Iniciar rota" antes de concluir a entrega.');
       return;
     }
-    if (status === 'delivered' && !confirm('Confirmar entrega?')) return;
+    if (!noteOnly && status === 'delivered' && !confirm('Confirmar entrega?')) return;
 
     setUpdatingOrderId(id);
-    const noteValue = note || '';
     try {
-      const kds = (await import('@/hooks/useOrders')).kdsPatchForStatus(status) || {};
+      const kds = noteOnly ? {} : ((await import('@/hooks/useOrders')).kdsPatchForStatus(status) || {});
       const { error } = await supabase
         .from('orders')
-        .update({ status, delivery_status_note: noteValue, ...kds })
+        .update({ ...(noteOnly ? {} : { status }), delivery_status_note: noteValue, ...kds })
         .eq('id', id)
         .eq('driver_id', driver.id);
       if (error) throw error;
-      setOrders(prev => prev.map(o => o.id === id ? { ...o, status, delivery_status_note: noteValue } : o));
+      setOrders(prev => prev.map(o => o.id === id ? { ...o, ...(noteOnly ? {} : { status }), delivery_status_note: noteValue } : o));
 
       // Mantém uma linha do tempo confiável para cliente e loja.
       try {
-        const description = status === 'delivered'
+        const description = noteOnly
+          ? `Motoboy ${driver.name}: ${noteValue}`
+          : status === 'delivered'
           ? `Motoboy ${driver.name} confirmou entrega`
           : noteValue
             ? `Motoboy ${driver.name}: ${noteValue}`
@@ -276,7 +279,7 @@ const DriverPanel = () => {
         await (supabase as any).from('order_events').insert({
           order_id: id,
           tenant_id: driver.tenant_id,
-          event_type: status === 'delivered' ? 'delivered' : 'driver_started_route',
+          event_type: noteOnly ? 'delivery_status_note' : status === 'delivered' ? 'delivered' : 'driver_started_route',
           from_status: currentOrder.status,
           to_status: status,
           actor: 'driver',
@@ -286,7 +289,7 @@ const DriverPanel = () => {
         });
       } catch { /* auditoria não bloqueia a entrega */ }
 
-      toast.success(status === 'delivered' ? '✅ Entrega confirmada' : '🏍️ Rota iniciada — cliente avisado');
+      toast.success(noteOnly ? '📣 Nota enviada — cliente avisado' : status === 'delivered' ? '✅ Entrega confirmada' : '🏍️ Rota iniciada — cliente avisado');
     } catch (e) {
       console.error(e);
       toast.error('Não foi possível atualizar este pedido. Tente novamente.');
