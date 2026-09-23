@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { createPortal } from 'react-dom';
 import { useProducts } from '@/hooks/useProducts';
 import { useAddOrder } from '@/hooks/useOrders';
 import { useAddCreditAccount } from '@/hooks/useCredit';
@@ -42,6 +41,7 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
   const [search, setSearch] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [activeCat, setActiveCat] = useState<string>('all');
+  const [variantMinPrices, setVariantMinPrices] = useState<Record<string, number>>({});
   const [cart, setCart] = useState<CartItem[]>([]);
   const [pay, setPay] = useState<PayMethod>('cash');
   const [cashReceived, setCashReceived] = useState('');
@@ -63,6 +63,29 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
   }, [saleMode, tenantId]);
 
   const inStock = useMemo(() => products.filter(p => p.in_stock !== false), [products]);
+
+  useEffect(() => {
+    const productIds = products.map(p => p.id).filter(Boolean);
+    if (productIds.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('product_variants' as any)
+        .select('product_id, price_delta, suggested_price, in_stock')
+        .in('product_id', productIds);
+      if (cancelled) return;
+      const prices: Record<string, number> = {};
+      for (const variant of (data || []) as Array<{ product_id: string; price_delta: number | null; suggested_price: number | null; in_stock: boolean | string }>) {
+        if (variant.in_stock === false || String(variant.in_stock).toLowerCase() === 'false') continue;
+        const product = products.find(p => p.id === variant.product_id);
+        if (!product) continue;
+        const price = Math.max(0, Number(product.price) + (Number(variant.price_delta) || 0)) || Number(variant.suggested_price) || 0;
+        if (price > 0 && (prices[variant.product_id] == null || price < prices[variant.product_id])) prices[variant.product_id] = price;
+      }
+      setVariantMinPrices(prices);
+    })();
+    return () => { cancelled = true; };
+  }, [products]);
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -440,6 +463,7 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1.5 pb-24 lg:pb-0">
             {filtered.map(p => {
               const inCartQty = cart.filter(i => i.product.id === p.id).reduce((sum, i) => sum + i.quantity, 0);
+              const displayPrice = variantMinPrices[p.id] ?? Number(p.price);
               return (
                 <button
                   key={p.id}
@@ -456,7 +480,7 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
                     </div>
                   )}
                   <p className="text-[11px] leading-tight font-medium text-foreground line-clamp-2 min-h-[1.8rem] break-words">{p.name}</p>
-                  <p className="text-xs font-bold text-primary mt-0.5">R$ {Number(p.price).toFixed(2)}</p>
+                  <p className="text-xs font-bold text-primary mt-0.5">R$ {displayPrice.toFixed(2)}</p>
                   {typeof (p as any).stock_quantity === 'number' && (
                     <p className="text-[9px] text-muted-foreground truncate">Est: {(p as any).stock_quantity}</p>
                   )}
