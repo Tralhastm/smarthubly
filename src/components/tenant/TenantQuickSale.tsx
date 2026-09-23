@@ -467,8 +467,8 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
       </div>
 
       {selectedProduct && (
-        <div className="fixed inset-0 z-[80] flex items-end bg-black/60" onClick={() => setSelectedProduct(null)}>
-          <div className="w-full max-w-lg mx-auto rounded-t-2xl border-t border-border bg-card p-4 space-y-3" onClick={event => event.stopPropagation()}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={() => setSelectedProduct(null)}>
+          <div className="w-full max-w-lg max-h-[85dvh] overflow-y-auto rounded-2xl border border-border bg-card p-4 space-y-3 shadow-2xl" onClick={event => event.stopPropagation()}>
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs text-muted-foreground">Selecione a cor/variação</p>
