@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useProducts } from '@/hooks/useProducts';
 import { useAddOrder } from '@/hooks/useOrders';
@@ -39,6 +39,7 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
   const addCredit = useAddCreditAccount();
 
   const [search, setSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [activeCat, setActiveCat] = useState<string>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [pay, setPay] = useState<PayMethod>('cash');
@@ -402,6 +403,7 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
+              ref={searchInputRef}
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar produto…"
@@ -468,6 +470,18 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
           </div>
         )}
       </div>
+
+      <button
+        type="button"
+        aria-label="Abrir busca de produtos"
+        onClick={() => {
+          searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          searchInputRef.current?.focus();
+        }}
+        className="lg:hidden fixed bottom-24 left-4 z-[65] flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-xl active:scale-95"
+      >
+        <Search className="h-4 w-4" /> Buscar
+      </button>
 
       {selectedProduct && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={() => setSelectedProduct(null)}>
