@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useInfiniteProducts, type Product } from '@/hooks/useProducts';
 import { type ProductVariant } from '@/hooks/useProductExtras';
 import { useCart } from '@/contexts/CartContext';
