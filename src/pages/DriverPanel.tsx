@@ -150,7 +150,9 @@ const DriverPanel = () => {
     const { data: fragments } = orderIds.length
       ? await (supabase as any).from('order_fragments').select('order_id, supplier_id, items').in('order_id', orderIds).limit(500)
       : { data: [] as any[] };
-    const supplierIds = Array.from(new Set((fragments || []).map((f: any) => f.supplier_id).filter(Boolean).concat(rawOrders.map((o: any) => o.supplier_id).filter(Boolean))));
+    const supplierIds = Array.from(new Set((fragments || []).map((f: any) => f.supplier_id).filter(Boolean)
+      .concat(rawOrders.map((o: any) => o.supplier_id).filter(Boolean))
+      .concat(rawOrders.flatMap((o: any) => Object.keys((o.metadata as any)?.fragmentation_map || {})))));
     const { data: suppliers } = supplierIds.length
       ? await supabase.from('suppliers').select('id, name, address, phone').in('id', supplierIds).limit(50)
       : { data: [] as any[] };
@@ -167,11 +169,6 @@ const DriverPanel = () => {
       const pickupSources = orderFragments.length
         ? orderFragments
         : Object.entries(fragmentationMap || {}).map(([supplier_id, items]) => ({ supplier_id, items }));
-      const pickupSupplierIds = Array.from(new Set(pickupSources.map((f: any) => String(f.supplier_id)).filter(Boolean)));
-      if (pickupSupplierIds.some(id => !suppliersById.has(id))) {
-        const { data: fallbackSuppliers } = await supabase.from('suppliers').select('id, name, address, phone').in('id', pickupSupplierIds).limit(50);
-        ((fallbackSuppliers || []) as any[]).forEach(s => suppliersById.set(String(s.id), s));
-      }
       const supplierPickups: SupplierPickup[] = pickupSources.map((fragment: any) => {
         const supplier = suppliersById.get(String(fragment.supplier_id));
         return {
