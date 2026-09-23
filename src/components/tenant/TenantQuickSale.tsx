@@ -476,7 +476,14 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
       {!selectedProduct && typeof document !== 'undefined' && createPortal(
         <div
           className="lg:hidden"
-          style={{ position: 'fixed', left: 16, right: 96, bottom: 16, zIndex: 65 }}
+          style={{
+            position: 'fixed',
+            left: '50%',
+            bottom: 16,
+            width: 'min(220px, calc(100vw - 120px))',
+            transform: 'translateX(-50%)',
+            zIndex: 65,
+          }}
         >
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -485,7 +492,7 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
             onChange={event => setSearch(event.target.value)}
             placeholder="Buscar produto…"
             aria-label="Buscar produto"
-            className="w-full rounded-full border border-primary/40 bg-card/95 py-3 pl-9 pr-4 text-sm text-foreground shadow-2xl backdrop-blur-sm outline-none focus:border-primary"
+            className="h-10 w-full rounded-full border border-primary/40 bg-card/95 pl-9 pr-4 text-sm text-foreground shadow-2xl backdrop-blur-sm outline-none focus:border-primary"
           />
         </div>,
         document.body,
