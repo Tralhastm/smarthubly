@@ -347,8 +347,24 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         embeddedImageCache.set(url, dataUrl);
         return dataUrl;
       } catch (error) {
-        console.warn('Não foi possível embutir imagem no catálogo:', url, error);
-        return url;
+        try {
+          const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(url)}`;
+          const proxyResponse = await fetch(proxyUrl);
+          if (!proxyResponse.ok) throw new Error(`proxy image status ${proxyResponse.status}`);
+          const proxyBlob = await proxyResponse.blob();
+          const proxyDataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(reader.error || new Error('proxy image read failed'));
+            reader.readAsDataURL(proxyBlob);
+          });
+          if (!proxyDataUrl) throw new Error('empty proxy image data');
+          embeddedImageCache.set(url, proxyDataUrl);
+          return proxyDataUrl;
+        } catch (proxyError) {
+          console.warn('Não foi possível embutir imagem no catálogo:', url, error, proxyError);
+          return url;
+        }
       }
     };
     const cards = (await Promise.all(exportProducts.map(async (product, index) => {
