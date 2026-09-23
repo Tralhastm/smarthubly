@@ -1043,7 +1043,15 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       }
     } catch (error: any) {
       console.error('order submit failed', error);
-      toast({ title: 'Erro ao registrar pedido', variant: 'destructive' });
+      const errorMessage = String(error?.message || '');
+      const supplierUnavailable = errorMessage.includes('fornecedor_sem_estoque_atual');
+      toast({
+        title: supplierUnavailable ? 'Variação sem estoque disponível' : 'Erro ao registrar pedido',
+        description: supplierUnavailable
+          ? 'Essa cor/variação ficou sem fornecedor disponível. Atualize a página e escolha outra opção.'
+          : undefined,
+        variant: 'destructive',
+      });
     } finally {
       setCreatingPayment(false);
     }
