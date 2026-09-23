@@ -1,6 +1,8 @@
 // Catálogo touch: lista de categorias → produtos.
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useProducts } from "@/hooks/useProducts";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Search, ShoppingCart } from "lucide-react";
@@ -17,8 +19,31 @@ interface Props {
 
 export default function PdvCatalog({ tenantId, cartCount, cartTotal, onBack, onAdd, onOpenCart, contextLabel }: Props) {
   const { data: products = [], isLoading } = useProducts(tenantId);
+  const { data: variants = [] } = useQuery({
+    queryKey: ["pdv-product-variants", tenantId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("product_variants" as any)
+        .select("product_id, price_delta, suggested_price, in_stock")
+        .eq("tenant_id", tenantId);
+      if (error) throw error;
+      return (data || []) as { product_id: string; price_delta: number | null; suggested_price: number | null; in_stock: boolean | string }[];
+    },
+    enabled: !!tenantId,
+    staleTime: 30_000,
+  });
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState<string | null>(null);
+
+  const displayPrice = (product: (typeof products)[number]) => {
+    const basePrice = Number(product.price) || 0;
+    if (basePrice > 0) return basePrice;
+    const variantPrices = variants
+      .filter(v => v.product_id === product.id && v.in_stock !== false && String(v.in_stock).toLowerCase() !== "false")
+      .map(v => Math.max(0, basePrice + (Number(v.price_delta) || 0)) || Number(v.suggested_price) || 0)
+      .filter(price => price > 0);
+    return variantPrices.length ? Math.min(...variantPrices) : 0;
+  };
 
   const categories = useMemo(() => {
     const set = new Set<string>();
@@ -87,7 +112,7 @@ export default function PdvCatalog({ tenantId, cartCount, cartTotal, onBack, onA
           {filtered.map(p => (
             <button
               key={p.id}
-              onClick={() => onAdd({ id: p.id, name: p.name, price: Number(p.price) })}
+              onClick={() => onAdd({ id: p.id, name: p.name, price: displayPrice(p) })}
               className="bg-card border rounded-xl p-2 text-left active:scale-95 transition-transform"
             >
               {p.image ? (
@@ -97,7 +122,7 @@ export default function PdvCatalog({ tenantId, cartCount, cartTotal, onBack, onA
               )}
               <div className="text-xs font-medium line-clamp-2 min-h-[2rem]">{p.name}</div>
               <div className="text-sm font-bold text-primary mt-0.5">
-                R$ {Number(p.price).toFixed(2).replace(".", ",")}
+                R$ {displayPrice(p).toFixed(2).replace(".", ",")}
               </div>
             </button>
           ))}
