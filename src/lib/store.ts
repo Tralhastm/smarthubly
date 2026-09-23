@@ -39,7 +39,7 @@ export const buildWhatsAppMessage = (
   L.push('────────────────');
   items.forEach(i => {
     const unit = getCartLineUnitPrice(i);
-    L.push(`*${i.quantity}x* ${i.product.name}${i.variantName ? ` (${i.variantName})` : ''} — ${brl(unit * i.quantity)}`);
+    L.push(`*${i.quantity}x* ${i.product.name}${i.variantName ? ` (Cor: ${i.variantName})` : ''} — ${brl(unit * i.quantity)}`);
     (i.addons || []).forEach(a => {
       L.push(`   ➕ ${a.quantity}x ${a.name}${a.price > 0 ? ` (+${brl(a.price * a.quantity)})` : ''}`);
     });
