@@ -37,7 +37,7 @@ export default function PdvReceipt({ storeName, orderId, items, total, paymentLa
       <div>${new Date().toLocaleString("pt-BR")}</div>
       <hr/>
       ${items.map(i => `
-        <div class="row"><span>${i.quantity}x ${i.name}</span><span>R$ ${(i.price*i.quantity).toFixed(2)}</span></div>
+        <div class="row"><span>${i.quantity}x ${i.name}${i.variantName ? ` · ${i.variantName}` : ""}</span><span>R$ ${(i.price*i.quantity).toFixed(2)}</span></div>
       `).join("")}
       <div class="row total"><span>TOTAL</span><span>R$ ${total.toFixed(2)}</span></div>
       <div class="row"><span>Pagamento</span><span>${paymentLabel}</span></div>

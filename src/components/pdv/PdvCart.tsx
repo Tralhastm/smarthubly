@@ -1,5 +1,5 @@
 // Carrinho: lista de itens com +/-, total, finalizar.
-import type { PdvCartItem } from "@/hooks/usePdvSession";
+import { pdvItemKey, type PdvCartItem } from "@/hooks/usePdvSession";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Minus, Plus, Trash2 } from "lucide-react";
 
@@ -31,20 +31,23 @@ export default function PdvCart({ items, total, contextLabel, modeIsTable, onBac
           <div className="text-center py-10 text-muted-foreground">Carrinho vazio</div>
         )}
         {items.map(it => (
-          <div key={it.productId} className="border rounded-xl p-3 bg-card">
+          <div key={pdvItemKey(it)} className="border rounded-xl p-3 bg-card">
             <div className="flex justify-between items-start gap-2 mb-2">
-              <div className="font-medium text-sm flex-1">{it.name}</div>
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => onRemove(it.productId)}>
+              <div className="font-medium text-sm flex-1">
+                {it.name}
+                {it.variantName && <span className="block text-xs font-normal text-muted-foreground">Cor: {it.variantName}</span>}
+              </div>
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => onRemove(pdvItemKey(it))}>
                 <Trash2 className="w-4 h-4 text-destructive" />
               </Button>
             </div>
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <Button size="icon" variant="outline" className="h-9 w-9" onClick={() => onInc(it.productId, -1)}>
+                <Button size="icon" variant="outline" className="h-9 w-9" onClick={() => onInc(pdvItemKey(it), -1)}>
                   <Minus className="w-4 h-4" />
                 </Button>
                 <span className="font-bold text-lg w-7 text-center">{it.quantity}</span>
-                <Button size="icon" variant="outline" className="h-9 w-9" onClick={() => onInc(it.productId, 1)}>
+                <Button size="icon" variant="outline" className="h-9 w-9" onClick={() => onInc(pdvItemKey(it), 1)}>
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>

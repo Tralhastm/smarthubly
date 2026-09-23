@@ -11,10 +11,15 @@ export type PdvOperator = {
 
 export type PdvCartItem = {
   productId: string;
+  variantId?: string;
+  variantName?: string;
   name: string;
   price: number;
   quantity: number;
 };
+
+export const pdvItemKey = (item: Pick<PdvCartItem, "productId" | "variantId">) =>
+  `${item.productId}:${item.variantId || "base"}`;
 
 const opKey = (slug: string) => `pdv:op:${slug}`;
 const cartKey = (slug: string) => `pdv:cart:${slug}`;
@@ -48,20 +53,20 @@ export function usePdvSession(slug: string, tenantId?: string) {
 
   const logout = useCallback(() => { setOperator(null); setCart([]); }, []);
 
-  const addItem = useCallback((p: { id: string; name: string; price: number }) => {
+  const addItem = useCallback((p: { id: string; variantId?: string; variantName?: string; name: string; price: number }) => {
     setCart(prev => {
-      const i = prev.findIndex(x => x.productId === p.id);
+      const i = prev.findIndex(x => pdvItemKey(x) === `${p.id}:${p.variantId || "base"}`);
       if (i >= 0) { const c = [...prev]; c[i] = { ...c[i], quantity: c[i].quantity + 1 }; return c; }
-      return [...prev, { productId: p.id, name: p.name, price: p.price, quantity: 1 }];
+      return [...prev, { productId: p.id, variantId: p.variantId, variantName: p.variantName, name: p.name, price: p.price, quantity: 1 }];
     });
   }, []);
 
   const incItem = useCallback((id: string, delta: number) => {
-    setCart(prev => prev.map(x => x.productId === id ? { ...x, quantity: Math.max(0, x.quantity + delta) } : x).filter(x => x.quantity > 0));
+    setCart(prev => prev.map(x => pdvItemKey(x) === id ? { ...x, quantity: Math.max(0, x.quantity + delta) } : x).filter(x => x.quantity > 0));
   }, []);
 
   const removeItem = useCallback((id: string) => {
-    setCart(prev => prev.filter(x => x.productId !== id));
+    setCart(prev => prev.filter(x => pdvItemKey(x) !== id));
   }, []);
 
   const clearCart = useCallback(() => setCart([]), []);

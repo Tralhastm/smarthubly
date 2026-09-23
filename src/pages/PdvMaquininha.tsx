@@ -155,6 +155,7 @@ export default function PdvMaquininha() {
         product_name: it.name,
         product_price: it.price,
         quantity: it.quantity,
+        variant_name: it.variantName ?? null,
       }));
       const { data: newOrderId, error: orderErr } = await (supabase as any).rpc("place_order", {
         _order: orderPayload,

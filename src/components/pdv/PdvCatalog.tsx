@@ -5,14 +5,14 @@ import { useProducts } from "@/hooks/useProducts";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Search, ShoppingCart } from "lucide-react";
+import { ArrowLeft, Search, ShoppingCart, X } from "lucide-react";
 
 interface Props {
   tenantId: string;
   cartCount: number;
   cartTotal: number;
   onBack: () => void;
-  onAdd: (p: { id: string; name: string; price: number }) => void;
+  onAdd: (p: { id: string; variantId?: string; variantName?: string; name: string; price: number }) => void;
   onOpenCart: () => void;
   contextLabel: string;
 }
@@ -24,23 +24,28 @@ export default function PdvCatalog({ tenantId, cartCount, cartTotal, onBack, onA
     queryFn: async () => {
       const { data, error } = await supabase
         .from("product_variants" as any)
-        .select("product_id, price_delta, suggested_price, in_stock")
+        .select("id, product_id, name, price_delta, suggested_price, in_stock")
         .eq("tenant_id", tenantId);
       if (error) throw error;
-      return (data || []) as { product_id: string; price_delta: number | null; suggested_price: number | null; in_stock: boolean | string }[];
+      return (data || []) as { id: string; product_id: string; name: string; price_delta: number | null; suggested_price: number | null; in_stock: boolean | string }[];
     },
     enabled: !!tenantId,
     staleTime: 30_000,
   });
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState<string | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<(typeof products)[number] | null>(null);
 
-  const displayPrice = (product: (typeof products)[number]) => {
+  const availableVariants = (productId: string) => variants.filter(v =>
+    v.product_id === productId && v.in_stock !== false && String(v.in_stock).toLowerCase() !== "false"
+  );
+
+  const displayPrice = (product: (typeof products)[number], variant?: (typeof variants)[number]) => {
     const basePrice = Number(product.price) || 0;
+    if (variant) return Math.max(0, basePrice + (Number(variant.price_delta) || 0)) || Number(variant.suggested_price) || 0;
     if (basePrice > 0) return basePrice;
-    const variantPrices = variants
-      .filter(v => v.product_id === product.id && v.in_stock !== false && String(v.in_stock).toLowerCase() !== "false")
-      .map(v => Math.max(0, basePrice + (Number(v.price_delta) || 0)) || Number(v.suggested_price) || 0)
+    const variantPrices = availableVariants(product.id)
+      .map(v => displayPrice(product, v))
       .filter(price => price > 0);
     return variantPrices.length ? Math.min(...variantPrices) : 0;
   };
@@ -112,7 +117,9 @@ export default function PdvCatalog({ tenantId, cartCount, cartTotal, onBack, onA
           {filtered.map(p => (
             <button
               key={p.id}
-              onClick={() => onAdd({ id: p.id, name: p.name, price: displayPrice(p) })}
+              onClick={() => availableVariants(p.id).length > 0
+                ? setSelectedProduct(p)
+                : onAdd({ id: p.id, name: p.name, price: displayPrice(p) })}
               className="bg-card border rounded-xl p-2 text-left active:scale-95 transition-transform"
             >
               {p.image ? (
@@ -128,6 +135,36 @@ export default function PdvCatalog({ tenantId, cartCount, cartTotal, onBack, onA
           ))}
         </div>
       </div>
+
+      {selectedProduct && (
+        <div className="fixed inset-0 z-20 flex items-end bg-black/50" onClick={() => setSelectedProduct(null)}>
+          <div className="w-full rounded-t-2xl border-t bg-card p-4 space-y-3" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Selecione a cor/variação</p>
+                <h2 className="font-semibold text-foreground">{selectedProduct.name}</h2>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedProduct(null)}><X className="h-5 w-5" /></Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {availableVariants(selectedProduct.id).map(variant => (
+                <button
+                  key={variant.id}
+                  type="button"
+                  onClick={() => {
+                    onAdd({ id: selectedProduct.id, variantId: variant.id, variantName: variant.name, name: selectedProduct.name, price: displayPrice(selectedProduct, variant) });
+                    setSelectedProduct(null);
+                  }}
+                  className="rounded-xl border border-border bg-background p-3 text-left hover:border-primary active:scale-[0.98]"
+                >
+                  <span className="block font-medium text-foreground">{variant.name}</span>
+                  <span className="mt-1 block text-sm font-bold text-primary">R$ {displayPrice(selectedProduct, variant).toFixed(2).replace(".", ",")}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {cartCount > 0 && (
         <button
