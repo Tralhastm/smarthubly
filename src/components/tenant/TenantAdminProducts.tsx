@@ -9,6 +9,7 @@ import ImageUploadField from '@/components/shared/ImageUploadField';
 import MediaGalleryField, { type MediaItem } from '@/components/shared/MediaGalleryField';
 import AutoCategorizeButton from '@/components/shared/AutoCategorizeButton';
 import ProductExtrasEditor from './ProductExtrasEditor';
+import TenantProductClicksSummary from './TenantProductClicksSummary';
 import CategoryTreeSelect from './CategoryTreeSelect';
 import TenantCategoriesTree from './TenantCategoriesTree';
 import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Download, Sparkles, Loader2, ImageIcon, Link as LinkIcon, AlertTriangle, Search, Eye, EyeOff } from 'lucide-react';
@@ -1446,6 +1447,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
   return (
     <div className="space-y-4">
+      <TenantProductClicksSummary tenantId={tenantId} />
       {soldOutColorVariants.length > 0 && (
         <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-amber-700 dark:text-amber-400">
           <div className="flex items-start gap-2">

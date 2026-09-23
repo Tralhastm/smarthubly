@@ -289,7 +289,20 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     };
   };
   const getDisplayPrice = (product: Product) => getDisplayPriceInfo(product).displayPrice;
-  const openDetails = splashEnabled ? setDetail : null;
+  const recordProductClick = useCallback((product: Product) => {
+    void supabase.rpc('register_storefront_product_click', {
+      _tenant_id: tenantId,
+      _product_id: product.id,
+      _user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 500) : null,
+      _referrer: typeof document !== 'undefined' ? document.referrer.slice(0, 500) : null,
+    }).then(({ error }) => {
+      if (error) console.warn('[catalog-click] Não foi possível registrar o clique', error.message);
+    });
+  }, [tenantId]);
+  const openDetails = splashEnabled ? (product: Product) => {
+    recordProductClick(product);
+    setDetail(product);
+  } : null;
 
   // Notifica a página quando o splash de detalhes abre/fecha para que os botões
   // flutuantes (carrinho, WhatsApp, chat, tema) sejam ocultados e não cubram o texto.
