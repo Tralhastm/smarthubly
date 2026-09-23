@@ -163,7 +163,16 @@ const DriverPanel = () => {
     });
     const newOrders = rawOrders.map((order: any) => {
       const orderFragments = fragmentsByOrder.get(String(order.id)) || [];
-      const supplierPickups: SupplierPickup[] = orderFragments.map((fragment: any) => {
+      const fragmentationMap = (order.metadata as any)?.fragmentation_map;
+      const pickupSources = orderFragments.length
+        ? orderFragments
+        : Object.entries(fragmentationMap || {}).map(([supplier_id, items]) => ({ supplier_id, items }));
+      const pickupSupplierIds = Array.from(new Set(pickupSources.map((f: any) => String(f.supplier_id)).filter(Boolean)));
+      if (pickupSupplierIds.some(id => !suppliersById.has(id))) {
+        const { data: fallbackSuppliers } = await supabase.from('suppliers').select('id, name, address, phone').in('id', pickupSupplierIds).limit(50);
+        ((fallbackSuppliers || []) as any[]).forEach(s => suppliersById.set(String(s.id), s));
+      }
+      const supplierPickups: SupplierPickup[] = pickupSources.map((fragment: any) => {
         const supplier = suppliersById.get(String(fragment.supplier_id));
         return {
           supplier_id: String(fragment.supplier_id),
