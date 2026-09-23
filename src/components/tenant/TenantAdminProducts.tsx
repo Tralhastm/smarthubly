@@ -350,7 +350,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       rows.push(productRow);
 
       const imageMarkup = images.length
-        ? `<div class="gallery">${images.map((url: string, imageIndex: number) => `<img src="${escapeHtml(url)}" alt="${escapeHtml(product.name)} — imagem ${imageIndex + 1}" loading="lazy">`).join('')}</div>`
+        ? `<div class="gallery">${images.map((url: string, imageIndex: number) => `<img src="${escapeHtml(url)}" alt="${escapeHtml(product.name)} — imagem ${imageIndex + 1}" loading="eager" decoding="async" referrerpolicy="no-referrer">`).join('')}</div>`
         : '<div class="no-image">Sem imagem</div>';
       const facts = [`<div><span>Preço de revenda</span><strong>${productPending ? 'Pendente' : escapeHtml(money(exportPrice))}</strong></div>`];
       if (includeCost) facts.push(`<div><span>Preço de custo</span><strong>${productCost == null ? 'Não definido' : escapeHtml(money(productCost))}</strong></div>`);
