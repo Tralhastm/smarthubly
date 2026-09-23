@@ -34,7 +34,7 @@ type OrderWithItems = {
   lalamove_order_id?: string | null;
   metadata?: any;
   supplier_batch_sent?: Record<string, string>;
-  order_items: { id: string; product_name: string; product_price: number; quantity: number }[];
+  order_items: { id: string; product_name: string; product_price: number; quantity: number; variant_name?: string | null }[];
 };
 
 type Product = {
@@ -1356,8 +1356,11 @@ const SupplierPanel = () => {
                   </div>
                   <div className="text-sm space-y-1">
                     {order.order_items.map(i => (
-                      <div key={i.id} className="flex justify-between text-muted-foreground">
-                        <span>{i.quantity}x {i.product_name}</span>
+                      <div key={i.id} className="flex justify-between gap-3 text-muted-foreground">
+                        <span>
+                          {i.quantity}x {i.product_name}
+                          {i.variant_name && <span className="ml-1 font-medium text-foreground">· {i.variant_name}</span>}
+                        </span>
                         <span>R${(i.product_price * i.quantity).toFixed(2)}</span>
                       </div>
                     ))}
