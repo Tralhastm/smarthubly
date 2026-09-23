@@ -40,6 +40,7 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
 
   const [search, setSearch] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const [activeCat, setActiveCat] = useState<string>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [pay, setPay] = useState<PayMethod>('cash');
@@ -471,17 +472,17 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
         )}
       </div>
 
-      <button
-        type="button"
-        aria-label="Abrir busca de produtos"
-        onClick={() => {
-          searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          searchInputRef.current?.focus();
-        }}
-        className="lg:hidden fixed bottom-24 left-4 z-[65] flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-xl active:scale-95"
-      >
-        <Search className="h-4 w-4" /> Buscar
-      </button>
+      <div className="lg:hidden fixed bottom-4 left-4 right-24 z-[65]">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          ref={mobileSearchInputRef}
+          value={search}
+          onChange={event => setSearch(event.target.value)}
+          placeholder="Buscar produto…"
+          aria-label="Buscar produto"
+          className="w-full rounded-full border border-primary/40 bg-card/95 py-3 pl-9 pr-4 text-sm text-foreground shadow-2xl backdrop-blur-sm outline-none focus:border-primary"
+        />
+      </div>
 
       {selectedProduct && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={() => setSelectedProduct(null)}>
