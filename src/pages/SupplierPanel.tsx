@@ -200,16 +200,16 @@ const SupplierPanel = () => {
     if (!supplier) return;
     // A RPC permite consultar o catálogo da loja para registrar ofertas, mas
     // a tela de estoque deve mostrar somente os itens deste fornecedor.
-    const [{ data: catalog }, { data: offers }] = await Promise.all([
+    const [{ data: catalog }, { data: offers }, { data: allOffers }] = await Promise.all([
       (supabase as any).rpc('get_supplier_catalog_by_token', { _token: token }),
       (supabase as any).from('supplier_variant_offers').select('product_id, product_variant_id, unit_cost')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).eq('available', true).limit(500),
+      (supabase as any).from('supplier_variant_offers').select('product_id, product_variant_id, supplier_id, unit_cost, updated_at')
+        .eq('tenant_id', supplier.tenant_id).eq('available', true).limit(5000),
     ]);
     const own = Array.isArray(catalog?.products) ? catalog.products : [];
     setCatalogProducts(own as Product[]);
     const catalogVariants = Array.isArray(catalog?.variants) ? catalog.variants : [];
-    const ids = Array.from(new Set(((offers || []) as any[]).map(o => o.product_id).filter(Boolean)));
-    const variantIds = Array.from(new Set(((offers || []) as any[]).map(o => o.product_variant_id).filter(Boolean)));
     // A RPC deliberately returns the full tenant catalog so a supplier can
     // register a new offer. The panel itself must not show that full catalog:
     // only products/variants already assigned to this supplier or offered by it
@@ -221,10 +221,28 @@ const SupplierPanel = () => {
     const ownVariantProductIds = catalogVariants
       .filter((v: any) => String(v.supplier_id || '') === supplierId)
       .map((v: any) => v.product_id);
-    const visibleProductIds = new Set([...ids, ...ownProductIds, ...ownVariantProductIds]);
+    // Um fornecedor só pode ver o que ele realmente venceu. A lista de ofertas
+    // própria serve para custos, mas não autoriza exibir uma oferta mais cara
+    // quando outro fornecedor tem o menor custo para a mesma variação.
+    const winnerByVariant = new Map<string, any>();
+    ((allOffers || []) as any[]).forEach(o => {
+      if (!o.product_variant_id) return;
+      const current = winnerByVariant.get(String(o.product_variant_id));
+      if (!current || Number(o.unit_cost) < Number(current.unit_cost)
+        || (Number(o.unit_cost) === Number(current.unit_cost) && String(o.supplier_id) < String(current.supplier_id))) {
+        winnerByVariant.set(String(o.product_variant_id), o);
+      }
+    });
+    const winningVariantIds = new Set(Array.from(winnerByVariant.entries())
+      .filter(([, o]) => String(o.supplier_id) === supplierId)
+      .map(([id]) => id));
+    const visibleProductIds = new Set([
+      ...ownProductIds,
+      ...catalogVariants.filter((v: any) => winningVariantIds.has(String(v.id))).map((v: any) => v.product_id),
+    ]);
     const visibleProducts = own.filter((p: any) => visibleProductIds.has(p.id));
     const variants = catalogVariants.filter((v: any) =>
-      visibleProductIds.has(v.product_id) && (variantIds.includes(v.id) || String(v.supplier_id || '') === supplierId)
+      visibleProductIds.has(v.product_id) && winningVariantIds.has(String(v.id))
     );
     const costByVariant = new Map(((offers || []) as any[]).map(o => [o.product_variant_id, Number(o.unit_cost)]));
     const variantsByProduct = new Map<string, Product['supplierVariants']>();
@@ -259,7 +277,7 @@ const SupplierPanel = () => {
       const ownQuery = supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity, catalog_conflict, catalog_conflict_reason, catalog_conflict_at')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
       const offeredQuery = offeredIds.length
-        ? supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity, catalog_conflict, catalog_conflict_reason, catalog_conflict_at').in('id', offeredIds)
+        ? supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity, catalog_conflict, catalog_conflict_reason, catalog_conflict_at').eq('tenant_id', supplier.tenant_id).in('id', offeredIds)
         : Promise.resolve({ data: [] as any[], error: null } as any);
       const [{ data: ownProducts }, { data: offeredProducts }] = await Promise.all([ownQuery, offeredQuery]);
       const productsById = new Map<string, Product>();
