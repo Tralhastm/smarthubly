@@ -21,6 +21,15 @@ type OrderWithItems = {
   payment_method?: string;
   change_for?: number;
   order_items: { id: string; product_name: string; product_price: number; quantity: number }[];
+  supplier_pickups?: SupplierPickup[];
+};
+
+type SupplierPickup = {
+  supplier_id: string;
+  supplier_name: string;
+  supplier_address: string;
+  supplier_phone?: string | null;
+  items: { product_name: string; variant_name?: string | null; quantity: number }[];
 };
 
 // Abre o app de mapas externo (Apple Maps no iOS, Google Maps no resto)
@@ -135,7 +144,50 @@ const DriverPanel = () => {
       .in('status', ['received', 'preparing', 'out-for-delivery', 'delivered'])
       .order('created_at', { ascending: false })
       .limit(50);
-    const newOrders = (data as OrderWithItems[]) || [];
+    const rawOrders = (data as OrderWithItems[]) || [];
+    const orderIds = rawOrders.map(o => o.id);
+    const { data: fragments } = orderIds.length
+      ? await (supabase as any).from('order_fragments').select('order_id, supplier_id, items').in('order_id', orderIds).limit(500)
+      : { data: [] as any[] };
+    const supplierIds = Array.from(new Set((fragments || []).map((f: any) => f.supplier_id).filter(Boolean).concat(rawOrders.map((o: any) => o.supplier_id).filter(Boolean))));
+    const { data: suppliers } = supplierIds.length
+      ? await supabase.from('suppliers').select('id, name, address, phone').in('id', supplierIds).limit(50)
+      : { data: [] as any[] };
+    const suppliersById = new Map(((suppliers || []) as any[]).map(s => [String(s.id), s]));
+    const fragmentsByOrder = new Map<string, any[]>();
+    ((fragments || []) as any[]).forEach(f => {
+      const list = fragmentsByOrder.get(String(f.order_id)) || [];
+      list.push(f);
+      fragmentsByOrder.set(String(f.order_id), list);
+    });
+    const newOrders = rawOrders.map((order: any) => {
+      const orderFragments = fragmentsByOrder.get(String(order.id)) || [];
+      const supplierPickups: SupplierPickup[] = orderFragments.map((fragment: any) => {
+        const supplier = suppliersById.get(String(fragment.supplier_id));
+        return {
+          supplier_id: String(fragment.supplier_id),
+          supplier_name: supplier?.name || 'Fornecedor não identificado',
+          supplier_address: supplier?.address || 'Endereço do fornecedor não cadastrado',
+          supplier_phone: supplier?.phone || null,
+          items: Array.isArray(fragment.items) ? fragment.items.map((item: any) => ({
+            product_name: item.product_name || 'Produto não identificado',
+            variant_name: item.variant_name || null,
+            quantity: Number(item.quantity || 1),
+          })) : [],
+        };
+      });
+      if (!supplierPickups.length && order.supplier_id) {
+        const supplier = suppliersById.get(String(order.supplier_id));
+        supplierPickups.push({
+          supplier_id: String(order.supplier_id),
+          supplier_name: supplier?.name || 'Fornecedor não identificado',
+          supplier_address: supplier?.address || 'Endereço do fornecedor não cadastrado',
+          supplier_phone: supplier?.phone || null,
+          items: (order.order_items || []).map((item: any) => ({ product_name: item.product_name, variant_name: item.variant_name || null, quantity: Number(item.quantity || 1) })),
+        });
+      }
+      return { ...order, supplier_pickups: supplierPickups };
+    });
     
     // Pedido atribuído pode ainda estar em "preparing"; ele só passa a
     // "out-for-delivery" quando o próprio motoboy inicia a rota.
@@ -329,6 +381,25 @@ const DriverPanel = () => {
               </div>
               <div className="text-sm text-muted-foreground">
                 <p><strong className="text-foreground">{order.customer_name}</strong> · {order.customer_phone}</p>
+                {(order.supplier_pickups || []).length > 0 && (
+                  <div className="mt-2 rounded-md border-2 border-orange-500/60 bg-orange-500/10 p-2 space-y-2">
+                    <p className="text-xs font-bold uppercase tracking-wide text-orange-400">📦 Pontos de retirada — conferir antes de sair</p>
+                    {order.supplier_pickups!.map((pickup, index) => (
+                      <div key={`${order.id}-${pickup.supplier_id}-${index}`} className="rounded-md border border-orange-500/30 bg-background/40 p-2 space-y-1">
+                        <p className="font-bold text-foreground">{pickup.supplier_name}</p>
+                        <p className="text-xs text-foreground flex items-start gap-1"><MapPin className="h-3 w-3 mt-0.5 shrink-0 text-orange-400" /> {pickup.supplier_address}</p>
+                        {pickup.supplier_phone && <p className="text-xs text-muted-foreground">☎ {pickup.supplier_phone}</p>}
+                        <div className="pt-1 border-t border-orange-500/20 space-y-0.5">
+                          {pickup.items.map((item, itemIndex) => (
+                            <p key={`${pickup.supplier_id}-${itemIndex}`} className="text-xs text-foreground">
+                              {item.quantity}x {item.product_name}{item.variant_name ? ` — ${item.variant_name}` : ' — variação não informada'}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-2 rounded-md border-2 border-primary/50 bg-primary/10 p-2">
                   <p className="text-xs font-bold uppercase tracking-wide text-primary">🔐 Código para conferência</p>
                   <p className="font-mono text-lg font-bold tracking-widest text-foreground">{getCourierCode(order)}</p>
