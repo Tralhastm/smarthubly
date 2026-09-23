@@ -843,12 +843,12 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         const bestByNameAndVariant = bestSuppliers.get(`${productMatchKey(item.product.name)}::${normalizeVariant(item.variantName)}`);
         const bestVariant = item.variantId ? bestVariantSuppliers.get(item.variantId) : null;
         const bestVariantByIdentity = bestVariantSuppliersByIdentity.get(`${productMatchKey(item.product.name)}::${normalizeVariant(item.variantName)}`);
-        // Primeiro usa a oferta por variante já cadastrada; se ela ainda não
-        // existir, usa o catálogo do fornecedor por nome + cor; por último,
-        // preserva o fornecedor originalmente vinculado ao produto.
-        const targetSupplierId = bestVariantByIdentity?.supplier_id
-          || bestVariant?.supplier_id
-          || bestByNameAndVariant?.supplier_id
+        // Todas as fontes disputam pelo menor custo. Uma oferta específica
+        // mais cara não pode vencer uma oferta geral confirmada mais barata.
+        const bestSupplier = [bestVariantByIdentity, bestVariant, bestByNameAndVariant]
+          .filter((candidate): candidate is { supplier_id: string; price: number } => !!candidate)
+          .sort((a, b) => a.price - b.price || a.supplier_id.localeCompare(b.supplier_id))[0];
+        const targetSupplierId = bestSupplier?.supplier_id
           || item.variantSupplierId
           || (item.product as any).supplier_id;
         if (targetSupplierId) {
