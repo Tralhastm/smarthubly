@@ -415,7 +415,7 @@ const SupplierPanel = () => {
           const subtotal = cost * qty;
           totalUnits += qty; totalDue += subtotal;
           const productName = item.product?.name || item.product_name || 'Não identificado';
-          const variantName = item.variantName || item.variant_name || 'Única';
+          const variantName = item.variantName || item.variant_name || 'Não informada — conferir';
           lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━', `Quantidade: ${qty} unidade(s)`, `Produto: ${productName}`, `Variação: ${variantName}`, `Custo unitário: ${cost > 0 ? money(cost) : 'NÃO LOCALIZADO'}`, `Subtotal: ${cost > 0 ? money(subtotal) : 'CONFERIR'}`, '');
         });
       });

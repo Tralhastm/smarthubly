@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useProductVariants, useProductAddons, type ProductVariant, type ProductAddon } from '@/hooks/useProductExtras';
 import { useCart, type CartAddon } from '@/contexts/CartContext';
 import type { Tables } from '@/integrations/supabase/types';
@@ -31,14 +31,6 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
     ))
   );
 
-  // Auto-seleciona primeira variante disponível
-  useEffect(() => {
-    if (availableVariants.length > 0 && !selectedVariant) {
-      const first = availableVariants[0];
-      if (first) setSelectedVariant(first);
-    }
-  }, [availableVariants, selectedVariant, product]);
-
   const updateAddon = (id: string, delta: number, max: number) => {
     setAddonQty(prev => {
       const cur = prev[id] || 0;
@@ -65,6 +57,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
 
   const handleAdd = () => {
     if (productUnavailable || (variants.length > 0 && availableVariants.length === 0)) return;
+    if (availableVariants.length > 0 && !selectedVariant) return;
     if (missingRequired.length > 0) return;
     addToCart(product, {
       variantId: selectedVariant?.id || null,
@@ -198,6 +191,9 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
 
         {/* Footer com total + botão */}
         <div className="border-t border-border p-3 shrink-0 space-y-2">
+          {availableVariants.length > 0 && !selectedVariant && (
+            <p className="text-xs text-destructive">⚠ Selecione uma cor antes de adicionar o produto.</p>
+          )}
           {missingRequired.length > 0 && (
             <p className="text-xs text-destructive">
               ⚠ Selecione: {missingRequired.map(m => m.name).join(', ')}
@@ -205,7 +201,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
           )}
           <button
             onClick={handleAdd}
-            disabled={productUnavailable || (variants.length > 0 && availableVariants.length === 0) || missingRequired.length > 0}
+            disabled={productUnavailable || (variants.length > 0 && availableVariants.length === 0) || (availableVariants.length > 0 && !selectedVariant) || missingRequired.length > 0}
             className="w-full flex items-center justify-between gap-2 rounded-lg gradient-primary text-primary-foreground px-4 py-3 font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span>{productUnavailable || (variants.length > 0 && availableVariants.length === 0) ? 'Indisponível' : 'Adicionar ao carrinho'}</span>
