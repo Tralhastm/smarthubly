@@ -106,17 +106,19 @@ const TenantAdmin = () => {
   }, []);
 
   // Tema do painel admin (light por padrão; lojista pode optar por dark)
-  const themeKey = `admin-theme-${slug}`;
-  const [adminTheme, setAdminTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window === 'undefined') return 'light';
-    return (localStorage.getItem(themeKey) as 'light' | 'dark') || 'light';
-  });
+  const [adminTheme, setAdminTheme] = useState<'light' | 'dark' | null>(null);
   useEffect(() => {
+    if (!slug) return;
+    const saved = localStorage.getItem(`admin-theme-${slug}`);
+    setAdminTheme(saved === 'dark' ? 'dark' : 'light');
+  }, [slug]);
+  useEffect(() => {
+    if (!slug || !adminTheme) return;
     const root = document.documentElement;
     if (adminTheme === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
-    localStorage.setItem(themeKey, adminTheme);
+    localStorage.setItem(`admin-theme-${slug}`, adminTheme);
     return () => { root.classList.remove('dark'); };
-  }, [adminTheme, themeKey]);
+  }, [adminTheme, slug]);
 
 
   const storeMode = ((tenant as any)?.store_mode as StoreMode) || 'delivery';
