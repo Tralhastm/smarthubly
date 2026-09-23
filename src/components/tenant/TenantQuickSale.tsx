@@ -9,7 +9,8 @@ import { Search, Plus, Minus, Trash2, ShoppingCart, DollarSign, CreditCard, Smar
 import type { Tables } from '@/integrations/supabase/types';
 
 type Product = Tables<'products'>;
-type CartItem = { product: Product; quantity: number };
+type Variant = { id: string; product_id: string; name: string; price_delta: number | null; suggested_price: number | null; in_stock: boolean | string };
+type CartItem = { product: Product; variant?: Variant; price: number; quantity: number };
 type PayMethod = 'cash' | 'pix' | 'card' | 'fiado';
 type SaleMode = 'instant' | 'kitchen'; // instant = entrega na hora; kitchen = vai pra preparo
 
@@ -47,6 +48,9 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
   const [submitting, setSubmitting] = useState(false);
   const [lastSale, setLastSale] = useState<{ total: number; change: number } | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false); // bottom sheet mobile
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedVariants, setSelectedVariants] = useState<Variant[]>([]);
+  const [loadingVariants, setLoadingVariants] = useState(false);
   const [saleMode, setSaleMode] = useState<SaleMode>(() => {
     try { return (localStorage.getItem(`quickSaleMode:${tenantId}`) as SaleMode) || 'instant'; }
     catch { return 'instant'; }
@@ -73,32 +77,60 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
     });
   }, [inStock, search, activeCat]);
 
-  const subtotal = useMemo(() => cart.reduce((s, i) => s + Number(i.product.price) * i.quantity, 0), [cart]);
+  const subtotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.quantity, 0), [cart]);
   const cashRecvNum = Number(cashReceived.replace(',', '.')) || 0;
   const change = pay === 'cash' && cashRecvNum > subtotal ? cashRecvNum - subtotal : 0;
   const itemsCount = cart.reduce((s, i) => s + i.quantity, 0);
 
-  const addToCart = (p: Product) => {
+  const variantPrice = (p: Product, variant: Variant) =>
+    Math.max(0, Number(p.price) + (Number(variant.price_delta) || 0)) || Number(variant.suggested_price) || 0;
+
+  const addToCart = (p: Product, variant?: Variant) => {
+    const price = variant ? variantPrice(p, variant) : Number(p.price);
+    const itemKey = `${p.id}:${variant?.id || 'base'}`;
     setCart(prev => {
-      const idx = prev.findIndex(i => i.product.id === p.id);
+      const idx = prev.findIndex(i => `${i.product.id}:${i.variant?.id || 'base'}` === itemKey);
       if (idx >= 0) {
         const copy = [...prev];
         copy[idx] = { ...copy[idx], quantity: copy[idx].quantity + 1 };
         return copy;
       }
-      return [...prev, { product: p, quantity: 1 }];
+      return [...prev, { product: p, variant, price, quantity: 1 }];
     });
   };
 
-  const updateQty = (id: string, delta: number) => {
+  const updateQty = (itemKey: string, delta: number) => {
     setCart(prev => prev.flatMap(i => {
-      if (i.product.id !== id) return [i];
+      if (`${i.product.id}:${i.variant?.id || 'base'}` !== itemKey) return [i];
       const q = i.quantity + delta;
       return q <= 0 ? [] : [{ ...i, quantity: q }];
     }));
   };
 
-  const removeItem = (id: string) => setCart(prev => prev.filter(i => i.product.id !== id));
+  const removeItem = (itemKey: string) => setCart(prev => prev.filter(i => `${i.product.id}:${i.variant?.id || 'base'}` !== itemKey));
+
+  const chooseProduct = async (p: Product) => {
+    setLoadingVariants(true);
+    setSelectedProduct(p);
+    try {
+      const { data, error } = await supabase
+        .from('product_variants' as any)
+        .select('id, product_id, name, price_delta, suggested_price, in_stock')
+        .eq('product_id', p.id);
+      if (error) throw error;
+      const available = ((data || []) as Variant[]).filter(v => v.in_stock !== false && String(v.in_stock).toLowerCase() !== 'false');
+      setSelectedVariants(available);
+      if (available.length === 0 && Number(p.price) > 0) {
+        addToCart(p);
+        setSelectedProduct(null);
+      }
+    } catch (error: any) {
+      setSelectedVariants([]);
+      toast.error(`Não foi possível carregar as variações: ${error.message || error}`);
+    } finally {
+      setLoadingVariants(false);
+    }
+  };
 
   const reset = () => {
     setCart([]); setPay('cash'); setCashReceived('');
@@ -153,8 +185,9 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
         } as any,
         items: cart.map(i => ({
           product_name: i.product.name,
-          product_price: Number(i.product.price),
+          product_price: i.price,
           quantity: i.quantity,
+          variant_name: i.variant?.name ?? null,
         })),
       });
 
@@ -334,24 +367,25 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
           Toque nos produtos para adicionar
         </div>
       ) : cart.map(i => (
-        <div key={i.product.id} className="rounded-lg bg-secondary p-2 flex items-center gap-2">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-foreground truncate">{i.product.name}</p>
-            <p className="text-xs text-muted-foreground">R$ {Number(i.product.price).toFixed(2)}</p>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button onClick={() => updateQty(i.product.id, -1)} className="h-7 w-7 rounded-md border border-border bg-card flex items-center justify-center text-foreground active:scale-90">
+          <div key={`${i.product.id}:${i.variant?.id || 'base'}`} className="rounded-lg bg-secondary p-2 flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-foreground truncate">{i.product.name}</p>
+              {i.variant && <p className="text-xs text-muted-foreground">Cor: {i.variant.name}</p>}
+              <p className="text-xs text-muted-foreground">R$ {i.price.toFixed(2)}</p>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+            <button onClick={() => updateQty(`${i.product.id}:${i.variant?.id || 'base'}`, -1)} className="h-7 w-7 rounded-md border border-border bg-card flex items-center justify-center text-foreground active:scale-90">
               <Minus className="h-3 w-3" />
             </button>
             <span className="w-6 text-center text-sm font-bold text-foreground">{i.quantity}</span>
-            <button onClick={() => updateQty(i.product.id, 1)} className="h-7 w-7 rounded-md border border-border bg-card flex items-center justify-center text-foreground active:scale-90">
+            <button onClick={() => updateQty(`${i.product.id}:${i.variant?.id || 'base'}`, 1)} className="h-7 w-7 rounded-md border border-border bg-card flex items-center justify-center text-foreground active:scale-90">
               <Plus className="h-3 w-3" />
             </button>
           </div>
           <span className="text-xs font-bold text-primary w-14 text-right shrink-0">
-            R$ {(Number(i.product.price) * i.quantity).toFixed(2)}
+            R$ {(i.price * i.quantity).toFixed(2)}
           </span>
-          <button onClick={() => removeItem(i.product.id)} className="text-destructive p-1 shrink-0">
+          <button onClick={() => removeItem(`${i.product.id}:${i.variant?.id || 'base'}`)} className="text-destructive p-1 shrink-0">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -399,11 +433,11 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1.5 pb-24 lg:pb-0">
             {filtered.map(p => {
-              const inCartQty = cart.find(i => i.product.id === p.id)?.quantity || 0;
+              const inCartQty = cart.filter(i => i.product.id === p.id).reduce((sum, i) => sum + i.quantity, 0);
               return (
                 <button
                   key={p.id}
-                  onClick={() => addToCart(p)}
+                  onClick={() => chooseProduct(p)}
                   className="group relative text-left rounded-lg border border-border bg-card hover:border-primary/50 hover:bg-primary/5 p-1.5 transition-all active:scale-95 min-w-0"
                 >
                   {p.image ? (
@@ -431,6 +465,32 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
           </div>
         )}
       </div>
+
+      {selectedProduct && (
+        <div className="fixed inset-0 z-[80] flex items-end bg-black/60" onClick={() => setSelectedProduct(null)}>
+          <div className="w-full max-w-lg mx-auto rounded-t-2xl border-t border-border bg-card p-4 space-y-3" onClick={event => event.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Selecione a cor/variação</p>
+                <h2 className="font-semibold text-foreground">{selectedProduct.name}</h2>
+              </div>
+              <button className="p-2 text-muted-foreground" onClick={() => setSelectedProduct(null)}><X className="h-5 w-5" /></button>
+            </div>
+            {loadingVariants ? <div className="py-4 text-center text-sm text-muted-foreground">Carregando variações...</div> : selectedVariants.length === 0 ? (
+              <div className="py-4 text-center text-sm text-destructive">Nenhuma variação disponível para este produto.</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {selectedVariants.map(variant => (
+                  <button key={variant.id} type="button" onClick={() => { addToCart(selectedProduct, variant); setSelectedProduct(null); }} className="rounded-xl border border-border bg-background p-3 text-left hover:border-primary active:scale-[0.98]">
+                    <span className="block font-medium text-foreground">{variant.name}</span>
+                    <span className="mt-1 block text-sm font-bold text-primary">R$ {variantPrice(selectedProduct, variant).toFixed(2)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* === CARRINHO DESKTOP (sticky lateral) === */}
       <div className="hidden lg:block">
