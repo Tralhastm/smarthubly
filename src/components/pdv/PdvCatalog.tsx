@@ -35,6 +35,20 @@ export default function PdvCatalog({ tenantId, cartCount, cartTotal, onBack, onA
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<(typeof products)[number] | null>(null);
+  const { data: selectedVariants = [], isLoading: selectedVariantsLoading } = useQuery({
+    queryKey: ["pdv-selected-product-variants", selectedProduct?.id],
+    queryFn: async () => {
+      if (!selectedProduct?.id) return [];
+      const { data, error } = await supabase
+        .from("product_variants" as any)
+        .select("id, product_id, name, price_delta, suggested_price, in_stock")
+        .eq("product_id", selectedProduct.id);
+      if (error) throw error;
+      return (data || []) as typeof variants;
+    },
+    enabled: !!selectedProduct?.id,
+    staleTime: 30_000,
+  });
 
   const availableVariants = (productId: string) => variants.filter(v =>
     v.product_id === productId && v.in_stock !== false && String(v.in_stock).toLowerCase() !== "false"
@@ -117,7 +131,7 @@ export default function PdvCatalog({ tenantId, cartCount, cartTotal, onBack, onA
           {filtered.map(p => (
             <button
               key={p.id}
-              onClick={() => availableVariants(p.id).length > 0
+              onClick={() => Number(p.price) === 0 || availableVariants(p.id).length > 0
                 ? setSelectedProduct(p)
                 : onAdd({ id: p.id, name: p.name, price: displayPrice(p) })}
               className="bg-card border rounded-xl p-2 text-left active:scale-95 transition-transform"
@@ -147,7 +161,11 @@ export default function PdvCatalog({ tenantId, cartCount, cartTotal, onBack, onA
               <Button variant="ghost" size="icon" onClick={() => setSelectedProduct(null)}><X className="h-5 w-5" /></Button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              {availableVariants(selectedProduct.id).map(variant => (
+              {selectedVariantsLoading && <div className="col-span-2 py-4 text-center text-sm text-muted-foreground">Carregando variações...</div>}
+              {!selectedVariantsLoading && selectedVariants.filter(v => v.in_stock !== false && String(v.in_stock).toLowerCase() !== "false").length === 0 && (
+                <div className="col-span-2 py-4 text-center text-sm text-destructive">Nenhuma variação disponível para este produto.</div>
+              )}
+              {!selectedVariantsLoading && selectedVariants.filter(v => v.in_stock !== false && String(v.in_stock).toLowerCase() !== "false").map(variant => (
                 <button
                   key={variant.id}
                   type="button"
