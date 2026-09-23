@@ -44,6 +44,7 @@ const openNavigation = (address: string) => {
   }
 };
 
+// Pickup locations are intentionally loaded per order so split deliveries never lose the supplier box.
 const DriverPanel = () => {
   const { token } = useParams<{ token: string }>();
   const { data: driver, isLoading } = useDriverByToken(token);
