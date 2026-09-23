@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { createPortal } from 'react-dom';
 import { useProducts } from '@/hooks/useProducts';
 import { useAddOrder } from '@/hooks/useOrders';
 import { useAddCreditAccount } from '@/hooks/useCredit';
@@ -472,20 +473,23 @@ const TenantQuickSale = ({ tenantId, printerEnabled }: Props) => {
         )}
       </div>
 
-      <div
-        className="lg:hidden"
-        style={{ position: 'fixed', left: 16, right: 96, bottom: 16, zIndex: 65 }}
-      >
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          ref={mobileSearchInputRef}
-          value={search}
-          onChange={event => setSearch(event.target.value)}
-          placeholder="Buscar produto…"
-          aria-label="Buscar produto"
-          className="w-full rounded-full border border-primary/40 bg-card/95 py-3 pl-9 pr-4 text-sm text-foreground shadow-2xl backdrop-blur-sm outline-none focus:border-primary"
-        />
-      </div>
+      {typeof document !== 'undefined' && createPortal(
+        <div
+          className="lg:hidden"
+          style={{ position: 'fixed', left: 16, right: 96, bottom: 16, zIndex: 65 }}
+        >
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            ref={mobileSearchInputRef}
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            placeholder="Buscar produto…"
+            aria-label="Buscar produto"
+            className="w-full rounded-full border border-primary/40 bg-card/95 py-3 pl-9 pr-4 text-sm text-foreground shadow-2xl backdrop-blur-sm outline-none focus:border-primary"
+          />
+        </div>,
+        document.body,
+      )}
 
       {selectedProduct && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={() => setSelectedProduct(null)}>
