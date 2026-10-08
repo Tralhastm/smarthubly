@@ -271,8 +271,11 @@ const SupplierPanel = () => {
     if (!supplier) return;
     try {
       // Produtos próprios + produtos em que o fornecedor possui oferta por cor.
+      // Ofertas antigas permanecem no banco para histórico, mas não podem
+      // ressuscitar produtos no estoque depois que uma nova lista contém só
+      // parte do catálogo.
       const { data: offerRows } = await (supabase as any).from('supplier_variant_offers')
-        .select('product_id').eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).limit(500);
+        .select('product_id').eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id).eq('available', true).limit(500);
       const offeredIds = Array.from(new Set(((offerRows || []) as any[]).map(o => o.product_id).filter(Boolean)));
       const ownQuery = supabase.from('products').select('id, name, price, original_price, in_stock, category, subcategory, subcategory_ids, supplier_id, stock_quantity, catalog_conflict, catalog_conflict_reason, catalog_conflict_at')
         .eq('tenant_id', supplier.tenant_id).eq('supplier_id', supplier.id);
