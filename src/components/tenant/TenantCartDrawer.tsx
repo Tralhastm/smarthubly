@@ -350,6 +350,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     : (isDropshipping ? deliveryFee : (allItemsHaveShipping ? 0 : deliveryFee));
   const quotedShippingTotal = deliveryType === 'delivery' ? effectiveDeliveryFee + shippingFee : 0;
   const globalDiscountEnabled = (tenant as any).shipping_discount_enabled !== false;
+  const automaticLocationDiscount = (tenant as any).shipping_discount_auto === true;
   const applyShippingRule = (amount: number, type: string, value: number) => {
     if (type === 'free') return 0;
     if (type === 'percent') return Math.max(0, amount * (1 - Math.min(100, Math.max(0, value)) / 100));
@@ -357,14 +358,14 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     return amount;
   };
   const productSubtotal = items.reduce((sum, item) => sum + getCartLineUnitPrice(item) * item.quantity, 0);
-  // Frete grátis/descontado só pode ser liberado após um cupom promocional
-  // ou código de vendedor válido ser aplicado no checkout.
-  const shippingDiscountAuthorized = Boolean(appliedCoupon);
+  // A regra global pode vir de cupom ou entrar automaticamente quando a loja
+  // habilita o desconto por localização.
+  const shippingDiscountAuthorized = Boolean(appliedCoupon) || automaticLocationDiscount;
   const appliedShippingTotal = deliveryType !== 'delivery' ? 0 : items.reduce((sum, item) => {
     const lineShare = productSubtotal > 0 ? quotedShippingTotal * (getCartLineUnitPrice(item) * item.quantity / productSubtotal) : 0;
     const product = item.product as any;
     const hasProductRule = product.shipping_discount_enabled === true;
-    const enabled = hasProductRule || globalDiscountEnabled;
+    const enabled = hasProductRule || globalDiscountEnabled || automaticLocationDiscount;
     if (!enabled || !shippingDiscountAuthorized) return sum + lineShare;
     const type = hasProductRule ? product.shipping_discount_type : ((tenant as any).shipping_discount_type || 'free');
     const value = hasProductRule ? Number(product.shipping_discount_value || 0) : Number((tenant as any).shipping_discount_value || 0);
@@ -1357,7 +1358,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     <div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal:</span><span>R${total.toFixed(2)}</span></div>
                     {customerFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Taxa operacional:</span><span>R${customerFee.toFixed(2)}</span></div>}
                     {shippingDiscountAmount > 0 && quotedShippingTotal > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete calculado:</span><span className="line-through">R${quotedShippingTotal.toFixed(2)}</span></div>}
-                    {shippingDiscountAmount > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>{appliedShippingTotal === 0 ? 'Frete grátis aplicado:' : 'Desconto no frete aplicado:'}</span><span>R${appliedShippingTotal.toFixed(2)}</span></div>}
+                    {shippingDiscountAmount > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>{automaticLocationDiscount ? (appliedShippingTotal === 0 ? 'Frete grátis pela localização:' : 'Desconto de frete pela localização:') : (appliedShippingTotal === 0 ? 'Frete grátis aplicado:' : 'Desconto no frete aplicado:')}</span><span>−R${shippingDiscountAmount.toFixed(2)}</span></div>}
                     {shippingDiscountAmount === 0 && effectiveDeliveryFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? `Frete estimado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):` : useLalamoveQuote ? 'Entrega Lalamove:' : 'Entrega (distância):'}</span><span>R${effectiveDeliveryFee.toFixed(2)}</span></div>}
                     {isDropshipping && freightEstimate && (
                       <div className="text-xs text-muted-foreground italic px-1">

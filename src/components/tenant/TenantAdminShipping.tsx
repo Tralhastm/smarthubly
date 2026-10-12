@@ -20,6 +20,7 @@ interface ShippingConfig {
   shipping_discount_enabled: boolean;
   shipping_discount_type: 'free' | 'percent' | 'fixed';
   shipping_discount_value: number;
+  shipping_discount_auto: boolean;
 }
 
 const TenantAdminShipping = ({ tenantId }: { tenantId: string }) => {
@@ -41,6 +42,7 @@ const TenantAdminShipping = ({ tenantId }: { tenantId: string }) => {
     shipping_discount_enabled: true,
     shipping_discount_type: 'free',
     shipping_discount_value: 0,
+    shipping_discount_auto: false,
   });
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -55,7 +57,7 @@ const TenantAdminShipping = ({ tenantId }: { tenantId: string }) => {
       try {
         const { data, error } = await supabase
           .from('tenants')
-          .select('shipping_enabled, shipping_base_fee, shipping_base_radius_km, shipping_per_km_fee, shipping_max_fee, shipping_origin_address, delivery_responsible, shipping_mode, shipping_lalamove_margin_percent, shipping_lalamove_apply_cap, delivery_max_radius_km, shipping_discount_enabled, shipping_discount_type, shipping_discount_value')
+          .select('shipping_enabled, shipping_base_fee, shipping_base_radius_km, shipping_per_km_fee, shipping_max_fee, shipping_origin_address, delivery_responsible, shipping_mode, shipping_lalamove_margin_percent, shipping_lalamove_apply_cap, delivery_max_radius_km, shipping_discount_enabled, shipping_discount_type, shipping_discount_value, shipping_discount_auto')
           .eq('id', tenantId)
           .maybeSingle();
         if (cancelled) return;
@@ -78,6 +80,7 @@ const TenantAdminShipping = ({ tenantId }: { tenantId: string }) => {
             shipping_discount_enabled: (data as any).shipping_discount_enabled ?? true,
             shipping_discount_type: ((data as any).shipping_discount_type === 'percent' || (data as any).shipping_discount_type === 'fixed') ? (data as any).shipping_discount_type : 'free',
             shipping_discount_value: Number((data as any).shipping_discount_value ?? 0),
+            shipping_discount_auto: !!(data as any).shipping_discount_auto,
           });
         }
       } catch (e: any) {
@@ -110,6 +113,7 @@ const TenantAdminShipping = ({ tenantId }: { tenantId: string }) => {
       shipping_discount_enabled: config.shipping_discount_enabled,
       shipping_discount_type: config.shipping_discount_type,
       shipping_discount_value: config.shipping_discount_value,
+      shipping_discount_auto: config.shipping_discount_auto,
     } as any).eq('id', tenantId);
     setSaving(false);
     if (error) {
@@ -361,13 +365,22 @@ const TenantAdminShipping = ({ tenantId }: { tenantId: string }) => {
               <Switch checked={config.shipping_discount_enabled} onCheckedChange={v => setConfig({ ...config, shipping_discount_enabled: v })} />
             </div>
             {config.shipping_discount_enabled && (
-              <div className="grid grid-cols-2 gap-2">
-                <select value={config.shipping_discount_type} onChange={e => setConfig({ ...config, shipping_discount_type: e.target.value as any })} className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground">
-                  <option value="free">Frete grátis</option>
-                  <option value="percent">Desconto percentual</option>
-                  <option value="fixed">Desconto em reais</option>
-                </select>
-                {config.shipping_discount_type !== 'free' && <input type="number" min="0" step="0.01" value={config.shipping_discount_value} onChange={e => setConfig({ ...config, shipping_discount_value: Math.max(0, parseFloat(e.target.value) || 0) })} placeholder={config.shipping_discount_type === 'percent' ? 'Ex: 50 (%)' : 'Ex: 10 (R$)'} className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3">
+                  <div className="flex-1 pr-3">
+                    <p className="text-xs font-medium text-foreground">Aplicar automaticamente por localização</p>
+                    <p className="text-xs text-muted-foreground mt-1">Sem cupom: o desconto entra direto no checkout. Com desconto fixo de R$50, o frete até R$50 fica grátis e acima disso o cliente paga só o excedente.</p>
+                  </div>
+                  <Switch checked={config.shipping_discount_auto} onCheckedChange={v => setConfig({ ...config, shipping_discount_auto: v })} />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <select value={config.shipping_discount_type} onChange={e => setConfig({ ...config, shipping_discount_type: e.target.value as any })} className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground">
+                    <option value="free">Frete grátis</option>
+                    <option value="percent">Desconto percentual</option>
+                    <option value="fixed">Desconto em reais</option>
+                  </select>
+                  {config.shipping_discount_type !== 'free' && <input type="number" min="0" step="0.01" value={config.shipping_discount_value} onChange={e => setConfig({ ...config, shipping_discount_value: Math.max(0, parseFloat(e.target.value) || 0) })} placeholder={config.shipping_discount_type === 'percent' ? 'Ex: 50 (%)' : 'Ex: 10 (R$)'} className="w-full mt-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />}
+                </div>
               </div>
             )}
           </div>
