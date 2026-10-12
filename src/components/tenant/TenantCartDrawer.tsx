@@ -108,8 +108,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const [checkingDelivery, setCheckingDelivery] = useState(false);
   const [showPickupOnlyModal, setShowPickupOnlyModal] = useState(false);
   const [pickupOnlyConfirmed, setPickupOnlyConfirmed] = useState(false);
-  // Estimativa ViaCEP (apenas modo dropshipping)
+  // Distância CEP→CEP usada para o dropshipping e a taxa efetiva por km.
   const [freightEstimate, setFreightEstimate] = useState<FreightEstimate | null>(null);
+  const [freightRatePerKm, setFreightRatePerKm] = useState<number | null>(null);
   // A cotação continua visível para o cliente, mas a loja aplica frete grátis.
   const [freeShippingApplied, setFreeShippingApplied] = useState(false);
   // Agendamento: data/hora escolhida pro serviço
@@ -436,6 +437,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       setDeliveryCheck(null);
       setDistanceError('');
       setFreightEstimate(null);
+      setFreightRatePerKm(null);
       setFreeShippingApplied(false);
       return val;
     });
@@ -447,6 +449,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     setOriginDistances({});
     setDeliveryCheck(null);
     setDeliveryFee(0);
+    setFreightRatePerKm(null);
     setFreeShippingApplied(false);
   }, []);
 
@@ -491,12 +494,14 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
 
     setCheckingDelivery(true);
     try {
-      // ===== Modo Dropshipping: cotação CEP→CEP via ViaCEP (sem motoboy) =====
+      // ===== Modo Dropshipping: distância CEP→CEP + tabela do motoboy =====
       if (isDropshipping) {
-        // Em dropshipping, IGNORA a taxa local (per-km) calculada pelo CepAddressInput
-        // — o frete real vem do estimate ViaCEP. Zera pra não vazar valor.
+        // Em dropshipping, a distância é estimada pelos CEPs, mas o valor deve
+        // respeitar a tabela de quem entrega. Nunca usar PAC/Sedex quando houver
+        // uma tabela própria configurada.
         setDeliveryFee(0);
         setFreightEstimate(null);
+        setFreightRatePerKm(null);
         const extractCep = (s: string) => {
           const m = (s || '').match(/\d{5}-?\d{3}/);
           return m ? m[0] : '';
@@ -571,21 +576,37 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                 };
               }
             }
-            const maxRadius = Number(supplierConfig?.delivery_max_radius_km ?? 0);
+            const supplierBaseFee = Number(supplierConfig?.shipping_base_fee ?? 0);
+            const supplierBaseRadius = Number(supplierConfig?.shipping_base_radius_km ?? 0);
+            const supplierPerKm = Number(supplierConfig?.shipping_per_km_fee ?? 0);
+            const supplierMaxFee = supplierConfig?.shipping_max_fee;
+            const supplierHasTable = Boolean(supplierConfig && (supplierBaseFee > 0 || supplierPerKm > 0));
+
+            const tenantBaseFee = Number((tenant as any).shipping_base_fee ?? 0);
+            const tenantBaseRadius = Number((tenant as any).shipping_base_radius_km ?? 0);
+            const tenantPerKm = Number((tenant as any).shipping_per_km_fee ?? 0);
+            const tenantMaxFee = (tenant as any).shipping_max_fee;
+            const tenantHasTable = tenantBaseFee > 0 || tenantPerKm > 0;
+            const feeConfig = supplierHasTable
+              ? { baseFee: supplierBaseFee, baseRadius: supplierBaseRadius, perKm: supplierPerKm, maxFee: supplierMaxFee }
+              : tenantHasTable
+                ? { baseFee: tenantBaseFee, baseRadius: tenantBaseRadius, perKm: tenantPerKm, maxFee: tenantMaxFee }
+                : null;
+
+            const maxRadius = Number(supplierConfig?.delivery_max_radius_km ?? (tenant as any).delivery_max_radius_km ?? 0);
+            setFreightRatePerKm(feeConfig?.perKm ?? null);
             if (maxRadius > 0 && est.distanceKm > maxRadius) {
               setFreightEstimate(est);
               setDeliveryFee(0);
               setDistanceError(`Este fornecedor entrega somente em até ${maxRadius} km. O endereço informado está a ${est.distanceKm.toFixed(1)} km da origem.`);
               return;
             }
-            const baseFee = supplierConfig?.shipping_base_fee ?? 0;
-            const baseRadius = supplierConfig?.shipping_base_radius_km ?? 0;
-            const perKm = supplierConfig?.shipping_per_km_fee ?? 0;
-            const maxFee = supplierConfig?.shipping_max_fee;
-            const tableFee = supplierConfig && baseFee > 0
+            const tableFee = feeConfig
               ? Math.min(
-                  maxFee != null && maxFee > 0 ? maxFee : Number.POSITIVE_INFINITY,
-                  est.distanceKm <= baseRadius ? baseFee : baseFee + (est.distanceKm - baseRadius) * perKm,
+                  feeConfig.maxFee != null && Number(feeConfig.maxFee) > 0 ? Number(feeConfig.maxFee) : Number.POSITIVE_INFINITY,
+                  est.distanceKm <= feeConfig.baseRadius
+                    ? feeConfig.baseFee
+                    : feeConfig.baseFee + (est.distanceKm - feeConfig.baseRadius) * feeConfig.perKm,
                 )
               : est.pac;
             setFreightEstimate(est);
@@ -1365,10 +1386,12 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     {customerFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Taxa operacional:</span><span>R${customerFee.toFixed(2)}</span></div>}
                     {shippingDiscountAmount > 0 && quotedShippingTotal > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete calculado:</span><span className="line-through">R${quotedShippingTotal.toFixed(2)}</span></div>}
                     {shippingDiscountAmount > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>{automaticLocationDiscount ? (appliedShippingTotal === 0 ? 'Frete grátis pela localização:' : 'Desconto de frete pela localização:') : (appliedShippingTotal === 0 ? 'Frete grátis aplicado:' : 'Desconto no frete aplicado:')}</span><span>−R${shippingDiscountAmount.toFixed(2)}</span></div>}
-                    {shippingDiscountAmount === 0 && effectiveDeliveryFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? `Frete estimado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):` : useLalamoveQuote ? 'Entrega Lalamove:' : 'Entrega (distância):'}</span><span>R${effectiveDeliveryFee.toFixed(2)}</span></div>}
+                    {shippingDiscountAmount === 0 && effectiveDeliveryFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? (freightRatePerKm != null ? `Frete do motoboy${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}:` : `Frete estimado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):`) : useLalamoveQuote ? 'Entrega Lalamove:' : 'Entrega (distância):'}</span><span>R${effectiveDeliveryFee.toFixed(2)}</span></div>}
                     {isDropshipping && freightEstimate && (
                       <div className="text-xs text-muted-foreground italic px-1">
-                        Estimativa CEP→CEP via ViaCEP. Sedex aprox. R${freightEstimate.sedex.toFixed(2)} · ~{freightEstimate.distanceKm}km. Valor final pode variar conforme transportadora.
+                        {freightRatePerKm != null
+                          ? `Motoboy: R$${freightRatePerKm.toFixed(2)}/km × ~${freightEstimate.distanceKm} km = R$${quotedShippingTotal.toFixed(2)} antes do desconto.`
+                          : `Estimativa CEP→CEP via ViaCEP. Sedex aprox. R$${freightEstimate.sedex.toFixed(2)} · ~${freightEstimate.distanceKm} km. Valor final pode variar conforme transportadora.`}
                       </div>
                     )}
                     {shippingDiscountAmount === 0 && shippingFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete (produtos):</span><span>R${shippingFee.toFixed(2)}</span></div>}
