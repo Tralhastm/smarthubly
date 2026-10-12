@@ -593,6 +593,23 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                 ? { baseFee: tenantBaseFee, baseRadius: tenantBaseRadius, perKm: tenantPerKm, maxFee: tenantMaxFee }
                 : null;
 
+            const normalizeCity = (value: string) => value
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .toLowerCase()
+              .trim();
+            const isMobiletec = normalizeCity(String((tenant as any).slug ?? '')) === 'mobiletec';
+            if (isMobiletec) {
+              const destinationCity = normalizeCity((est.toCity || '').split('/')[0]);
+              const allowedCities = new Set(['belo horizonte', 'betim', 'contagem']);
+              if (!allowedCities.has(destinationCity)) {
+                setFreightEstimate(est);
+                setDeliveryFee(0);
+                setDistanceError('A Mobiletec entrega somente em Belo Horizonte, Betim ou Contagem.');
+                return;
+              }
+            }
+
             // Um fornecedor legado pode expor raio 0 mesmo quando a loja tem
             // um raio válido. Só deixa o fornecedor substituir o tenant quando
             // ele realmente possui um limite positivo configurado.
