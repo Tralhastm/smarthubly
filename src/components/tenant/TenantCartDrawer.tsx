@@ -593,7 +593,12 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                 ? { baseFee: tenantBaseFee, baseRadius: tenantBaseRadius, perKm: tenantPerKm, maxFee: tenantMaxFee }
                 : null;
 
-            const maxRadius = Number(supplierConfig?.delivery_max_radius_km ?? (tenant as any).delivery_max_radius_km ?? 0);
+            // Um fornecedor legado pode expor raio 0 mesmo quando a loja tem
+            // um raio válido. Só deixa o fornecedor substituir o tenant quando
+            // ele realmente possui um limite positivo configurado.
+            const supplierMaxRadius = Number(supplierConfig?.delivery_max_radius_km ?? 0);
+            const tenantMaxRadius = Number((tenant as any).delivery_max_radius_km ?? 0);
+            const maxRadius = supplierMaxRadius > 0 ? supplierMaxRadius : tenantMaxRadius;
             setFreightRatePerKm(feeConfig?.perKm ?? null);
             if (maxRadius > 0 && est.distanceKm > maxRadius) {
               setFreightEstimate(est);
