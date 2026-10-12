@@ -288,16 +288,18 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   }, [items]);
 
   const getProductOrigin = (product: any, variantSupplierId?: string | null): string => {
-    // Prioridade: override explícito > endereço do fornecedor > origem da loja > endereço da loja
-    if (product.shipping_origin_override) return product.shipping_origin_override;
+    // No dropshipping, a origem é exclusivamente o fornecedor do item.
+    // Override/origem da loja não podem substituir o endereço do fornecedor.
+    if (!isDropshipping && product.shipping_origin_override) return product.shipping_origin_override;
     const supplierId = variantSupplierId || product.supplier_id || resolvedSupplierIds[productMatchKey(product.name)];
     if (supplierId && supplierShippings[supplierId]?.address) {
       return supplierShippings[supplierId].address;
     }
-    return (tenant as any).shipping_origin_address || tenant.address;
+    return isDropshipping ? '' : ((tenant as any).shipping_origin_address || tenant.address);
   };
+  const primaryShippingItem = items.find(i => productNeedsShipping(i.product));
   const primaryShippingOrigin = isDropshipping
-    ? getProductOrigin(items.find(i => productNeedsShipping(i.product))?.product || {})
+    ? getProductOrigin(primaryShippingItem?.product || {}, primaryShippingItem?.variantSupplierId)
     : ((tenant as any).shipping_origin_address || tenant.address);
 
   // Compute shipping using per-product origin distances + tabela do fornecedor (se houver)
@@ -471,7 +473,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       if (origin && origin !== tenantOrigin) uniqueOrigins.add(origin);
     });
 
-    const distances: Record<string, number> = { [tenantOrigin]: distanceKm };
+    const distances: Record<string, number> = isDropshipping ? {} : { [tenantOrigin]: distanceKm };
 
     if (!isDropshipping && uniqueOrigins.size > 0) {
       _setCalculatingDistance(true);
@@ -511,7 +513,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         // sobre a origem da loja (cada produto pode sair de um endereço distinto).
         const supplierOrigin = items
           .filter(i => productNeedsShipping(i.product))
-          .map(i => getProductOrigin(i.product))
+          .map(i => getProductOrigin(i.product, i.variantSupplierId))
           .find(Boolean) || '';
         let originCep = extractCep(supplierOrigin);
         // O cliente pode clicar imediatamente após abrir o checkout, antes do
@@ -540,8 +542,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             };
           }
         }
-        const tenantCep = (tenant as any).whatsapp_store_cep || extractCep((tenant as any).shipping_origin_address || tenant.address || '');
-        const sourceCep = originCep || tenantCep;
+        // Nunca usar o CEP da loja como fallback: o frete sai do fornecedor.
+        const sourceCep = originCep;
         if (destCep && sourceCep) {
           const est = await estimateFreight(sourceCep, destCep);
           if (est) {
@@ -640,7 +642,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             setDistanceError('Não foi possível estimar o frete pra esse CEP. Tente novamente.');
           }
         } else if (!sourceCep) {
-          setDistanceError('Loja sem CEP de origem cadastrado. Avise o vendedor.');
+          setDistanceError('Fornecedor sem CEP de origem cadastrado. Avise o vendedor.');
         } else if (!destCep) {
           setDistanceError('CEP de destino inválido.');
         }
