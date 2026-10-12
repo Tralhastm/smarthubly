@@ -367,8 +367,14 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
     const hasProductRule = product.shipping_discount_enabled === true;
     const enabled = hasProductRule || globalDiscountEnabled || automaticLocationDiscount;
     if (!enabled || !shippingDiscountAuthorized) return sum + lineShare;
-    const type = hasProductRule ? product.shipping_discount_type : ((tenant as any).shipping_discount_type || 'free');
-    const value = hasProductRule ? Number(product.shipping_discount_value || 0) : Number((tenant as any).shipping_discount_value || 0);
+    // A campanha automática da loja prevalece sobre regras antigas salvas no
+    // produto; assim o teto de R$50 vale de forma uniforme no carrinho inteiro.
+    const type = automaticLocationDiscount
+      ? ((tenant as any).shipping_discount_type || 'free')
+      : (hasProductRule ? product.shipping_discount_type : ((tenant as any).shipping_discount_type || 'free'));
+    const value = automaticLocationDiscount
+      ? Number((tenant as any).shipping_discount_value || 0)
+      : (hasProductRule ? Number(product.shipping_discount_value || 0) : Number((tenant as any).shipping_discount_value || 0));
     return sum + applyShippingRule(lineShare, type, value);
   }, 0);
   const shippingDiscountAmount = Math.max(0, quotedShippingTotal - appliedShippingTotal);
