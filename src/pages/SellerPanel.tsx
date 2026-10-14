@@ -57,7 +57,9 @@ const statusLabel: Record<string, string> = {
 };
 
 export default function SellerPanel() {
-  const { token } = useParams<{ slug: string; token: string }>();
+  const { token: routeToken } = useParams<{ slug: string; token: string }>();
+  const pathToken = typeof window !== 'undefined' ? window.location.pathname.match(/\/vendedor\/([^/]+)/)?.[1] : undefined;
+  const token = routeToken || pathToken || '';
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -66,14 +68,28 @@ export default function SellerPanel() {
   const [realtimeConnected, setRealtimeConnected] = useState(false);
 
   const load = async () => {
-    if (!token) return;
     setLoading(true);
     setError('');
-    const rpc = supabase.rpc as unknown as (name: string, args: { _token: string }) => Promise<{ data: DashboardResponse | null; error: { message: string } | null }>;
-    const { data: result, error: rpcError } = await rpc('get_seller_dashboard', { _token: token });
-    if (rpcError || result?.error) setError(rpcError?.message || result?.error || 'Painel indisponível');
-    else setData(result as Dashboard);
-    setLoading(false);
+    try {
+      if (!token) {
+        setError('Link do vendedor inválido ou incompleto. Solicite um novo link à loja.');
+        return;
+      }
+
+      const rpc = supabase.rpc as unknown as (name: string, args: { _token: string }) => Promise<{ data: DashboardResponse | null; error: { message: string } | null }>;
+      const response = await Promise.race([
+        rpc('get_seller_dashboard', { _token: token }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('A consulta demorou mais que o esperado.')), 12000)),
+      ]);
+      const { data: result, error: rpcError } = response;
+      if (rpcError || result?.error) setError(rpcError?.message || result?.error || 'Painel indisponível');
+      else if (result) setData(result);
+      else setError('Não foi possível carregar os dados do vendedor.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível carregar o painel. Tente atualizar a página.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { void load(); }, [token]);
