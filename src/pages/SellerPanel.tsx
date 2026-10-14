@@ -76,7 +76,7 @@ export default function SellerPanel() {
         return;
       }
 
-      const rpc = supabase.rpc as unknown as (name: string, args: { _token: string }) => Promise<{ data: DashboardResponse | null; error: { message: string } | null }>;
+      const rpc = supabase.rpc.bind(supabase) as unknown as (name: string, args: { _token: string }) => Promise<{ data: DashboardResponse | null; error: { message: string } | null }>;
       const response = await Promise.race([
         rpc('get_seller_dashboard', { _token: token }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('A consulta demorou mais que o esperado.')), 12000)),
