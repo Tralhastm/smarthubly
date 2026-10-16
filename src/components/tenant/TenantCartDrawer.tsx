@@ -1411,13 +1411,6 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     {shippingDiscountAmount > 0 && quotedShippingTotal > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete calculado:</span><span className="line-through">R${quotedShippingTotal.toFixed(2)}</span></div>}
                     {shippingDiscountAmount > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>{automaticLocationDiscount ? (appliedShippingTotal === 0 ? 'Frete grátis pela localização:' : 'Desconto de frete pela localização:') : (appliedShippingTotal === 0 ? 'Frete grátis aplicado:' : 'Desconto no frete aplicado:')}</span><span>−R${shippingDiscountAmount.toFixed(2)}</span></div>}
                     {shippingDiscountAmount === 0 && effectiveDeliveryFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? (freightRatePerKm != null ? `Frete do motoboy${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}:` : `Frete estimado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):`) : useLalamoveQuote ? 'Entrega Lalamove:' : 'Entrega (distância):'}</span><span>R${effectiveDeliveryFee.toFixed(2)}</span></div>}
-                    {isDropshipping && freightEstimate && (
-                      <div className="text-xs text-muted-foreground italic px-1">
-                        {freightRatePerKm != null
-                          ? `Motoboy: R$${freightRatePerKm.toFixed(2)}/km × ~${freightEstimate.distanceKm} km = R$${quotedShippingTotal.toFixed(2)} antes do desconto.`
-                          : `Estimativa CEP→CEP via ViaCEP. Sedex aprox. R$${freightEstimate.sedex.toFixed(2)} · ~${freightEstimate.distanceKm} km. Valor final pode variar conforme transportadora.`}
-                      </div>
-                    )}
                     {shippingDiscountAmount === 0 && shippingFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete (produtos):</span><span>R${shippingFee.toFixed(2)}</span></div>}
                     {discountAmount > 0 && <div className="flex justify-between text-sm text-green-400"><span>Cupom ({appliedCoupon?.code}):</span><span>−R${discountAmount.toFixed(2)}</span></div>}
                     <div className="flex justify-between text-lg font-bold text-foreground"><span>{onlinePaymentMethod === 'pix' ? 'Total Pix:' : onlinePaymentMethod === 'credit' ? 'Total cartão:' : onlinePaymentMethod === 'debit' ? 'Total débito:' : 'Subtotal:'}</span><span className="text-primary">R${(hasOnlinePayment && onlinePaymentMethod ? onlineTotal : finalTotal).toFixed(2)}</span></div>
