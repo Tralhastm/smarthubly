@@ -520,6 +520,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStep, setImportStep] = useState<'idle' | 'parsing' | 'preview' | 'importing'>('idle');
   const [parsedProducts, setParsedProducts] = useState<ParsedProduct[]>([]);
+  const [createNewProducts, setCreateNewProducts] = useState(false);
   const [generateImages, setGenerateImages] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [importTotal, setImportTotal] = useState(0);
@@ -779,6 +780,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     setImportSupplierName('');
     setImportPriceType('cost');
     setImportSupplierId(null);
+    setCreateNewProducts(false);
     setImportCancelled(false);
     
     if (isText && files.every(item => item.type.startsWith('text/') || /\.(txt|csv|tsv|md|json|xml|html|htm|log|yaml|yml)$/i.test(item.name))) {
@@ -1158,7 +1160,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           // Catálogos comerciais também podem trazer produtos novos. Nesse caso,
           // cadastra o item no tenant atual e só depois grava eventuais variantes.
           // O vínculo é sempre limitado ao tenant desta tela.
-          if (price <= 0) {
+          if (!createNewProducts) {
+            console.info('[catalog-import] produto novo mantido fora do catálogo por segurança:', p.name);
+          } else if (price <= 0) {
             console.info('[catalog-import] produto sem preço válido ignorado:', p.name);
           } else {
             const { data: created, error: createError } = await supabase.from('products').insert({
@@ -1908,6 +1912,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input type="checkbox" checked={generateImages} onChange={e => setGenerateImages(e.target.checked)} className="accent-primary" />
               <Sparkles className="h-3.5 w-3.5 text-primary" /> Gerar imagens por IA (no servidor — pode fechar o navegador)
+            </label>
+            <label className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-foreground cursor-pointer">
+              <input type="checkbox" checked={createNewProducts} onChange={e => setCreateNewProducts(e.target.checked)} className="accent-primary mt-0.5" />
+              <span><strong>Cadastrar produtos novos nesta importação</strong><span className="block text-[11px] text-muted-foreground">Desmarcado por padrão: listas de fornecedores continuam atualizando apenas produtos já cadastrados.</span></span>
             </label>
             <div className="flex gap-2">
               <button onClick={handleImportConfirm} className="flex-1 items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm">
