@@ -27,6 +27,9 @@ const TenantStore = () => {
     startPath: `/loja/${slug}`,
     scopePath: `/loja/${slug}/`,
   });
+  const halloweenActive = slug?.trim().toLowerCase() === 'mobiletec'
+    && Boolean(tenant)
+    && (tenant as any)?.storefront_config?.halloween_theme_enabled !== false;
 
   // Apply tenant brand colors with auto-derived tokens (garante contraste)
   useEffect(() => {
@@ -92,12 +95,22 @@ const TenantStore = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className={`min-h-screen bg-background flex flex-col ${halloweenActive ? 'mobiletec-halloween' : ''}`}>
+      {halloweenActive && (
+        <div className="halloween-announcement" aria-label="Tema especial de Halloween da Mobiletec">
+          <span className="halloween-announcement-bat" aria-hidden="true">🦇</span>
+          <span className="halloween-announcement-copy">
+            <strong>Halloween na Mobiletec</strong>
+            <small>Tecnologia em clima de noite assombrada</small>
+          </span>
+          <span className="halloween-announcement-pumpkin" aria-hidden="true">🎃</span>
+        </div>
+      )}
       {showSplash && (
         <StoreSplash
           logoUrl={tenant.logo_url}
           name={tenant.name}
-          bgColor={(tenant as any).splash_bg_color || '#0F172A'}
+          bgColor={halloweenActive ? '#170D25' : (tenant as any).splash_bg_color || '#0F172A'}
           onDone={hideSplash}
         />
       )}
@@ -139,7 +152,15 @@ const TenantStore = () => {
         <SupermarketStorefront tenant={tenant} />
       ) : (
         <>
-      <section className="relative py-12 overflow-hidden">
+      <section className={`relative py-12 overflow-hidden ${halloweenActive ? 'halloween-hero' : ''}`}>
+        {halloweenActive && (
+          <div className="halloween-hero-ornaments" aria-hidden="true">
+            <span className="halloween-orb halloween-orb-left">🎃</span>
+            <span className="halloween-bat halloween-bat-one">🦇</span>
+            <span className="halloween-bat halloween-bat-two">🦇</span>
+            <span className="halloween-orb halloween-orb-right">🕸️</span>
+          </div>
+        )}
         <div className="container mx-auto px-4 text-center relative z-10">
           {(tenant as any).show_title !== false && (
             <h1 className="font-heading text-3xl md:text-4xl text-foreground mb-3">{tenant.name}</h1>

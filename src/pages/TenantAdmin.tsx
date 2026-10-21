@@ -434,7 +434,7 @@ const TenantAdmin = () => {
           {tab === 'coupons-test' && <TenantAdminCouponsTest tenantId={tenant.id} tenantSlug={slug!} />}
           {tab === 'reviews' && <TenantAdminReviews tenantId={tenant.id} />}
           {tab === 'billing' && <TenantBillingPanel tenantId={tenant.id} blockedUntil={(tenant as any).billing_blocked_until} />}
-          {tab === 'appearance' && <TenantAppearance tenantId={tenant.id} />}
+          {tab === 'appearance' && <TenantAppearance tenantId={tenant.id} tenantSlug={tenant.slug} />}
           {tab === 'printer' && <TenantAdminPrinter tenantId={tenant.id} />}
           {tab === 'integrations' && <TenantAdminIntegrations tenantId={tenant.id} />}
           {tab === 'fiscal' && <TenantAdminFiscal tenantId={tenant.id} />}
@@ -495,7 +495,8 @@ const PRESET_COLORS = [
 ];
 
 
-const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
+const TenantAppearance = ({ tenantId, tenantSlug }: { tenantId: string; tenantSlug: string }) => {
+  const isMobiletec = tenantSlug.trim().toLowerCase() === 'mobiletec';
   const [splashColor, setSplashColor] = useState('#0F172A');
   const [primaryColor, setPrimaryColor] = useState('#3B82F6');
   const [bgColor, setBgColor] = useState('#0F172A');
@@ -536,6 +537,8 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
   // pedido de delivery cobrando o frete calculado (cliente organiza a própria retirada, ex.: Uber Moto).
   const [pickupAsFallback, setPickupAsFallback] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [storefrontConfig, setStorefrontConfig] = useState<Record<string, unknown>>({});
+  const [halloweenThemeEnabled, setHalloweenThemeEnabled] = useState(true);
 
   useEffect(() => {
     supabase.from('tenants').select('splash_bg_color, brand_primary_color, brand_bg_color, is_dropshipping, auto_dropshipping_enabled, dropshipping_review_mode, store_mode, pickup_enabled, pix_key, pix_key_type, lalamove_enabled, lalamove_api_key, lalamove_api_secret, lalamove_market, lalamove_sandbox, uber_direct_enabled, uber_direct_customer_id, uber_direct_client_id, uber_direct_client_secret, uber_direct_sandbox, catalog_layout, product_splash_enabled, whatsapp_show_pix, dropshipping_submode, whatsapp_consultora_phone, whatsapp_default_address_source, whatsapp_store_address, whatsapp_store_cep, show_description, show_title, description, payment_provider, infinitepay_handle, infinitepay_document, infinitepay_enabled, infinitepay_installment_fees').eq('id', tenantId).single().then(({ data }) => {
@@ -581,6 +584,19 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
     });
   }, [tenantId]);
 
+  useEffect(() => {
+    if (!isMobiletec) return;
+    supabase.from('tenants').select('storefront_config').eq('id', tenantId).single().then(({ data, error }) => {
+      if (error) return;
+      const rawConfig = (data as any)?.storefront_config;
+      const config = rawConfig && typeof rawConfig === 'object' && !Array.isArray(rawConfig)
+        ? rawConfig as Record<string, unknown>
+        : {};
+      setStorefrontConfig(config);
+      setHalloweenThemeEnabled(config.halloween_theme_enabled !== false);
+    });
+  }, [isMobiletec, tenantId]);
+
   const save = async () => {
     setSaving(true);
     await supabase.from('tenants').update({
@@ -623,6 +639,7 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
       whatsapp_default_address_source: defaultAddrSrc,
       whatsapp_store_address: storeAddress.trim(),
       whatsapp_store_cep: storeCep.trim(),
+      ...(isMobiletec ? { storefront_config: { ...storefrontConfig, halloween_theme_enabled: halloweenThemeEnabled } } : {}),
     } as any).eq('id', tenantId);
     setSaving(false);
     import('sonner').then(m => m.toast.success('Configurações salvas! Recarregue a loja para ver.'));
@@ -684,6 +701,26 @@ const TenantAppearance = ({ tenantId }: { tenantId: string }) => {
         )}
 
       </div>
+
+      {isMobiletec && (
+        <section className="space-y-3 overflow-hidden rounded-xl border border-orange-500/30 bg-gradient-to-br from-orange-500/10 via-violet-600/10 to-zinc-950/5 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-orange-400/30 bg-orange-500/10 text-2xl shadow-[0_0_24px_rgba(249,115,22,0.18)]" aria-hidden="true">🎃</div>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-heading flex items-center gap-2 text-sm text-foreground">Especial de Halloween <span aria-hidden="true">🦇</span></h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Ative a edição sazonal da vitrine Mobiletec: noite roxa, destaques laranja, brilho e detalhes animados. Fotos, preços e produtos não mudam.</p>
+            </div>
+          </div>
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-orange-500/20 bg-background/60 p-3">
+            <span>
+              <span className="block text-sm font-medium text-foreground">Aplicar tema de Halloween na loja</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">Ligado por padrão nesta campanha. Desative para voltar ao visual normal.</span>
+            </span>
+            <input type="checkbox" checked={halloweenThemeEnabled} onChange={e => setHalloweenThemeEnabled(e.target.checked)} className="h-5 w-5 shrink-0 accent-orange-500" />
+          </label>
+          <p className="text-[11px] text-muted-foreground">Depois, salve em <strong className="text-foreground">Salvar todas as configurações</strong> no fim desta aba.</p>
+        </section>
+      )}
 
       {storeMode === 'supermarket' && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">

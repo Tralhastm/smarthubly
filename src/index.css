@@ -191,3 +191,125 @@ html.splash-open .splash-add-btn {
   pointer-events: none !important;
   transition: opacity 0.2s ease;
 }
+
+/* Edição sazonal opcional — somente a vitrine Mobiletec recebe esta classe. */
+.mobiletec-halloween {
+  --background: 258 36% 8%;
+  --foreground: 35 35% 95%;
+  --card: 257 30% 12%;
+  --card-foreground: 35 35% 95%;
+  --popover: 258 34% 10%;
+  --popover-foreground: 35 35% 95%;
+  --primary: 25 96% 58%;
+  --primary-foreground: 258 36% 8%;
+  --secondary: 257 24% 18%;
+  --secondary-foreground: 35 30% 94%;
+  --muted: 258 20% 16%;
+  --muted-foreground: 260 12% 72%;
+  --accent: 277 52% 24%;
+  --accent-foreground: 35 35% 95%;
+  --border: 260 22% 25%;
+  --input: 260 22% 25%;
+  --ring: 25 96% 58%;
+  background-image:
+    radial-gradient(ellipse at 12% 4%, hsl(278 66% 30% / 0.26), transparent 34rem),
+    radial-gradient(ellipse at 92% 20%, hsl(25 94% 45% / 0.12), transparent 30rem);
+  background-attachment: fixed;
+}
+
+.mobiletec-halloween .storefront-header {
+  border-color: hsl(264 35% 35% / 0.6);
+  background-color: hsl(258 36% 8% / 0.88);
+  box-shadow: 0 8px 28px hsl(270 70% 4% / 0.28);
+}
+
+.mobiletec-halloween .storefront-header img {
+  box-shadow: 0 0 0 2px hsl(25 96% 58% / 0.45), 0 0 22px hsl(25 96% 58% / 0.18);
+}
+
+.halloween-announcement {
+  position: relative;
+  z-index: 31;
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  overflow: hidden;
+  border-bottom: 1px solid hsl(25 96% 58% / 0.3);
+  background: linear-gradient(100deg, hsl(264 50% 13%), hsl(279 48% 17%) 52%, hsl(23 52% 15%));
+  color: hsl(35 35% 95%);
+  text-align: center;
+}
+
+.halloween-announcement::before {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 120%, hsl(25 96% 58% / 0.22), transparent 55%);
+  content: '';
+  pointer-events: none;
+}
+
+.halloween-announcement-copy,
+.halloween-announcement-bat,
+.halloween-announcement-pumpkin {
+  position: relative;
+  z-index: 1;
+}
+
+.halloween-announcement-copy { display: flex; flex-direction: column; gap: 1px; }
+.halloween-announcement-copy strong { color: hsl(32 100% 72%); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+.halloween-announcement-copy small { color: hsl(260 20% 84%); font-size: 10px; }
+.halloween-announcement-bat { animation: halloween-bat-drift 5s ease-in-out infinite; font-size: 19px; }
+.halloween-announcement-pumpkin { animation: halloween-pumpkin-bob 3.2s ease-in-out infinite; filter: drop-shadow(0 0 9px hsl(25 96% 58% / 0.5)); font-size: 21px; }
+
+.mobiletec-halloween .halloween-hero {
+  background: linear-gradient(120deg, hsl(275 48% 16% / 0.45), hsl(258 36% 8% / 0.12) 60%, hsl(25 75% 16% / 0.22));
+  border-bottom: 1px solid hsl(270 34% 28% / 0.55);
+}
+
+.halloween-hero-ornaments { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.halloween-orb { position: absolute; display: block; filter: drop-shadow(0 0 18px hsl(25 96% 58% / 0.45)); }
+.halloween-orb-left { left: max(4%, calc((100% - 1180px) / 2)); top: 22%; animation: halloween-pumpkin-bob 4s ease-in-out infinite; font-size: clamp(28px, 4vw, 48px); opacity: 0.78; }
+.halloween-orb-right { right: max(5%, calc((100% - 1180px) / 2)); bottom: 12%; animation: halloween-web-float 6s ease-in-out infinite; font-size: clamp(26px, 3.5vw, 42px); opacity: 0.46; }
+.halloween-bat { position: absolute; display: block; filter: drop-shadow(0 0 10px hsl(279 80% 70% / 0.5)); opacity: 0.76; }
+.halloween-bat-one { left: 24%; top: 18%; animation: halloween-bat-drift 7s ease-in-out infinite; font-size: 19px; }
+.halloween-bat-two { right: 23%; top: 28%; animation: halloween-bat-drift 8s ease-in-out -2s infinite reverse; font-size: 15px; }
+
+.mobiletec-halloween main .bg-card {
+  border-color: hsl(267 26% 28% / 0.75);
+  box-shadow: 0 10px 30px hsl(270 70% 3% / 0.2), inset 0 1px hsl(0 0% 100% / 0.025);
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+
+.mobiletec-halloween main .bg-card:hover {
+  border-color: hsl(25 96% 58% / 0.52);
+  box-shadow: 0 14px 34px hsl(270 70% 3% / 0.28), 0 0 24px hsl(277 70% 45% / 0.11);
+  transform: translateY(-2px);
+}
+
+@keyframes halloween-pumpkin-bob {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-7px) rotate(3deg); }
+}
+
+@keyframes halloween-bat-drift {
+  0%, 100% { transform: translate(0, 0) rotate(-5deg); }
+  50% { transform: translate(10px, -6px) rotate(7deg); }
+}
+
+@keyframes halloween-web-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(8deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .halloween-announcement-bat,
+  .halloween-announcement-pumpkin,
+  .halloween-orb-left,
+  .halloween-orb-right,
+  .halloween-bat-one,
+  .halloween-bat-two {
+    animation: none !important;
+  }
+}
