@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useProductVariants, useProductAddons, type ProductVariant, type ProductAddon } from '@/hooks/useProductExtras';
 import { useCart, type CartAddon } from '@/contexts/CartContext';
 import type { Tables } from '@/integrations/supabase/types';
 import { X, Plus, Minus, Check } from 'lucide-react';
 import { hasPositiveFinalProfit, grossUpPaymentFee } from '@/lib/pricing';
+import { formatBRL } from '@/lib/format-money';
 
 type Product = Tables<'products'>;
 
@@ -14,8 +15,8 @@ interface Props {
 }
 
 const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props) => {
-  const { data: variants = [] } = useProductVariants(product.id);
-  const { data: addons = [] } = useProductAddons(product.id);
+  const { data: variants = [], isLoading: variantsLoading, isError: variantsError } = useProductVariants(product.id);
+  const { data: addons = [], isLoading: addonsLoading, isError: addonsError } = useProductAddons(product.id);
   const { addToCart } = useCart();
 
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
@@ -23,13 +24,28 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   const [notes, setNotes] = useState('');
   const productUnavailable = product.in_stock === false || (product.in_stock as any) === 'false';
   const displayPrice = (value: number) => showPixPrice ? grossUpPaymentFee(value, 0.99) : value;
-  const availableVariants = variants.filter(v =>
-    v.in_stock !== false && v.in_stock !== 'false' &&
-    ((v as any).allow_loss || (product as any).allow_loss || hasPositiveFinalProfit(
-      getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: v.suggested_price, priceDelta: v.price_delta, variantCost: v.cost_price }),
-      v.cost_price ?? (product as any).original_price,
-    ))
-  );
+  const availableVariants = useMemo(() => variants.filter(v =>
+      v.in_stock !== false && v.in_stock !== 'false' &&
+      ((v as any).allow_loss || (product as any).allow_loss || hasPositiveFinalProfit(
+        getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: v.suggested_price, priceDelta: v.price_delta, variantCost: v.cost_price }),
+        v.cost_price ?? (product as any).original_price,
+      ))
+    ), [variants, product]);
+
+  // Se há uma única opção comprável, pré-selecione-a. Com várias opções,
+  // aguarde a escolha do cliente e não mostre o preço-base como se fosse o da cor.
+  useEffect(() => {
+    setSelectedVariant(current => {
+      if (current) return availableVariants.find(v => v.id === current.id) ?? null;
+      if (!variantsLoading && !variantsError && availableVariants.length === 1) return availableVariants[0];
+      return null;
+    });
+  }, [availableVariants, variantsLoading, variantsError]);
+
+  const optionsLoading = variantsLoading || addonsLoading;
+  const optionsError = variantsError || addonsError;
+  const noAvailableVariants = !variantsLoading && variants.length > 0 && availableVariants.length === 0;
+  const needsVariantSelection = availableVariants.length > 0 && !selectedVariant;
 
   const updateAddon = (id: string, delta: number, max: number) => {
     setAddonQty(prev => {
@@ -56,6 +72,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   const unitTotal = selectedVariantPrice + addonsTotal;
 
   const handleAdd = () => {
+    if (optionsLoading || optionsError) return;
     if (productUnavailable || (variants.length > 0 && availableVariants.length === 0)) return;
     if (availableVariants.length > 0 && !selectedVariant) return;
     if (missingRequired.length > 0) return;
@@ -89,6 +106,9 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
 
         {/* Conteúdo */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {optionsError && (
+            <p className="text-sm text-destructive">Não foi possível carregar as opções. Atualize a página e tente novamente.</p>
+          )}
           {/* Variantes */}
           {availableVariants.length > 0 && (
             <div>
@@ -115,7 +135,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
                       <span>{v.name}</span>
                     </span>
                     <span className="text-xs font-medium text-primary">
-                      R${displayPrice(variantPrice).toFixed(2)}
+                      {formatBRL(displayPrice(variantPrice))}
                     </span>
                   </button>
                   );
@@ -148,7 +168,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
                           {a.required && <span className="text-destructive">*</span>}
                         </p>
                         {a.price > 0 && (
-                          <p className="text-xs text-primary">+R${a.price.toFixed(2)}</p>
+                          <p className="text-xs text-primary">+ {formatBRL(a.price)}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -191,8 +211,8 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
 
         {/* Footer com total + botão */}
         <div className="border-t border-border p-3 shrink-0 space-y-2">
-          {availableVariants.length > 0 && !selectedVariant && (
-            <p className="text-xs text-destructive">⚠ Selecione uma cor antes de adicionar o produto.</p>
+          {needsVariantSelection && (
+            <p className="text-xs text-destructive">⚠ Selecione uma opção antes de adicionar o produto.</p>
           )}
           {missingRequired.length > 0 && (
             <p className="text-xs text-destructive">
@@ -201,11 +221,11 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
           )}
           <button
             onClick={handleAdd}
-            disabled={productUnavailable || (variants.length > 0 && availableVariants.length === 0) || (availableVariants.length > 0 && !selectedVariant) || missingRequired.length > 0}
+            disabled={optionsLoading || optionsError || productUnavailable || noAvailableVariants || (availableVariants.length > 0 && !selectedVariant) || missingRequired.length > 0}
             className="w-full flex items-center justify-between gap-2 rounded-lg gradient-primary text-primary-foreground px-4 py-3 font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span>{productUnavailable || (variants.length > 0 && availableVariants.length === 0) ? 'Indisponível' : 'Adicionar ao carrinho'}</span>
-            <span className="font-bold">R${displayPrice(unitTotal).toFixed(2)}</span>
+            <span>{optionsError ? 'Opções indisponíveis' : optionsLoading ? 'Carregando opções…' : productUnavailable || noAvailableVariants ? 'Indisponível' : needsVariantSelection ? 'Selecione uma opção' : 'Adicionar ao carrinho'}</span>
+            <span className="font-bold">{optionsLoading || optionsError || noAvailableVariants || needsVariantSelection ? '—' : formatBRL(displayPrice(unitTotal))}</span>
           </button>
         </div>
       </div>

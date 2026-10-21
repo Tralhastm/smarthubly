@@ -4,6 +4,7 @@ import { AlertCircle, ArrowLeft, CheckCircle2, Copy, ExternalLink, Loader2, QrCo
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantBySlug } from '@/hooks/useTenants';
 import { useToast } from '@/hooks/use-toast';
+import { formatBRL } from '@/lib/format-money';
 
 const PAID = new Set(['received', 'preparing', 'ready-for-pickup', 'out-for-delivery', 'delivered']);
 
@@ -113,7 +114,7 @@ export default function TenantPaymentGateway() {
         <section className="rounded-2xl border border-primary/30 bg-primary/5 p-5 text-center">
           <p className="text-xs text-muted-foreground">Pedido #{orderId?.slice(0, 8)}</p>
           {total !== null && <>
-            <p className="mt-1 text-3xl font-bold text-primary">R$ {total.toFixed(2)}</p>
+            <p className="mt-1 text-3xl font-bold text-primary">{formatBRL(total)}</p>
             <p className="mt-1 text-xs text-muted-foreground">Valor à vista/Pix</p>
           </>}
           <p className="mt-2 text-xs text-muted-foreground">Pagamento processado por <strong className="text-foreground">{label}</strong></p>

@@ -13,6 +13,7 @@ import { normalizeProductDescription } from '@/lib/product-description';
 import { ExpandableProductDescription } from './ExpandableProductDescription';
 import { calculateFinalProfit } from '@/lib/pricing';
 import { getVariantSalePrice } from '@/lib/variant-pricing';
+import { formatBRL } from '@/lib/format-money';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
 
@@ -62,7 +63,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
         <div className="mt-auto flex items-center justify-between gap-3 pt-4">
           <div className="min-w-0">
-            <span className="block text-xl font-bold text-primary"><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>R${displayPrice.toFixed(2)}</span>
+            <span className="block text-xl font-bold text-primary"><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>{formatBRL(displayPrice)}</span>
             {(product as any).stock_quantity != null && (product as any).stock_quantity <= 5 && product.in_stock && (
               <span className="mt-0.5 block text-xs text-yellow-400">Restam {(product as any).stock_quantity}</span>
             )}
@@ -113,7 +114,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
         </div>
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-end justify-between mt-auto gap-3 pt-2">
-          <span className="text-lg font-bold text-primary whitespace-nowrap"><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>R${displayPrice.toFixed(2)}</span>
+          <span className="text-lg font-bold text-primary whitespace-nowrap"><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>{formatBRL(displayPrice)}</span>
           <div className="flex items-center gap-1.5">
             {isDropshipping && product.supplier_id && (
               <SupplierChatCustomer tenantId={tenantId} productId={product.id} supplierId={product.supplier_id} productName={product.name} />
@@ -145,7 +146,7 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, displa
         <div className="flex items-baseline justify-between gap-2 mb-0.5">
           <h3 className="font-heading text-base text-foreground">{product.name}{onOpenDetails && <span className="ml-1 text-primary/60">›</span>}</h3>
           <div className="flex-1 border-b border-dashed border-border/60 self-end mb-1.5" />
-          <span className="text-base font-bold text-primary shrink-0"><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>R${displayPrice.toFixed(2)}</span>
+          <span className="text-base font-bold text-primary shrink-0"><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>{formatBRL(displayPrice)}</span>
         </div>
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-center gap-2 mt-1.5">
@@ -183,7 +184,7 @@ const MagazineCard = ({ product, addToCart, niche, hasExtras, displayPrice, disp
         <span className="text-[10px] font-medium text-white/70 uppercase tracking-wider">{product.category}</span>
         <h3 className={`font-heading text-white ${large ? 'text-xl' : 'text-base'} leading-tight`}>{product.name}</h3>
         <div className="flex items-center justify-between mt-2">
-          <span className={`font-bold text-white ${large ? 'text-2xl' : 'text-lg'}`}><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>R${displayPrice.toFixed(2)}</span>
+          <span className={`font-bold text-white ${large ? 'text-2xl' : 'text-lg'}`}><span className="mr-1 text-xs font-medium">{pricePrefix || (displayFrom ? 'A partir de' : '')}</span>{formatBRL(displayPrice)}</span>
           <button onClick={(e) => {
               e.stopPropagation();
               if (!product.in_stock) return;
@@ -624,9 +625,9 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
               )}
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 {(detail as any).original_price != null && (detail as any).original_price > getDisplayPrice(detail) && (
-                  <span className="text-sm text-muted-foreground line-through">R${(detail as any).original_price.toFixed(2)}</span>
+                  <span className="text-sm text-muted-foreground line-through">{formatBRL((detail as any).original_price)}</span>
                 )}
-                <span className="text-2xl font-bold text-primary">R${getDisplayPrice(detail).toFixed(2)}</span>
+                <span className="text-2xl font-bold text-primary">{formatBRL(getDisplayPrice(detail))}</span>
                 {!detail.in_stock ? (
                   <span className="rounded-full bg-destructive/15 px-3 py-1 text-xs font-medium text-destructive">Esgotado</span>
                 ) : (detail as any).stock_quantity != null && (detail as any).stock_quantity <= 5 ? (

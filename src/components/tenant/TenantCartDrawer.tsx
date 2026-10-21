@@ -17,6 +17,7 @@ import type { Tenant } from '@/hooks/useTenants';
 import { ShoppingCart, X, Plus, Minus, Trash2, MessageCircle, CreditCard, MapPin, Loader2, ExternalLink, Tag, CheckCircle2, CalendarClock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
+import { formatBRL } from '@/lib/format-money';
 
 type SupplierShipping = {
   id: string;
@@ -412,7 +413,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         setCouponMsg(res.reason || 'Cupom inválido');
       } else {
         setAppliedCoupon(res.coupon!);
-        setCouponMsg(`✅ Cupom aplicado: -R$${res.discount.toFixed(2)}`);
+        setCouponMsg(`✅ Cupom aplicado: -${formatBRL(res.discount)}`);
       }
     } finally {
       setValidatingCoupon(false);
@@ -1151,7 +1152,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                             {item.notes && (
                               <p className="text-[11px] text-muted-foreground italic truncate">📝 {item.notes}</p>
                             )}
-                            <p className="text-primary text-sm font-bold mt-0.5">R${(displayedUnit * item.quantity).toFixed(2)}</p>
+                            <p className="text-primary text-sm font-bold mt-0.5">{formatBRL(displayedUnit * item.quantity)}</p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <button onClick={() => updateQuantity(item.key, item.quantity - 1)} className="rounded-md bg-muted p-1 text-muted-foreground hover:text-foreground"><Minus className="h-3 w-3" /></button>
@@ -1164,15 +1165,15 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       })}
                       <div className="border-t border-border pt-4">
                         <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                          <span>Subtotal:</span><span>R${total.toFixed(2)}</span>
+                          <span>Subtotal:</span><span>{formatBRL(total)}</span>
                         </div>
                         {customerFee > 0 && (
                           <div className="flex justify-between text-sm text-muted-foreground mb-1">
-                            <span>Taxa operacional:</span><span>R${customerFee.toFixed(2)}</span>
+                            <span>Taxa operacional:</span><span>{formatBRL(customerFee)}</span>
                           </div>
                         )}
                         <div className="flex justify-between text-lg font-bold text-foreground">
-                          <span>Total:</span><span className="text-primary">R${(total + customerFee).toFixed(2)}</span>
+                          <span>Total:</span><span className="text-primary">{formatBRL(total + customerFee)}</span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">+ entrega calculada após informar o endereço</p>
                       </div>
@@ -1307,7 +1308,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                           <div className="mt-2 rounded-lg border border-green-500/30 bg-green-500/5 p-2 text-xs text-green-600 dark:text-green-400 space-y-0.5">
                             <p className="font-medium">✓ Entrega disponível!</p>
                             <p className="text-muted-foreground">
-                              {chosen.label} {totalFreteExibido > 0 ? `· Cotação R$${totalFreteExibido.toFixed(2)}` : '· grátis'}{shippingDiscountAmount > 0 ? ` · Desconto aplicado: R$${shippingDiscountAmount.toFixed(2)}` : ''} {chosen.eta ? `· ${chosen.eta}` : ''}
+                              {chosen.label} {totalFreteExibido > 0 ? `· Cotação ${formatBRL(totalFreteExibido)}` : '· grátis'}{shippingDiscountAmount > 0 ? ` · Desconto aplicado: ${formatBRL(shippingDiscountAmount)}` : ''} {chosen.eta ? `· ${chosen.eta}` : ''}
                             </p>
                           </div>
                         );
@@ -1361,9 +1362,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
                         <p className="text-sm font-semibold text-foreground">Como você quer pagar?</p>
                         <div className="grid grid-cols-3 gap-2">
-                          <button type="button" onClick={() => setOnlinePaymentMethod('pix')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'pix' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Pix</strong><span>R${pixOnlineTotal.toFixed(2)}</span></button>
-                          <button type="button" onClick={() => setOnlinePaymentMethod('credit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'credit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Crédito</strong><span>R${cardOnlineTotal.toFixed(2)}</span></button>
-                          <button type="button" onClick={() => setOnlinePaymentMethod('debit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'debit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Débito</strong><span>R${cardOnlineTotal.toFixed(2)}</span></button>
+                          <button type="button" onClick={() => setOnlinePaymentMethod('pix')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'pix' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Pix</strong><span>{formatBRL(pixOnlineTotal)}</span></button>
+                          <button type="button" onClick={() => setOnlinePaymentMethod('credit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'credit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Crédito</strong><span>{formatBRL(cardOnlineTotal)}</span></button>
+                          <button type="button" onClick={() => setOnlinePaymentMethod('debit')} className={`rounded-lg border px-3 py-2 text-left text-xs ${onlinePaymentMethod === 'debit' ? 'border-primary bg-primary/10 text-foreground' : 'border-border bg-secondary text-muted-foreground'}`}><strong className="block text-foreground">Débito</strong><span>{formatBRL(cardOnlineTotal)}</span></button>
                         </div>
                       </div>
                     )}
@@ -1387,7 +1388,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       <div className="flex items-center justify-between gap-2 rounded-lg bg-green-500/10 border border-green-500/30 p-2">
                         <div className="flex items-center gap-2 text-sm text-green-400">
                           <CheckCircle2 className="h-4 w-4" /> <span className="font-mono font-bold">{appliedCoupon.code}</span>
-                          <span className="text-xs">−R${discountAmount.toFixed(2)}</span>
+                          <span className="text-xs">−{formatBRL(discountAmount)}</span>
                         </div>
                         <button onClick={removeCoupon} className="text-xs text-destructive hover:underline">remover</button>
                       </div>
@@ -1406,14 +1407,14 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                   </div>
 
                   <div className="border-t border-border pt-3 space-y-1">
-                    <div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal:</span><span>R${total.toFixed(2)}</span></div>
-                    {customerFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Taxa operacional:</span><span>R${customerFee.toFixed(2)}</span></div>}
-                    {shippingDiscountAmount > 0 && quotedShippingTotal > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete calculado:</span><span className="line-through">R${quotedShippingTotal.toFixed(2)}</span></div>}
-                    {shippingDiscountAmount > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>{automaticLocationDiscount ? (appliedShippingTotal === 0 ? 'Frete grátis pela localização:' : 'Desconto de frete pela localização:') : (appliedShippingTotal === 0 ? 'Frete grátis aplicado:' : 'Desconto no frete aplicado:')}</span><span>−R${shippingDiscountAmount.toFixed(2)}</span></div>}
-                    {shippingDiscountAmount === 0 && effectiveDeliveryFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? (freightRatePerKm != null ? `Frete do motoboy${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}:` : `Frete estimado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):`) : useLalamoveQuote ? 'Entrega Lalamove:' : 'Entrega (distância):'}</span><span>R${effectiveDeliveryFee.toFixed(2)}</span></div>}
-                    {shippingDiscountAmount === 0 && shippingFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete (produtos):</span><span>R${shippingFee.toFixed(2)}</span></div>}
-                    {discountAmount > 0 && <div className="flex justify-between text-sm text-green-400"><span>Cupom ({appliedCoupon?.code}):</span><span>−R${discountAmount.toFixed(2)}</span></div>}
-                    <div className="flex justify-between text-lg font-bold text-foreground"><span>{onlinePaymentMethod === 'pix' ? 'Total Pix:' : onlinePaymentMethod === 'credit' ? 'Total cartão:' : onlinePaymentMethod === 'debit' ? 'Total débito:' : 'Subtotal:'}</span><span className="text-primary">R${(hasOnlinePayment && onlinePaymentMethod ? onlineTotal : finalTotal).toFixed(2)}</span></div>
+                    <div className="flex justify-between text-sm text-muted-foreground"><span>Subtotal:</span><span>{formatBRL(total)}</span></div>
+                    {customerFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Taxa operacional:</span><span>{formatBRL(customerFee)}</span></div>}
+                    {shippingDiscountAmount > 0 && quotedShippingTotal > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete calculado:</span><span className="line-through">{formatBRL(quotedShippingTotal)}</span></div>}
+                    {shippingDiscountAmount > 0 && <div className="flex justify-between text-sm text-green-600 dark:text-green-400"><span>{automaticLocationDiscount ? (appliedShippingTotal === 0 ? 'Frete grátis pela localização:' : 'Desconto de frete pela localização:') : (appliedShippingTotal === 0 ? 'Frete grátis aplicado:' : 'Desconto no frete aplicado:')}</span><span>−{formatBRL(shippingDiscountAmount)}</span></div>}
+                    {shippingDiscountAmount === 0 && effectiveDeliveryFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>{isDropshipping ? (freightRatePerKm != null ? `Frete do motoboy${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}:` : `Frete estimado (PAC${freightEstimate ? ` · ${freightEstimate.toCity}` : ''}):`) : useLalamoveQuote ? 'Entrega Lalamove:' : 'Entrega (distância):'}</span><span>{formatBRL(effectiveDeliveryFee)}</span></div>}
+                    {shippingDiscountAmount === 0 && shippingFee > 0 && <div className="flex justify-between text-sm text-muted-foreground"><span>Frete (produtos):</span><span>{formatBRL(shippingFee)}</span></div>}
+                    {discountAmount > 0 && <div className="flex justify-between text-sm text-green-400"><span>Cupom ({appliedCoupon?.code}):</span><span>−{formatBRL(discountAmount)}</span></div>}
+                    <div className="flex justify-between text-lg font-bold text-foreground"><span>{onlinePaymentMethod === 'pix' ? 'Total Pix:' : onlinePaymentMethod === 'credit' ? 'Total cartão:' : onlinePaymentMethod === 'debit' ? 'Total débito:' : 'Subtotal:'}</span><span className="text-primary">{formatBRL(hasOnlinePayment && onlinePaymentMethod ? onlineTotal : finalTotal)}</span></div>
                   </div>
 
                   {isWhatsAppMode && showPixToCustomer && (
@@ -1436,7 +1437,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                       <button onClick={() => submitOrder(false, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked || !onlinePaymentMethod}
                         className="w-full py-4 rounded-lg font-bold text-base text-primary-foreground gradient-primary hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ring-2 ring-primary/40">
                         {creatingPayment ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
-                        {creatingPayment ? 'Gerando pagamento...' : onlinePaymentMethod ? `💳 Pagar R$${onlineTotal.toFixed(2)} (${onlinePaymentMethod === 'pix' ? 'Pix' : onlinePaymentMethod === 'credit' ? 'crédito' : 'débito'})` : 'Escolha Pix, crédito ou débito'}
+                        {creatingPayment ? 'Gerando pagamento...' : onlinePaymentMethod ? `💳 Pagar ${formatBRL(onlineTotal)} (${onlinePaymentMethod === 'pix' ? 'Pix' : onlinePaymentMethod === 'credit' ? 'crédito' : 'débito'})` : 'Escolha Pix, crédito ou débito'}
                       </button>
                       {!!(tenant as any).demo_payment_enabled && (
                         <button onClick={() => submitOrder(false, true, true)} disabled={addOrderMutation.isPending || creatingPayment || deliveryBlocked}

@@ -13,6 +13,7 @@ import DriverMap, { type MapMarker } from '@/components/shared/DriverMap';
 import { useRouteEta, formatEta, formatDistance } from '@/hooks/useRouteEta';
 import { useToast } from '@/hooks/use-toast';
 import { deriveBrandTokens, applyBrandTokens, clearBrandTokens } from '@/lib/color-utils';
+import { formatBRL } from '@/lib/format-money';
 
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; color: string; description: string }> = {
   pending_payment: { label: 'Aguardando Pagamento', icon: <CreditCard className="h-5 w-5" />, color: 'bg-purple-500/20 text-purple-400', description: 'Conclua o pagamento para que possamos preparar seu pedido.' },
@@ -254,7 +255,7 @@ const TenantOrderStatus = () => {
             <div key={i.id} className="text-sm space-y-0.5">
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground flex-1">{i.quantity}x {i.product_name}</span>
-                <span className="text-foreground shrink-0">R${(i.product_price * i.quantity).toFixed(2)}</span>
+                <span className="text-foreground shrink-0">{formatBRL(i.product_price * i.quantity)}</span>
               </div>
               {i.variant_name && (
                 <p className="text-[11px] text-muted-foreground pl-3">Opção: {i.variant_name}</p>
@@ -272,12 +273,12 @@ const TenantOrderStatus = () => {
           {order.delivery_fee > 0 && (
             <div className="flex justify-between text-sm border-t border-border pt-2">
               <span className="text-muted-foreground">Taxa de entrega</span>
-              <span className="text-foreground">R${order.delivery_fee.toFixed(2)}</span>
+              <span className="text-foreground">{formatBRL(order.delivery_fee)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold border-t border-border pt-2">
             <span className="text-foreground">Total</span>
-            <span className="text-primary">R${order.total.toFixed(2)}</span>
+            <span className="text-primary">{formatBRL(order.total)}</span>
           </div>
         </div>
 
@@ -339,7 +340,7 @@ const TenantOrderStatus = () => {
               </div>
             )}
             {order.change_for && order.change_for > 0 && /dinheiro/i.test(order.payment_method) && (
-              <p className="text-xs text-muted-foreground">Troco para R${order.change_for.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground">Troco para {formatBRL(order.change_for)}</p>
             )}
           </div>
         )}

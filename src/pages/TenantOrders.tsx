@@ -6,6 +6,7 @@ import { Search, Package, Clock, ChefHat, Truck, CheckCircle, ArrowLeft, Store, 
 import { CANCELLED_ORDER_STATUS } from '@/lib/order-status';
 import CustomerOrderChat from '@/components/tenant/CustomerOrderChat';
 import { deriveBrandTokens, applyBrandTokens, clearBrandTokens } from '@/lib/color-utils';
+import { formatBRL } from '@/lib/format-money';
 
 // Detecta se a busca é um código curto de pedido (#977532) ou telefone.
 // Códigos: 6+ caracteres hex (0-9 a-f). Telefones: só dígitos, 10+.
@@ -228,12 +229,12 @@ const TenantOrders = () => {
                 {order.order_items.map(i => (
                   <div key={i.id} className="flex justify-between text-muted-foreground">
                     <span>{i.quantity}x {i.product_name}</span>
-                    <span>R${(i.product_price * i.quantity).toFixed(2)}</span>
+                    <span>{formatBRL(i.product_price * i.quantity)}</span>
                   </div>
                 ))}
                 <div className="flex justify-between font-bold text-foreground border-t border-border pt-1">
                   <span>Total</span>
-                  <span className="text-primary">R${order.total.toFixed(2)}</span>
+                  <span className="text-primary">{formatBRL(order.total)}</span>
                 </div>
               </div>
               {order.delivery_status_note && (
