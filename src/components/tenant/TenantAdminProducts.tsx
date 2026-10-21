@@ -49,11 +49,13 @@ const getImportedPrices = (product: ParsedProduct, priceType: string) => {
   if (priceType === 'color') return { cost: 0, sale: 0 };
   const legacyPrice = Number(product.price || 0) || 0;
   const explicitCost = Number(product.cost_price || 0) || 0;
+  const explicitSale = Number(product.resale_price || 0) || 0;
+  if (priceType === 'resale') return { cost: 0, sale: explicitSale || legacyPrice };
   const isCost = priceType === 'cost' || priceType === 'both';
   const cost = isCost ? (explicitCost || (priceType === 'both' ? 0 : legacyPrice)) : explicitCost;
   // Lista de fornecedor informa custo. Revenda é sempre definida manualmente
   // no painel e nunca pode ser copiada do catálogo recebido.
-  return { cost, sale: 0 };
+  return { cost, sale: priceType === 'both' ? explicitSale : 0 };
 };
 
 const normalizeProductName = (value: unknown) => String(value ?? '')
@@ -1153,10 +1155,32 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           await saveImportedVariants(existing.id, p, Number(existing.price) || price, Number(existing.original_price) || importedCost, isCost, shipping, margin, productSupplierId, colorOnly);
           insertedIds.push(existing.id);
         } else {
-          // A lista é fonte de atualização, nunca de cadastro de produto.
-          // Produtos presentes apenas no fornecedor ficam ignorados; somente
-          // cores novas de produtos já cadastrados podem ser criadas.
-          console.info('[catalog-import] produto da lista não cadastrado ignorado:', p.name);
+          // Catálogos comerciais também podem trazer produtos novos. Nesse caso,
+          // cadastra o item no tenant atual e só depois grava eventuais variantes.
+          // O vínculo é sempre limitado ao tenant desta tela.
+          if (price <= 0) {
+            console.info('[catalog-import] produto sem preço válido ignorado:', p.name);
+          } else {
+            const { data: created, error: createError } = await supabase.from('products').insert({
+              tenant_id: tenantId,
+              name: p.name.trim(),
+              price,
+              original_price: importedCost > 0 ? importedCost : null,
+              category: p.category || 'Geral',
+              description: p.description || '',
+              in_stock: p.available !== false,
+              stock_quantity: null,
+              supplier_id: productSupplierId,
+              condition: p.condition || 'new',
+              store_visible: true,
+              manual_blocked: false,
+            } as any).select('id').single();
+            if (createError) throw createError;
+            if (created?.id) {
+              await saveImportedVariants(created.id, p, price, importedCost, isCost, shipping, margin, productSupplierId, colorOnly);
+              insertedIds.push(created.id);
+            }
+          }
         }
 
         // Registra sempre na tabela de comparação multi-fornecedor

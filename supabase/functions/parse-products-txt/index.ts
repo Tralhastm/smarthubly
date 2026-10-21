@@ -158,8 +158,8 @@ export function parseCatalog(text: string): Product[] {
           product = {
             name,
             price,
-            cost_price: price,
-            resale_price: 0,
+            cost_price: 0,
+            resale_price: price,
             category: category(name, structuredCategory || section),
             description: structuredDescription,
             condition,
@@ -168,7 +168,7 @@ export function parseCatalog(text: string): Product[] {
           grouped.set(key, product);
         } else {
           product.price = price;
-          product.cost_price = price;
+          product.resale_price = price;
           if (structuredDescription) product.description = structuredDescription;
         }
         lastProduct = product;
