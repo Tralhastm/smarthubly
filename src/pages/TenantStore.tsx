@@ -272,7 +272,7 @@ const TenantStore = () => {
         ) : (tenant as any).store_mode === 'affiliate' ? (
           <TenantAffiliateCatalog tenantId={tenant.id} tenantSlug={slug!} />
         ) : (
-            <TenantCatalog tenantId={tenant.id} isDropshipping={tenant.is_dropshipping} niche={tenant.niche} layout={isJuzzy ? 'grid' : (((tenant as any).catalog_layout as any) || 'grid')} splashEnabled={(tenant as any).product_splash_enabled !== false} showPixPrice={false} />
+            <TenantCatalog tenantId={tenant.id} isDropshipping={tenant.is_dropshipping} niche={tenant.niche} layout={isJuzzy ? 'grid' : (((tenant as any).catalog_layout as any) || 'grid')} splashEnabled={(tenant as any).product_splash_enabled !== false} showPixPrice={false} disableSafeMargin={isJuzzy} />
         )}
       </main>
         </>

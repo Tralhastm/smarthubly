@@ -209,7 +209,7 @@ const SkeletonCard = () => (
   </div>
 );
 
-const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid', splashEnabled = true, showPixPrice = false }: { tenantId: string; isDropshipping?: boolean; niche?: string | null; layout?: CatalogLayout; splashEnabled?: boolean; showPixPrice?: boolean }) => {
+const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid', splashEnabled = true, showPixPrice = false, disableSafeMargin = false }: { tenantId: string; isDropshipping?: boolean; niche?: string | null; layout?: CatalogLayout; splashEnabled?: boolean; showPixPrice?: boolean; disableSafeMargin?: boolean }) => {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteProducts(tenantId);
   const { addToCart } = useCart();
   const [search, setSearch] = useState('');
@@ -268,7 +268,11 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     // marcado como prejuízo durante esse intervalo.
     if (referencePrice <= 0) return product;
     const pricing = calculateFinalProfit(referencePrice, referenceCost);
-    if (pricing.finalProfit < 80 && !(product as any).allow_loss) return { ...product, in_stock: false, pricing_blocked: true };
+    // A Juzzy desativa apenas o mínimo de margem segura: ainda bloqueia
+    // prejuízo real, mas não bloqueia uma venda que continua positiva.
+    const belowSafeMargin = pricing.finalProfit < 80;
+    const realLoss = pricing.finalProfit < 0;
+    if ((realLoss || (!disableSafeMargin && belowSafeMargin)) && !(product as any).allow_loss) return { ...product, in_stock: false, pricing_blocked: true };
     if ((product as any).manual_blocked) return { ...product, in_stock: false };
     return product;
   }), [allProducts, variantMap]);
