@@ -30,6 +30,7 @@ const TenantStore = () => {
     scopePath: `/loja/${slug}/`,
   });
   const isMobiletec = slug?.trim().toLowerCase() === 'mobiletec';
+  const isJuzzy = slug?.trim().toLowerCase() === 'juzzy-concetto';
   useEffect(() => {
     if (!isMobiletec) {
       setHalloweenThemeEnabled(null);
@@ -113,7 +114,7 @@ const TenantStore = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-background flex flex-col ${halloweenActive ? 'mobiletec-halloween' : ''}`}>
+    <div className={`min-h-screen bg-background flex flex-col ${halloweenActive ? 'mobiletec-halloween' : ''} ${isJuzzy ? 'juzzy-storefront' : ''}`}>
       {halloweenActive && (
         <div className="halloween-announcement" aria-label="Tema especial de Halloween da Mobiletec">
           <span className="halloween-announcement-bat" aria-hidden="true">🦇</span>
@@ -132,7 +133,7 @@ const TenantStore = () => {
           onDone={hideSplash}
         />
       )}
-      {(tenant as any).store_mode !== 'supermarket' && (
+      {(tenant as any).store_mode !== 'supermarket' && !isJuzzy && (
       <header className="storefront-header sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
 
         <div className="container mx-auto flex items-center justify-between px-4 py-3">
@@ -164,13 +165,51 @@ const TenantStore = () => {
       </header>
       )}
 
+      {isJuzzy && (
+        <header className="juzzy-header">
+          <a href={`/loja/${slug}`} className="juzzy-wordmark" aria-label="Juzzy Concetto — início">
+            {tenant.logo_url ? <img src={tenant.logo_url} alt={tenant.name} /> : <span>Juzzy</span>}
+            <small>concetto</small>
+          </a>
+          <nav className="juzzy-nav" aria-label="Navegação principal">
+            <a href="#colecao">Coleção</a>
+            <a href="#sobre-juzzy">A marca</a>
+            <a href={`/loja/${slug}/meus-pedidos`}>Pedidos</a>
+          </nav>
+          <div className="juzzy-header-actions">
+            <a href={`/loja/${slug}/chat`} aria-label="Abrir chat"><MessageCircle className="h-5 w-5" /></a>
+            <a href="#colecao" className="juzzy-header-cta">Comprar agora</a>
+          </div>
+        </header>
+      )}
+
 
 
       {(tenant as any).store_mode === 'supermarket' ? (
         <SupermarketStorefront tenant={tenant} />
       ) : (
         <>
-      <section className={`relative py-12 overflow-hidden ${halloweenActive ? 'halloween-hero' : ''}`}>
+      {isJuzzy ? (
+        <section className="juzzy-hero" id="sobre-juzzy">
+          <div className="juzzy-hero-glow juzzy-hero-glow-one" />
+          <div className="juzzy-hero-glow juzzy-hero-glow-two" />
+          <div className="juzzy-hero-copy">
+            <span className="juzzy-eyebrow">Joias para todos os seus capítulos</span>
+            <h1>Seu brilho.<br /><em>Sua assinatura.</em></h1>
+            <p>Peças escolhidas para acompanhar a sua personalidade — do detalhe delicado ao statement que muda tudo.</p>
+            <div className="juzzy-hero-actions">
+              <a href="#colecao" className="juzzy-primary-button">Explorar coleção <span>↗</span></a>
+              {tenant.whatsapp && <a href={`https://wa.me/${tenant.whatsapp}`} target="_blank" rel="noopener noreferrer" className="juzzy-text-button">Falar com a Juzzy <span>→</span></a>}
+            </div>
+          </div>
+          <div className="juzzy-hero-art" aria-hidden="true">
+            <div className="juzzy-art-ring ring-one" />
+            <div className="juzzy-art-ring ring-two" />
+            <div className="juzzy-art-card"><span>JC</span><small>CONCETTO</small></div>
+            <span className="juzzy-art-spark spark-one">✦</span><span className="juzzy-art-spark spark-two">✧</span>
+          </div>
+        </section>
+      ) : <section className={`relative py-12 overflow-hidden ${halloweenActive ? 'halloween-hero' : ''}`}>
         {halloweenActive && (
           <div className="halloween-hero-ornaments" aria-hidden="true">
             <span className="halloween-orb halloween-orb-left">🎃</span>
@@ -188,7 +227,7 @@ const TenantStore = () => {
           )}
           <div className="h-0.5 w-24 gradient-primary rounded-full mx-auto" />
         </div>
-      </section>
+      </section>}
 
       {(tenant as any).promo_active && (tenant as any).promo_text && (
         <section className="container mx-auto px-4 mb-6">
@@ -199,7 +238,13 @@ const TenantStore = () => {
         </section>
       )}
 
-      <main className="container mx-auto px-4 pb-24">
+      <main id={isJuzzy ? 'colecao' : undefined} className={`container mx-auto px-4 pb-24 ${isJuzzy ? 'juzzy-main' : ''}`}>
+        {isJuzzy && (
+          <div className="juzzy-collection-intro">
+            <div><span className="juzzy-section-label">A seleção Juzzy</span><h2>Encontre o detalhe<br /><em>que faltava.</em></h2></div>
+            <p>Uma curadoria de formas, texturas e pontos de luz para você usar do seu jeito.</p>
+          </div>
+        )}
         {(tenant as any).quotes_enabled && (tenant as any).store_mode !== 'affiliate' && (
           <div className="flex gap-2 mb-5 border-b border-border">
             <button
@@ -227,7 +272,7 @@ const TenantStore = () => {
         ) : (tenant as any).store_mode === 'affiliate' ? (
           <TenantAffiliateCatalog tenantId={tenant.id} tenantSlug={slug!} />
         ) : (
-          <TenantCatalog tenantId={tenant.id} isDropshipping={tenant.is_dropshipping} niche={tenant.niche} layout={((tenant as any).catalog_layout as any) || 'grid'} splashEnabled={(tenant as any).product_splash_enabled !== false} showPixPrice={false} />
+            <TenantCatalog tenantId={tenant.id} isDropshipping={tenant.is_dropshipping} niche={tenant.niche} layout={isJuzzy ? 'grid' : (((tenant as any).catalog_layout as any) || 'grid')} splashEnabled={(tenant as any).product_splash_enabled !== false} showPixPrice={false} />
         )}
       </main>
         </>
