@@ -771,14 +771,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     const file = files[0];
     if (!file) return;
     
-    const isText = file.type === 'text/plain' || file.name.endsWith('.txt');
-    const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
-    const isImage = file.type.startsWith('image/');
-
-    if (!isText && !isPdf && !isImage) {
-      toast.error('Formato não suportado. Use TXT, PDF ou Imagem (PNG/JPG).');
-      return;
-    }
+    const isText = file.type.startsWith('text/') || /\.(txt|csv|tsv|md|json|xml|html|htm|log|yaml|yml)$/i.test(file.name);
 
     setImportFileName(files.length > 1 ? files.map(item => item.name).join(' + ') : file.name);
     setImportSupplierName('');
@@ -786,14 +779,16 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     setImportSupplierId(null);
     setImportCancelled(false);
     
-    if (isText && files.every(item => item.type === 'text/plain' || item.name.endsWith('.txt'))) {
+    if (isText && files.every(item => item.type.startsWith('text/') || /\.(txt|csv|tsv|md|json|xml|html|htm|log|yaml|yml)$/i.test(item.name))) {
       const text = (await Promise.all(files.map(item => item.text()))).join('\n\n');
       if (!text.trim()) { toast.error('Arquivo vazio'); return; }
       setImportRawText(text);
       (window as any)._importFile = null;
     } else {
       // Para PDF/Imagem, guardamos o arquivo para upload multipart no step seguinte
-      setImportRawText('[Arquivo Binário: PDF/Imagem]');
+      // PDFs, imagens, documentos e outros binários seguem para a análise
+      // multimodal. A extensão não deve impedir a IA de tentar interpretar o arquivo.
+      setImportRawText(`[Arquivo para análise multimodal: ${file.name}]`);
       (window as any)._importFile = file;
     }
 
@@ -1624,7 +1619,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             Apagar todos os produtos ({products.length})
           </button>
         )}
-        <input ref={fileInputRef} type="file" multiple accept=".txt,.pdf,.png,.jpg,.jpeg" className="hidden" onChange={handleFileSelect} />
+        <input ref={fileInputRef} type="file" multiple accept="*/*" className="hidden" onChange={handleFileSelect} />
       </div>
 
       {showBulkDescriptions && (

@@ -103,11 +103,82 @@ export function parseCatalog(text: string): Product[] {
   let lastProduct: Product | null = null;
   let nextColorsUnavailable = false;
   let pendingName = "";
+  // Formato exportado pelo próprio painel (Nome numerado + campos rotulados).
+  // Esses campos são apenas uma das formas possíveis de entrada: o parser
+  // continua aceitando listas livres como "Produto (R$ 10) cor".
+  let structuredName = "";
+  let structuredCategory = "";
+  let structuredDescription = "";
   for (const raw of String(text || "").split(/\r?\n/)) {
     const line = raw.trim();
     if (!line) continue;
     const header = line.replace(/^[-=*#\s]+|[-=*#\s]+$/g, "").trim();
     const normalizedHeader = normalize(header);
+
+    // Aceita o TXT exportado pelo painel e listas com rótulos equivalentes,
+    // sem exigir uma ordem rígida nem um cabeçalho específico.
+    const numberedName = line.match(/^\d+[.)]\s*(.+)$/);
+    if (numberedName && !/R\$\s*[\d.,]+/i.test(line)) {
+      structuredName = cleanName(numberedName[1]);
+      structuredCategory = "";
+      structuredDescription = "";
+      pendingName = structuredName;
+      lastProduct = null;
+      continue;
+    }
+    const labeledName = line.match(/^(?:produto|item|nome)\s*:\s*(.+)$/i);
+    if (labeledName && !/R\$\s*[\d.,]+/i.test(line)) {
+      structuredName = cleanName(labeledName[1]);
+      structuredCategory = "";
+      structuredDescription = "";
+      pendingName = structuredName;
+      lastProduct = null;
+      continue;
+    }
+    const labeledCategory = line.match(/^(?:categoria|category|grupo|seção|secao)\s*:\s*(.+)$/i);
+    if (labeledCategory) {
+      structuredCategory = labeledCategory[1].trim() || "Geral";
+      section = structuredCategory;
+      continue;
+    }
+    const labeledDescription = line.match(/^(?:descrição|descricao|description|detalhes?)\s*:\s*(.+)$/i);
+    if (labeledDescription) {
+      structuredDescription = labeledDescription[1].trim();
+      if (lastProduct) lastProduct.description = structuredDescription;
+      continue;
+    }
+    const labeledPrice = line.match(/^(?:preço(?:\s+de\s+venda)?|preco(?:\s+de\s+venda)?|valor|price)\s*:\s*(?:R\$\s*)?([\d.,]+)/i);
+    if (labeledPrice && (structuredName || pendingName)) {
+      const price = parseMoney(labeledPrice[1]);
+      const name = cleanName(structuredName || pendingName);
+      if (price > 0 && name) {
+        const key = `${normalize(name)}|${condition}`;
+        let product = grouped.get(key);
+        if (!product) {
+          product = {
+            name,
+            price,
+            cost_price: price,
+            resale_price: 0,
+            category: category(name, structuredCategory || section),
+            description: structuredDescription,
+            condition,
+            variants: [],
+          };
+          grouped.set(key, product);
+        } else {
+          product.price = price;
+          product.cost_price = price;
+          if (structuredDescription) product.description = structuredDescription;
+        }
+        lastProduct = product;
+        structuredName = "";
+        pendingName = "";
+        structuredDescription = "";
+      }
+      continue;
+    }
+    if (/^(?:imagens?|images?)\s*\(/i.test(line) || /^-{3,}$/.test(line)) continue;
     if (skipGradeASection) {
       // A seção Grade A fica fora da importação. Se houver uma nova seção
       // explícita depois dela, retomamos o processamento nessa nova seção.
