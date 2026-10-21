@@ -20,3 +20,20 @@ export function getVariantSalePrice(input: VariantPricingInput): number {
   const priceDelta = Number(input.priceDelta) || 0;
   return Math.max(0, productPrice + priceDelta);
 }
+
+/** Mantém o mesmo tratamento de boolean e texto usado pelo seletor de variantes. */
+export function isVariantInStock(value: unknown): boolean {
+  return value !== false && String(value).toLowerCase() !== 'false';
+}
+
+/** Retorna o menor preço positivo entre variantes com estoque disponível. */
+export function getLowestInStockVariantPrice(
+  variants: Array<{ in_stock?: unknown; salePrice: unknown }>,
+): number | null {
+  const availablePrices = variants
+    .filter(variant => isVariantInStock(variant.in_stock))
+    .map(variant => Number(variant.salePrice))
+    .filter(price => Number.isFinite(price) && price > 0);
+
+  return availablePrices.length > 0 ? Math.min(...availablePrices) : null;
+}

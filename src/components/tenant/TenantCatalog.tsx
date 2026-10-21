@@ -12,7 +12,7 @@ import { getItemCTA } from '@/lib/niche-labels';
 import { normalizeProductDescription } from '@/lib/product-description';
 import { ExpandableProductDescription } from './ExpandableProductDescription';
 import { calculateFinalProfit } from '@/lib/pricing';
-import { getVariantSalePrice } from '@/lib/variant-pricing';
+import { getLowestInStockVariantPrice, getVariantSalePrice, isVariantInStock } from '@/lib/variant-pricing';
 import { formatBRL } from '@/lib/format-money';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
@@ -253,7 +253,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   // de uma atualização manual de in_stock no banco.
   const storefrontProducts = useMemo(() => allProducts.filter(product => (product as any).store_visible !== false).map(product => {
     const variants = variantMap.get(product.id) || [];
-    const pricedVariants = variants.map(variant => ({
+    const pricedVariants = variants.filter(variant => isVariantInStock(variant.in_stock)).map(variant => ({
       sale: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
       cost: Number(variant.cost_price ?? (product as any).original_price) || 0,
     })).filter(item => Number.isFinite(item.sale) && item.sale > 0);
@@ -274,18 +274,15 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   }), [allProducts, variantMap]);
   const getDisplayPriceInfo = (product: Product) => {
     const variants = variantMap.get(product.id) || [];
-    const prices = variants
-      .map(variant => {
-        const raw = getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price });
-        return raw;
-      })
-      .filter(price => Number.isFinite(price) && price > 0);
+    const lowestAvailablePrice = getLowestInStockVariantPrice(variants.map(variant => ({
+      in_stock: variant.in_stock,
+      salePrice: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
+    })));
     return {
-      displayPrice: prices.length > 0 ? Math.min(...prices) : Number(product.price) || 0,
-      // Variações são a fonte de verdade da venda: o cliente deve ver o
-      // menor preço pesquisado com o rótulo “A partir de”, mesmo quando há
-      // somente uma cor ou quando todas as cores têm o mesmo valor.
-      displayFrom: prices.length > 0,
+      displayPrice: lowestAvailablePrice ?? (Number(product.price) || 0),
+      // Só variantes em estoque podem definir o “A partir de”; uma opção
+      // esgotada não deve atrair clique com um preço impossível de comprar.
+      displayFrom: lowestAvailablePrice !== null,
       pricePrefix: undefined,
     };
   };

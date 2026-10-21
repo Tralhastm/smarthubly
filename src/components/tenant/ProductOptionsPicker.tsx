@@ -5,6 +5,7 @@ import type { Tables } from '@/integrations/supabase/types';
 import { X, Plus, Minus, Check } from 'lucide-react';
 import { hasPositiveFinalProfit, grossUpPaymentFee } from '@/lib/pricing';
 import { formatBRL } from '@/lib/format-money';
+import { getVariantSalePrice, isVariantInStock } from '@/lib/variant-pricing';
 
 type Product = Tables<'products'>;
 
@@ -25,7 +26,7 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   const productUnavailable = product.in_stock === false || (product.in_stock as any) === 'false';
   const displayPrice = (value: number) => showPixPrice ? grossUpPaymentFee(value, 0.99) : value;
   const availableVariants = useMemo(() => variants.filter(v =>
-      v.in_stock !== false && v.in_stock !== 'false' &&
+      isVariantInStock(v.in_stock) &&
       ((v as any).allow_loss || (product as any).allow_loss || hasPositiveFinalProfit(
         getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: v.suggested_price, priceDelta: v.price_delta, variantCost: v.cost_price }),
         v.cost_price ?? (product as any).original_price,
@@ -234,4 +235,3 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
 };
 
 export default ProductOptionsPicker;
-import { getVariantSalePrice } from '@/lib/variant-pricing';
