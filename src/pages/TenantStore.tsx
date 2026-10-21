@@ -168,7 +168,7 @@ const TenantStore = () => {
       {isJuzzy && (
         <header className="juzzy-header">
           <a href={`/loja/${slug}`} className="juzzy-wordmark" aria-label="Juzzy Concetto — início">
-            {tenant.logo_url ? <img src={tenant.logo_url} alt={tenant.name} /> : <span>Juzzy</span>}
+            <span>Juzzy</span>
             <small>concetto</small>
           </a>
           <nav className="juzzy-nav" aria-label="Navegação principal">
