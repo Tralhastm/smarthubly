@@ -12,11 +12,13 @@ import StoreChatbot from '@/components/tenant/StoreChatbot';
 import { useSplashOverlay } from '@/hooks/useSplashOverlay';
 import { ClipboardList, Store, MessageCircle, Heart, Calculator, ShoppingBag } from 'lucide-react';
 import { deriveBrandTokens, applyBrandTokens, clearBrandTokens } from '@/lib/color-utils';
+import { supabase } from '@/integrations/supabase/client';
 
 const TenantStore = () => {
   const { slug } = useParams<{ slug: string }>();
   const [showSplash, setShowSplash] = useState(true);
   const [view, setView] = useState<'catalog' | 'quote'>('catalog');
+  const [halloweenThemeEnabled, setHalloweenThemeEnabled] = useState<boolean | null>(null);
   const hideSplash = useCallback(() => setShowSplash(false), []);
   // Oculta os botões flutuantes enquanto o splash de detalhes do produto está aberto.
   useSplashOverlay();
@@ -27,9 +29,25 @@ const TenantStore = () => {
     startPath: `/loja/${slug}`,
     scopePath: `/loja/${slug}/`,
   });
-  const halloweenActive = slug?.trim().toLowerCase() === 'mobiletec'
-    && Boolean(tenant)
-    && (tenant as any)?.storefront_config?.halloween_theme_enabled !== false;
+  const isMobiletec = slug?.trim().toLowerCase() === 'mobiletec';
+  useEffect(() => {
+    if (!isMobiletec) {
+      setHalloweenThemeEnabled(null);
+      return;
+    }
+    let current = true;
+    void (supabase as any)
+      .from('mobiletec_halloween_public')
+      .select('halloween_theme_enabled')
+      .maybeSingle()
+      .then(({ data, error }: { data: any; error: any }) => {
+        if (!current || error || !data) return;
+        setHalloweenThemeEnabled(data.halloween_theme_enabled !== false);
+      })
+      .catch(() => {});
+    return () => { current = false; };
+  }, [isMobiletec]);
+  const halloweenActive = isMobiletec && halloweenThemeEnabled !== false;
 
   // Apply tenant brand colors with auto-derived tokens (garante contraste)
   useEffect(() => {
