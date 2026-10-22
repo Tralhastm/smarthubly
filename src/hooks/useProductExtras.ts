@@ -101,7 +101,13 @@ export const useSaveVariant = () => {
         if (error) throw error;
       }
     },
-    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: ['product-variants', vars.product_id] }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['product-variants', vars.product_id] });
+      // TenantAdminProducts usa esta consulta agregada para renderizar o
+      // preço da revenda nos cards. Sem invalidá-la, o editor salvava no banco
+      // mas o painel continuava mostrando o valor antigo até um reload.
+      qc.invalidateQueries({ queryKey: ['tenant-product-variants', vars.tenant_id] });
+    },
   });
 };
 

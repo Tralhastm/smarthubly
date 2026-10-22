@@ -53,8 +53,8 @@ const getImportedPrices = (product: ParsedProduct, priceType: string) => {
   if (priceType === 'resale') return { cost: 0, sale: explicitSale || legacyPrice };
   const isCost = priceType === 'cost' || priceType === 'both';
   const cost = isCost ? (explicitCost || (priceType === 'both' ? 0 : legacyPrice)) : explicitCost;
-  // Lista de fornecedor informa custo. Revenda é sempre definida manualmente
-  // no painel e nunca pode ser copiada do catálogo recebido.
+  // No modo custo, este valor atualiza somente o custo. A revenda é manual e
+  // deve continuar sendo definida pelo administrador no painel.
   return { cost, sale: priceType === 'both' ? explicitSale : 0 };
 };
 
@@ -159,6 +159,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     },
     enabled: !!tenantId,
     staleTime: 30000,
+    // O fornecedor atualiza custos em outra sessão e o administrador pode
+    // salvar a revenda manualmente. Mantém o painel sincronizado sem F5.
+    refetchInterval: 15000,
+    refetchIntervalInBackground: false,
   });
   const queryClient = useQueryClient();
   const { data: suppliers = [] } = useSuppliers(tenantId);
@@ -171,6 +175,17 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const [showAdd, setShowAdd] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState('');
   const [nodesById, setNodesById] = useState<Record<string, { name: string }>>({});
+
+  useEffect(() => {
+    if (!tenantId) return;
+    const interval = window.setInterval(() => {
+      // Produtos sem variação também podem ter a revenda ajustada pelo banco
+      // depois que o custo vencedor muda.
+      void refetch();
+      void queryClient.invalidateQueries({ queryKey: ['tenant-product-variants', tenantId] });
+    }, 15000);
+    return () => window.clearInterval(interval);
+  }, [tenantId, queryClient, refetch]);
 
   useEffect(() => {
     let dead = false;
@@ -948,10 +963,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       const key = variantMatchKey(name);
       const existing = existingByName.get(key);
       const variantCost = colorOnly ? Number(existing?.cost_price || 0) : Number(variant.cost_price || (isCost ? variant.price : 0)) || 0;
-      // Listas de fornecedores informam exclusivamente custo. Mesmo que a IA
-      // extraia uma coluna chamada revenda, ela não pode alterar a revenda da
-      // loja; esse valor só entra em importações explicitamente não-cost.
-      const explicitSale = colorOnly ? Number(existing?.suggested_price || 0) : 0;
+      const explicitSale = colorOnly
+        ? Number(existing?.suggested_price || 0)
+        : Number((variant as any).resale_price || (!isCost ? variant.price : 0)) || 0;
       const calculatedSale = variantCost > 0 ? (variantCost + shipping) * (1 + margin / 100) : 0;
       const preservedSale = isCost ? Number(existing?.suggested_price || 0) : 0;
       const variantSale = explicitSale > 0
@@ -973,9 +987,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         price_delta: colorOnly ? (existing?.price_delta ?? 0) : variantSale > 0 ? variantSale - baseSalePrice : 0,
         cost_price: colorOnly ? (existing?.cost_price ?? null) : variantCost > 0 ? variantCost : null,
         suggested_price: colorOnly ? (existing?.suggested_price ?? null) : variantSale > 0 ? variantSale : null,
-        // O custo pode variar por cor/capacidade. Isso não significa que a
-        // revenda esteja pendente: só sinalizar quando não houver preço de
-        // revenda definido para a variante.
+        // O custo pode variar por cor/capacidade, mas não altera a revenda
+        // manual já definida para a variação.
         needs_price_review: variantSale <= 0,
         price_source: colorOnly ? (existing?.price_source || 'seletor_por_cor') : variantCost > 0 ? 'lista_diaria' : 'lista_diaria_sem_custo',
         in_stock: variant.available !== false && variantSale > 0,
@@ -1148,9 +1161,6 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             updateData.supplier_id = productSupplierId;
           }
 
-          // Em atualização de custo, preserve sempre o preço de venda manual existente,
-          // inclusive quando ele estiver vazio/zero. A opção de preço de custo não deve
-          // transformar custo do fornecedor em preço de venda automaticamente.
           const { error: updateError } = await supabase.from('products').update(updateData).eq('id', existing.id);
           if (updateError) throw updateError;
           await saveImportedVariants(existing.id, p, Number(existing.price) || price, Number(existing.original_price) || importedCost, isCost, shipping, margin, productSupplierId, colorOnly);
