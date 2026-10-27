@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
+import type { Session } from '@supabase/supabase-js';
 import TenantAdminCustomerChats from '@/components/tenant/TenantAdminCustomerChats';
 import { useStoreOrderChats } from '@/hooks/useOrderChat';
 import { supabase } from '@/integrations/supabase/client';
-import { useTenantBySlug } from '@/hooks/useTenants';
+import { useAdminTenantBySlug } from '@/hooks/useTenants';
 import { useStoreManifest } from '@/hooks/useStoreManifest';
 import TenantAdminLogin from '@/components/tenant/TenantAdminLogin';
 import StorefrontEditor from '@/components/tenant/StorefrontEditor';
@@ -73,7 +74,12 @@ type StoreMode = 'local' | 'delivery' | 'dropshipping' | 'hybrid' | 'affiliate' 
 
 const TenantAdmin = () => {
   const { slug } = useParams<{ slug: string }>();
-  const { data: tenant, isLoading: loadingTenant } = useTenantBySlug(slug);
+  const {
+    data: tenant,
+    error: tenantError,
+    isLoading: loadingTenant,
+    refetch: refetchTenant,
+  } = useAdminTenantBySlug(slug);
   // Per-store PWA manifest: when admin installs from /loja/{slug}/admin,
   // the home-screen icon shows the store's name + logo (not "Delivery Platform").
   useStoreManifest({
@@ -130,30 +136,44 @@ const TenantAdmin = () => {
   const isDropshipping = hasDropshipping; // backwards-compat alias para componentes filhos
   const isWhatsAppDropshipping = hasDropshipping && (((tenant as any)?.dropshipping_submode as string) === 'whatsapp');
 
-  const checkAdmin = useCallback(async () => {
+  const checkAdmin = useCallback(async (authSession?: Session | null) => {
     if (!tenant) return;
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      const { data: roleData } = await supabase
-        .from('user_roles').select('approved')
-        .eq('user_id', session.user.id).eq('tenant_id', tenant.id).eq('role', 'admin').maybeSingle();
-      if (roleData?.approved) { setIsAdmin(true); setLoading(false); return; }
-      const { data: platformData } = await supabase
-        .from('platform_roles').select('role')
-        .eq('user_id', session.user.id).eq('role', 'super_admin').maybeSingle();
-      if (platformData) { setIsAdmin(true); setLoading(false); return; }
+    try {
+      // Não deixa uma sessão expirada ou uma renovação lenta prender o painel
+      // indefinidamente. O evento de autenticação passa a sessão diretamente.
+      const session = authSession !== undefined ? authSession : await Promise.race([
+        supabase.auth.getSession().then(({ data }) => data.session),
+        new Promise<null>(resolve => window.setTimeout(() => resolve(null), 5000)),
+      ]);
+      if (session?.user) {
+        const { data: roleData } = await supabase
+          .from('user_roles').select('approved')
+          .eq('user_id', session.user.id).eq('tenant_id', tenant.id).eq('role', 'admin').maybeSingle();
+        if (roleData?.approved) { setIsAdmin(true); setLoading(false); return; }
+        const { data: platformData } = await supabase
+          .from('platform_roles').select('role')
+          .eq('user_id', session.user.id).eq('role', 'super_admin').maybeSingle();
+        if (platformData) { setIsAdmin(true); setLoading(false); return; }
+      }
+    } catch (error) {
+      console.error('[TenantAdmin] Falha ao verificar acesso', error);
     }
-    setIsAdmin(false); setLoading(false);
+    setIsAdmin(false);
+    setLoading(false);
   }, [tenant]);
 
   useEffect(() => {
     // Aguarda o React Query terminar (loadingTenant) antes de decidir.
     if (loadingTenant) return;
-    // Se a loja não existe, libera o loading pra mostrar a tela "não encontrado".
+    // Um erro de rede não significa que a loja não existe; a renderização
+    // abaixo mostra a mensagem correta usando tenantError.
     if (!tenant) { setLoading(false); return; }
     const timeout = setTimeout(() => setLoading(false), 4000);
-    checkAdmin();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => { checkAdmin(); });
+    void checkAdmin();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      // O callback do Supabase não deve aguardar novas chamadas ao Auth.
+      window.setTimeout(() => { void checkAdmin(session); }, 0);
+    });
     return () => { clearTimeout(timeout); subscription.unsubscribe(); };
   }, [checkAdmin, tenant, loadingTenant]);
 
@@ -169,6 +189,24 @@ const TenantAdmin = () => {
   const handleLogout = async () => { await supabase.auth.signOut(); setIsAdmin(false); };
 
   if (loadingTenant || loading) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
+  if (tenantError) return (
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <div className="max-w-md w-full rounded-2xl border border-destructive/30 bg-card p-6 text-center space-y-4">
+        <h1 className="text-lg font-semibold text-foreground">Não foi possível carregar o comércio</h1>
+        <p className="text-sm text-muted-foreground">A sessão ou a conexão demorou para responder. Tente novamente — seus dados não foram alterados.</p>
+        <button
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            void refetchTenant().finally(() => setLoading(false));
+          }}
+          className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    </div>
+  );
   if (!tenant) return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Comércio não encontrado.</p></div>;
   if (!isAdmin) return <TenantAdminLogin tenant={tenant} onLogin={checkAdmin} />;
 
