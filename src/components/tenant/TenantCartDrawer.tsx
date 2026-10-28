@@ -8,6 +8,7 @@ import { productMatchKey } from '@/lib/product-match';
 import { PENDING_PAYMENT_STATUS } from '@/lib/order-status';
 import { supabase } from '@/integrations/supabase/client';
 import { logOrderEvent } from '@/lib/order-events';
+import { shouldChargePerOrderPlatformFee } from '@/lib/platform-billing';
 import { validateCoupon, incrementCouponUse, incrementSellerCodeUse, type Coupon } from '@/hooks/useCoupons';
 
 import CepAddressInput from './CepAddressInput';
@@ -187,12 +188,16 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const feeMode = (tenant as any).fee_mode ?? 'margin';
   const feeSplitStorePercent = (tenant as any).fee_split_store_percent ?? 50;
   const billingMode = (tenant as any).billing_mode ?? 'per_order';
-  const isMonthlyFixed = billingMode === 'monthly_fixed';
   const isDonated = (tenant as any).is_donated === true;
+  const isSocietyBilling = (tenant as any).society_billing_enabled === true;
 
-  // Lojas em mensalidade fixa OU doadas NÃO pagam taxa por pedido.
+  // Sociedade ativa, mensalidade fixa OU lojas doadas não pagam taxa por pedido.
   // Calcula taxa sobre o preço unitário da linha (já inclui variante + adicionais).
-  const platformFee = (isMonthlyFixed || isDonated) ? 0 : items.reduce((sum, item) => {
+  const platformFee = shouldChargePerOrderPlatformFee({
+    societyBillingEnabled: isSocietyBilling,
+    billingMode,
+    isDonated,
+  }) ? items.reduce((sum, item) => {
     const lineTotal = getCartLineUnitPrice(item) * item.quantity;
     const productFee = (item.product as any).platform_fee_percent;
     if (productFee != null && productFee > 0) {
@@ -202,7 +207,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       return sum + (lineTotal * tenantFeePercent / 100);
     }
     return total > 0 ? sum + (lineTotal / total * tenant.platform_fee) : sum;
-  }, 0);
+  }, 0) : 0;
 
   // Customer-visible fee based on fee_mode
   const customerFee = feeMode === 'margin' ? 0

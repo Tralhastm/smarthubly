@@ -42,7 +42,7 @@ serve(async (req) => {
 
     const { data: tenants, error: tErr } = await supabase
       .from("tenants")
-      .select("id, name, billing_frequency, billing_grace_days, last_invoice_at, created_at, billing_blocked_until, billing_mode, monthly_fee, platform_fee_percent, billing_email, billing_status, billing_warning_sent_at, billing_degraded_at, billing_suspended_at")
+      .select("id, name, billing_frequency, billing_grace_days, last_invoice_at, created_at, billing_blocked_until, billing_mode, monthly_fee, platform_fee_percent, society_billing_enabled, billing_email, billing_status, billing_warning_sent_at, billing_degraded_at, billing_suspended_at")
       .eq("active", true)
       .eq("is_donated", false);
     if (tErr) throw tErr;
@@ -52,6 +52,15 @@ serve(async (req) => {
 
     for (const t of tenants || []) {
       if (body.tenant_id && t.id !== body.tenant_id) continue;
+
+      // Sociedade substitui a cobrança padrão. Atualizar o marco evita que,
+      // ao desativá-la, o período sem cobrança seja faturado retroativamente.
+      if ((t as any).society_billing_enabled === true) {
+        const { error: checkpointError } = await supabase.from("tenants")
+          .update({ last_invoice_at: now.toISOString() }).eq("id", t.id);
+        if (checkpointError) console.error("society billing checkpoint error", checkpointError);
+        continue;
+      }
 
       const billingMode = (t as any).billing_mode || "per_order";
       const freq = billingMode === "monthly_fixed" ? "monthly" : (t.billing_frequency || "monthly");

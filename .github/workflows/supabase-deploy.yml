@@ -64,3 +64,13 @@ jobs:
         run: supabase functions deploy automations-cron --project-ref qbcplbcdxoyqpmcehnvu
         env:
           SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy generate-invoices
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase functions deploy generate-invoices --project-ref qbcplbcdxoyqpmcehnvu
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy fiscal-unified
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase functions deploy fiscal-unified --project-ref qbcplbcdxoyqpmcehnvu
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
