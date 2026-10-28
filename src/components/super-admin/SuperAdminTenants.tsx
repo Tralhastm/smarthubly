@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { generateSlug } from '@/lib/store';
 import { Plus, Edit, Trash2, Check, X, Store, ExternalLink, Package, Sparkles, Eraser, Loader2, Bot } from 'lucide-react';
 import ImageUploadField from '@/components/shared/ImageUploadField';
-import { ADMIN_SUBTABS, subTabKey } from '@/lib/admin-subtabs';
+import { ADMIN_SUBTABS, normalizeAdminTabsConfig, subTabKey } from '@/lib/admin-subtabs';
 import { BotEditor, type BotRow as WABoTRow } from './SuperAdminWhatsAppBots';
 
 const telDigits = (t: string) => String(t || '').replace(/[^0-9]/g, '');
@@ -31,6 +31,7 @@ const ADMIN_TABS: { id: string; label: string; group: string }[] = [
   { id: 'printer', label: 'Impressora', group: 'Operação' },
   { id: 'consultora', label: 'WhatsApp Consultora', group: 'Operação' },
   { id: 'products', label: 'Produtos', group: 'Catálogo' },
+  { id: 'categories', label: 'Categorias', group: 'Catálogo' },
   { id: 'quotes', label: 'Orçamento', group: 'Catálogo' },
   { id: 'stock', label: 'Estoque', group: 'Catálogo' },
   { id: 'suppliers', label: 'Fornecedores', group: 'Catálogo' },
@@ -44,10 +45,16 @@ const ADMIN_TABS: { id: string; label: string; group: string }[] = [
   { id: 'abc', label: 'Curva ABC', group: 'Financeiro' },
   { id: 'bi', label: 'BI / Previsão', group: 'Financeiro' },
   { id: 'billing', label: 'Cobranças', group: 'Financeiro' },
+  { id: 'sellers', label: 'Vendedores', group: 'Financeiro' },
   { id: 'promo', label: 'Promoção', group: 'Marketing' },
+  { id: 'sofia-agent', label: 'Sofia Agente', group: 'Marketing' },
+  { id: 'remote-prospecting', label: 'Prospecção Remota', group: 'Marketing' },
+  { id: 'prospecting', label: 'Prospecção', group: 'Marketing' },
   { id: 'posts', label: 'Posts IA', group: 'Marketing' },
   { id: 'coupons', label: 'Cupons', group: 'Marketing' },
+  { id: 'coupons-test', label: 'Cupons (teste)', group: 'Marketing' },
   { id: 'reviews', label: 'Avaliações', group: 'Marketing' },
+  { id: 'clicks', label: 'Cliques', group: 'Marketing' },
   { id: 'emails', label: 'E-mails', group: 'Marketing' },
   { id: 'appearance', label: 'Aparência', group: 'Configurações' },
   { id: 'integrations', label: 'Integrações', group: 'Configurações' },
@@ -57,18 +64,19 @@ const ADMIN_TABS: { id: string; label: string; group: string }[] = [
   { id: 'diagnostic', label: 'Diagnóstico', group: 'Configurações' },
   { id: 'support', label: 'Suporte & Treino', group: 'Configurações' },
   { id: 'users', label: 'Usuários', group: 'Configurações' },
+  { id: 'price-intelligence', label: 'Inteligência de Preços', group: 'Financeiro' },
 ];
 
 const AdminTabsConfigEditor = ({ value, onChange }: { value: TabsConfig; onChange: (v: TabsConfig) => void }) => {
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const safeValue = normalizeAdminTabsConfig(value);
   const set = (id: string, patch: { hidden?: boolean; label?: string }) => {
-    // Força a persistência do estado 'hidden' no objeto
-    const next = { ...value, [id]: { ...(value[id] || {}), ...patch } };
+    const next = { ...safeValue, [id]: { ...(safeValue[id] || {}), ...patch } };
     onChange(next);
   };
   const groups = Array.from(new Set(ADMIN_TABS.map(t => t.group)));
-  const hiddenCount = Object.values(value).filter(v => v?.hidden).length;
+  const hiddenCount = Object.values(safeValue).filter(v => v?.hidden).length;
 
   return (
     <div className="rounded-lg border border-border bg-secondary/30 p-3 space-y-2">
@@ -92,9 +100,9 @@ const AdminTabsConfigEditor = ({ value, onChange }: { value: TabsConfig; onChang
                 return (
                   <div key={t.id} className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" checked={!value[t.id]?.hidden} onChange={e => set(t.id, { hidden: !e.target.checked })} className="accent-primary" />
+                      <input type="checkbox" checked={!safeValue[t.id]?.hidden} onChange={e => set(t.id, { hidden: !e.target.checked })} className="accent-primary" />
                       <span className="w-40 shrink-0 truncate text-xs text-foreground">{t.label}</span>
-                      <input value={value[t.id]?.label || ''} onChange={e => set(t.id, { label: e.target.value })}
+                      <input value={safeValue[t.id]?.label || ''} onChange={e => set(t.id, { label: e.target.value })}
                         placeholder="renomear (opcional)"
                         className="flex-1 rounded border border-border bg-card px-2 py-1 text-xs text-foreground" />
                       {subs.length > 0 && (
@@ -110,9 +118,9 @@ const AdminTabsConfigEditor = ({ value, onChange }: { value: TabsConfig; onChang
                           const key = subTabKey(t.id, s.id);
                           return (
                             <div key={s.id} className="flex items-center gap-2">
-                              <input type="checkbox" checked={!value[key]?.hidden} onChange={e => set(key, { hidden: !e.target.checked })} className="accent-primary" />
+                              <input type="checkbox" checked={!safeValue[key]?.hidden} onChange={e => set(key, { hidden: !e.target.checked })} className="accent-primary" />
                               <span className="w-36 shrink-0 truncate text-[11px] text-muted-foreground">{s.label}</span>
-                              <input value={value[key]?.label || ''} onChange={e => set(key, { label: e.target.value })}
+                              <input value={safeValue[key]?.label || ''} onChange={e => set(key, { label: e.target.value })}
                                 placeholder="renomear sub-aba (opcional)"
                                 className="flex-1 rounded border border-border bg-card px-2 py-1 text-[11px] text-foreground" />
                             </div>
@@ -423,7 +431,7 @@ const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCan
           <input value={(form as any).billing_email || ''} onChange={e => setForm({ ...form, billing_email: e.target.value } as any)} placeholder="lojista@email.com" type="email" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
         </div>
         <AdminTabsConfigEditor
-          value={((form as any).admin_tabs_config || {}) as TabsConfig}
+          value={normalizeAdminTabsConfig((form as any).admin_tabs_config)}
           onChange={cfg => setForm({ ...form, admin_tabs_config: cfg } as any)}
         />
         <div className="rounded-lg border border-border bg-secondary/30 p-3 space-y-2">

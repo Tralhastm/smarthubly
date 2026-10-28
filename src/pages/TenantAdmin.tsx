@@ -32,7 +32,7 @@ import TenantAdminScheduling from '@/components/tenant/TenantAdminScheduling';
 import TenantAdminQuotes from '@/components/tenant/TenantAdminQuotes';
 import TenantPriceIntelligence from '@/components/tenant/TenantPriceIntelligence';
 import OnboardingChecklist from '@/components/tenant/OnboardingChecklist';
-import { AdminTabsConfigProvider } from '@/lib/admin-subtabs';
+import { AdminTabsConfigProvider, normalizeAdminTabsConfig } from '@/lib/admin-subtabs';
 import HelpButton from '@/components/tenant/HelpButton';
 import InvoiceAlertBanner from '@/components/tenant/InvoiceAlertBanner';
 import CreditCardReminder from '@/components/tenant/CreditCardReminder';
@@ -186,6 +186,15 @@ const TenantAdmin = () => {
     if (!hasDropshipping && tab === 'suppliers') setTab('dashboard');
   }, [isAffiliate, hasDelivery, hasDropshipping, tab]);
 
+  const tabsConfig = useMemo(
+    () => normalizeAdminTabsConfig((tenant as any)?.admin_tabs_config),
+    [tenant?.admin_tabs_config],
+  );
+
+  useEffect(() => {
+    if (tabsConfig[tab]?.hidden === true) setTab('dashboard');
+  }, [tab, tabsConfig]);
+
   const handleLogout = async () => { await supabase.auth.signOut(); setIsAdmin(false); };
 
   if (loadingTenant || loading) return <div className="min-h-screen bg-background flex items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
@@ -285,9 +294,8 @@ const TenantAdmin = () => {
     { id: 'users', label: 'Usuários', icon: <Users className="h-4 w-4" />, group: 'settings' },
   ];
 
-  // Config do super admin: { [tabId]: { hidden?: boolean, label?: string } }
-  const tabsConfig = (((tenant as any).admin_tabs_config) || {}) as Record<string, { hidden?: boolean; label?: string }>;
-
+  // Config do super admin. A normalização mantém compatibilidade com lojas
+  // antigas que salvaram o jsonb como string ou com chaves numéricas.
   // Filtro por modo da loja (mantém a lógica anterior de hide-by-mode).
   const visibleTabs = allTabs.filter(t => {
     // PRIORIDADE MÁXIMA: Configuração explícita do Super Admin (admin_tabs_config)
@@ -327,6 +335,8 @@ const TenantAdmin = () => {
   const currentTab = visibleTabs.find(t => t.id === tab) ?? visibleTabs[0];
   const activeGroup: GroupId = currentTab?.group ?? 'dashboard';
   const subTabs = visibleTabs.filter(t => t.group === activeGroup && t.group !== 'dashboard');
+
+  const activeTab = currentTab?.id ?? 'dashboard';
 
   return (
     <AdminTabsConfigProvider value={tabsConfig}>
@@ -427,8 +437,8 @@ const TenantAdmin = () => {
         )}
 
         {!isAffiliate && <CreditCardReminder tenantId={tenant.id} />}
-        <div className="animate-fade-in" key={tab}>
-          {tab === 'dashboard' && (
+        <div className="animate-fade-in" key={activeTab}>
+          {activeTab === 'dashboard' && (
             <>
               {!isAffiliate && <InvoiceAlertBanner tenantId={tenant.id} onOpenBilling={() => setTab('billing')} />}
               {!isAffiliate && <OnboardingChecklist tenantId={tenant.id} tenant={tenant} onNavigate={(t) => {
@@ -438,56 +448,56 @@ const TenantAdmin = () => {
               {isAffiliate ? <TenantAffiliateDashboard tenantId={tenant.id} /> : <TenantAdminDashboard tenantId={tenant.id} />}
             </>
           )}
-          {tab === 'customer-chats' && (
+          {activeTab === 'customer-chats' && (
             <TenantAdminCustomerChats tenantId={tenant.id} focusOrderId={focusOrderId} />
           )}
-          {tab === 'orders' && (
+          {activeTab === 'orders' && (
             <TenantAdminOrders tenantId={tenant.id} tenantName={tenant.name} />
           )}
-          {tab === 'live-floor' && <TenantLiveFloor tenantId={tenant.id} />}
-          {tab === 'tables' && <TenantAdminTables tenantId={tenant.id} slug={slug!} />}
-          {tab === 'quicksale' && (
+          {activeTab === 'live-floor' && <TenantLiveFloor tenantId={tenant.id} />}
+          {activeTab === 'tables' && <TenantAdminTables tenantId={tenant.id} slug={slug!} />}
+          {activeTab === 'quicksale' && (
             <TenantQuickSale tenantId={tenant.id} printerEnabled={(tenant as any).printer_enabled} />
           )}
-          {tab === 'products' && <TenantAdminProducts tenantId={tenant.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate} />}
-          {tab === 'categories' && <TenantCategoriesTree tenantId={tenant.id} />}
-          {tab === 'suppliers' && <TenantAdminSuppliers tenantId={tenant.id} slug={slug!} />}
-          {tab === 'consultora' && <TenantAdminDropshippingWhatsApp tenantId={tenant.id} />}
-          {tab === 'drivers' && <TenantAdminDrivers tenantId={tenant.id} slug={slug!} />}
-          {tab === 'shipping' && <TenantAdminShipping tenantId={tenant.id} />}
-          {tab === 'financial' && <TenantFinancialManager tenantId={tenant.id} />}
-          {tab === 'users' && <TenantAdminUsers tenantId={tenant.id} />}
-          {tab === 'sales' && <TenantSalesRanking tenantId={tenant.id} />}
-          {tab === 'commissions' && <TenantWaiterCommissions tenantId={tenant.id} />}
-          {tab === 'sellers' && <TenantSellerManagement tenantId={tenant.id} slug={slug!} />}
-          {tab === 'abc' && <TenantAbcCurve tenantId={tenant.id} />}
-          {tab === 'bi' && <TenantBIDashboard tenantId={tenant.id} />}
-          {tab === 'clicks' && <TenantAffiliateClicksRanking tenantId={tenant.id} />}
-          {tab === 'promo' && <TenantPromoManager tenantId={tenant.id} niche={(tenant as any).niche} />}
-          {tab === 'sofia-agent' && <SofiaStoreAgent tenantId={tenant.id} tenantName={(tenant as any).name || tenant.slug} />}
-          {tab === 'prospecting' && <SuperAdminProspecting scope="client" tenantId={tenant.id} label="Prospecção" />}
-          {tab === 'remote-prospecting' && <SuperAdminRemoteProspecting scope="client" tenantId={tenant.id} label="Prospecção Remota" />}
-          {tab === 'posts' && <MarketingPostGenerator scope="tenant" tenantId={tenant.id} title="Posts do dia (Instagram, Stories, Reels...)" />}
-          {tab === 'coupons' && <TenantAdminCoupons tenantId={tenant.id} />}
-          {tab === 'coupons-test' && <TenantAdminCouponsTest tenantId={tenant.id} tenantSlug={slug!} />}
-          {tab === 'reviews' && <TenantAdminReviews tenantId={tenant.id} />}
-          {tab === 'billing' && <TenantBillingPanel tenantId={tenant.id} blockedUntil={(tenant as any).billing_blocked_until} />}
-          {tab === 'appearance' && <TenantAppearance tenantId={tenant.id} tenantSlug={tenant.slug} />}
-          {tab === 'printer' && <TenantAdminPrinter tenantId={tenant.id} />}
-          {tab === 'integrations' && <TenantAdminIntegrations tenantId={tenant.id} />}
-          {tab === 'fiscal' && <TenantAdminFiscal tenantId={tenant.id} />}
-          {tab === 'ficha' && <TenantAdminFichaTecnica tenantId={tenant.id} />}
-          {tab === 'stock' && <TenantAdminStock tenantId={tenant.id} />}
-          {tab === 'price-intelligence' && <TenantPriceIntelligence tenantId={tenant.id} />}
-          {tab === 'finance-deep' && <TenantAdminFinanceDeep tenantId={tenant.id} />}
-          {tab === 'reports' && <TenantAdminReports tenantId={tenant.id} />}
-          {tab === 'support' && <TenantAdminSupport tenantId={tenant.id} />}
-          {tab === 'automations' && <TenantAdminAutomations tenantId={tenant.id} />}
-          {tab === 'monitor' && <TenantAdminAutomationsMonitor tenantId={tenant.id} />}
-          {tab === 'diagnostic' && <TenantAdminAutomationsDiagnostic tenantId={tenant.id} />}
-          {tab === 'emails' && <TenantAdminEmails tenantId={tenant.id} />}
-          {tab === 'scheduling' && <TenantAdminScheduling tenantId={tenant.id} />}
-          {tab === 'quotes' && (
+          {activeTab === 'products' && <TenantAdminProducts tenantId={tenant.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate} />}
+          {activeTab === 'categories' && <TenantCategoriesTree tenantId={tenant.id} />}
+          {activeTab === 'suppliers' && <TenantAdminSuppliers tenantId={tenant.id} slug={slug!} />}
+          {activeTab === 'consultora' && <TenantAdminDropshippingWhatsApp tenantId={tenant.id} />}
+          {activeTab === 'drivers' && <TenantAdminDrivers tenantId={tenant.id} slug={slug!} />}
+          {activeTab === 'shipping' && <TenantAdminShipping tenantId={tenant.id} />}
+          {activeTab === 'financial' && <TenantFinancialManager tenantId={tenant.id} />}
+          {activeTab === 'users' && <TenantAdminUsers tenantId={tenant.id} />}
+          {activeTab === 'sales' && <TenantSalesRanking tenantId={tenant.id} />}
+          {activeTab === 'commissions' && <TenantWaiterCommissions tenantId={tenant.id} />}
+          {activeTab === 'sellers' && <TenantSellerManagement tenantId={tenant.id} slug={slug!} />}
+          {activeTab === 'abc' && <TenantAbcCurve tenantId={tenant.id} />}
+          {activeTab === 'bi' && <TenantBIDashboard tenantId={tenant.id} />}
+          {activeTab === 'clicks' && <TenantAffiliateClicksRanking tenantId={tenant.id} />}
+          {activeTab === 'promo' && <TenantPromoManager tenantId={tenant.id} niche={(tenant as any).niche} />}
+          {activeTab === 'sofia-agent' && <SofiaStoreAgent tenantId={tenant.id} tenantName={(tenant as any).name || tenant.slug} />}
+          {activeTab === 'prospecting' && <SuperAdminProspecting scope="client" tenantId={tenant.id} label="Prospecção" />}
+          {activeTab === 'remote-prospecting' && <SuperAdminRemoteProspecting scope="client" tenantId={tenant.id} label="Prospecção Remota" />}
+          {activeTab === 'posts' && <MarketingPostGenerator scope="tenant" tenantId={tenant.id} title="Posts do dia (Instagram, Stories, Reels...)" />}
+          {activeTab === 'coupons' && <TenantAdminCoupons tenantId={tenant.id} />}
+          {activeTab === 'coupons-test' && <TenantAdminCouponsTest tenantId={tenant.id} tenantSlug={slug!} />}
+          {activeTab === 'reviews' && <TenantAdminReviews tenantId={tenant.id} />}
+          {activeTab === 'billing' && <TenantBillingPanel tenantId={tenant.id} blockedUntil={(tenant as any).billing_blocked_until} />}
+          {activeTab === 'appearance' && <TenantAppearance tenantId={tenant.id} tenantSlug={tenant.slug} />}
+          {activeTab === 'printer' && <TenantAdminPrinter tenantId={tenant.id} />}
+          {activeTab === 'integrations' && <TenantAdminIntegrations tenantId={tenant.id} />}
+          {activeTab === 'fiscal' && <TenantAdminFiscal tenantId={tenant.id} />}
+          {activeTab === 'ficha' && <TenantAdminFichaTecnica tenantId={tenant.id} />}
+          {activeTab === 'stock' && <TenantAdminStock tenantId={tenant.id} />}
+          {activeTab === 'price-intelligence' && <TenantPriceIntelligence tenantId={tenant.id} />}
+          {activeTab === 'finance-deep' && <TenantAdminFinanceDeep tenantId={tenant.id} />}
+          {activeTab === 'reports' && <TenantAdminReports tenantId={tenant.id} />}
+          {activeTab === 'support' && <TenantAdminSupport tenantId={tenant.id} />}
+          {activeTab === 'automations' && <TenantAdminAutomations tenantId={tenant.id} />}
+          {activeTab === 'monitor' && <TenantAdminAutomationsMonitor tenantId={tenant.id} />}
+          {activeTab === 'diagnostic' && <TenantAdminAutomationsDiagnostic tenantId={tenant.id} />}
+          {activeTab === 'emails' && <TenantAdminEmails tenantId={tenant.id} />}
+          {activeTab === 'scheduling' && <TenantAdminScheduling tenantId={tenant.id} />}
+          {activeTab === 'quotes' && (
             <TenantAdminQuotes
               tenantId={tenant.id}
               quotesEnabled={(tenant as any).quotes_enabled ?? false}

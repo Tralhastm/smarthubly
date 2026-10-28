@@ -78,13 +78,17 @@ export const useAdminTenantBySlug = (slug?: string) => {
         .ilike('slug', normalizedSlug)
         .maybeSingle();
 
-      if (publicTenant) return publicTenant as Tenant;
-
+      // A view pública pode existir sem admin_tabs_config. O painel precisa
+      // mesclar os campos não sensíveis da tabela base para aplicar as regras
+      // do Super Admin, sem usar select('*') e sem expor tokens.
       const { data: baseTenant, error: baseError } = await supabase
         .from('tenants')
         .select(ADMIN_TENANT_COLUMNS)
         .ilike('slug', normalizedSlug)
         .maybeSingle();
+
+      if (publicTenant && baseTenant) return { ...publicTenant, ...baseTenant } as Tenant;
+      if (publicTenant) return publicTenant as Tenant;
 
       if (baseError) {
         console.error('[AdminTenant] Falha ao carregar o comércio', { publicError, baseError });

@@ -24,6 +24,7 @@ export const ADMIN_SUBTABS: Record<string, { id: string; label: string }[]> = {
     { id: 'apr', label: 'Contas' },
     { id: 'cashflow', label: 'Fluxo Projetado' },
     { id: 'dre', label: 'DRE Comparativo' },
+    { id: 'society', label: 'Sociedade' },
   ],
   reports: [
     { id: 'hours', label: 'Horários' },
@@ -60,6 +61,39 @@ export const ADMIN_SUBTABS: Record<string, { id: string; label: string }[]> = {
 };
 
 export const subTabKey = (tabId: string, subId: string) => `${tabId}.${subId}`;
+
+/**
+ * Corrige formatos antigos do jsonb: string JSON ou objeto criado pelo spread
+ * de uma string (chaves "0", "1"...).
+ */
+export function normalizeAdminTabsConfig(value: unknown): TabsConfigMap {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try {
+      return normalizeAdminTabsConfig(JSON.parse(value));
+    } catch {
+      return {};
+    }
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) return {};
+
+  const record = value as Record<string, unknown>;
+  const numericKeys = Object.keys(record).filter(key => /^\d+$/.test(key)).sort((a, b) => Number(a) - Number(b));
+  const nonNumeric = Object.fromEntries(Object.entries(record).filter(([key]) => !/^\d+$/.test(key)));
+
+  if (numericKeys.length > 0) {
+    try {
+      const parsed = JSON.parse(numericKeys.map(key => String(record[key] ?? '')).join(''));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return { ...normalizeAdminTabsConfig(parsed), ...nonNumeric } as TabsConfigMap;
+      }
+    } catch {
+      // Preserva as configurações válidas mesmo se o trecho antigo estiver incompleto.
+    }
+  }
+
+  return nonNumeric as TabsConfigMap;
+}
 
 // Contexto: o TenantAdmin injeta a config do tenant; fora dele (PDV, garçom...)
 // tudo fica visível por padrão.
