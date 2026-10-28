@@ -1,0 +1,294 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
+import { AlertCircle, CheckCircle2, ClipboardList, History, LockKeyhole, Plus, ReceiptText, ShieldCheck, WalletCards } from 'lucide-react';
+
+interface Props { tenantId: string }
+
+type Scope = 'general' | 'product' | 'variant';
+type AmountType = 'fixed_per_unit' | 'percentage_sale' | 'fixed_per_order';
+
+type CatalogProduct = { id: string; name: string; price: number; original_price?: number | null };
+type CatalogVariant = { id: string; product_id: string; name: string; price_delta?: number | null; cost_price?: number | null };
+type CostRule = {
+  id: string; scope: Scope; product_id: string | null; variant_id: string | null;
+  category: string; label: string; amount_type: AmountType; amount: number; created_at: string;
+};
+type ProfitLine = {
+  product_id: string | null; product_name: string; variant_id: string | null; variant_name: string;
+  units: number; sale_unit_price: number; sales_total: number; product_cost_total: number;
+  operating_cost_total: number; net_profit: number; owner_share: number; operator_share: number;
+};
+type Report = {
+  period_start: string; period_end: string; owner_percent: number;
+  summary: { units: number; sales_total: number; product_cost_total: number; operating_cost_total: number; net_profit: number; owner_share: number; operator_share: number };
+  lines: ProfitLine[];
+};
+type Settlement = {
+  id: string; period_start: string; period_end: string; sales_total: number; product_cost_total: number;
+  operating_cost_total: number; net_profit: number; owner_share: number; operator_share: number;
+  status: 'open' | 'received'; snapshot: Report; created_at: string; received_at: string | null;
+};
+
+const money = (value: number | null | undefined) => (Number(value) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const dateBR = (value?: string | null) => value ? new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR') : '—';
+const isoToday = () => new Date().toISOString().slice(0, 10);
+const isoMonthStart = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; };
+
+const amountTypeLabel: Record<AmountType, string> = {
+  fixed_per_unit: 'R$ por unidade vendida',
+  percentage_sale: '% sobre a venda',
+  fixed_per_order: 'R$ por pedido (rateado pelos itens)',
+};
+const scopeLabel: Record<Scope, string> = { general: 'Geral', product: 'Produto', variant: 'Variação' };
+
+export default function TenantSocietyTab({ tenantId }: Props) {
+  const qc = useQueryClient();
+  const [subTab, setSubTab] = useState<'report' | 'rules' | 'history'>('report');
+  const [periodStart, setPeriodStart] = useState(isoMonthStart);
+  const [periodEnd, setPeriodEnd] = useState(isoToday);
+  const [selectedSettlement, setSelectedSettlement] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    scope: 'general' as Scope,
+    productId: '',
+    variantId: '',
+    category: 'operacional',
+    label: '',
+    amountType: 'fixed_per_unit' as AmountType,
+    amount: '',
+  });
+
+  const { data: catalog = { products: [] as CatalogProduct[], variants: [] as CatalogVariant[] } } = useQuery({
+    queryKey: ['society-catalog', tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const [{ data: productRows, error: productError }, { data: variantRows, error: variantError }] = await Promise.all([
+        supabase.from('products').select('id,name,price,original_price').eq('tenant_id', tenantId).order('name').limit(1000),
+        supabase.from('product_variants' as any).select('id,product_id,name,price_delta,cost_price').eq('tenant_id', tenantId).order('name').limit(2000),
+      ]);
+      if (productError) throw productError;
+      if (variantError) throw variantError;
+      return {
+        products: (productRows || []) as CatalogProduct[],
+        variants: (variantRows || []) as CatalogVariant[],
+      };
+    },
+  });
+
+  const { data: rules = [], isLoading: rulesLoading } = useQuery({
+    queryKey: ['partnership-cost-rules', tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('partnership_cost_rules' as any)
+        .select('id,scope,product_id,variant_id,category,label,amount_type,amount,created_at')
+        .eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(1000);
+      if (error) throw error;
+      return (data || []) as CostRule[];
+    },
+  });
+
+  const reportQuery = useQuery({
+    queryKey: ['partnership-profit-report', tenantId, periodStart, periodEnd],
+    enabled: !!tenantId && !!periodStart && !!periodEnd && periodStart <= periodEnd,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc('get_partnership_profit_report', {
+        _tenant_id: tenantId, _period_start: periodStart, _period_end: periodEnd,
+      });
+      if (error) throw error;
+      return data as Report;
+    },
+  });
+
+  const { data: settlements = [], isLoading: settlementsLoading } = useQuery({
+    queryKey: ['partnership-settlements', tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('partnership_settlements' as any)
+        .select('id,period_start,period_end,sales_total,product_cost_total,operating_cost_total,net_profit,owner_share,operator_share,status,snapshot,created_at,received_at')
+        .eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(100);
+      if (error) throw error;
+      return (data || []) as Settlement[];
+    },
+  });
+
+  const { data: isSuperAdmin = false } = useQuery({
+    queryKey: ['society-super-admin'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return false;
+      const { data, error } = await supabase.from('platform_roles').select('role').eq('user_id', user.id).eq('role', 'super_admin').maybeSingle();
+      return !error && !!data;
+    },
+  });
+
+  const addRule = useMutation({
+    mutationFn: async () => {
+      const amount = Number(form.amount.replace(',', '.'));
+      if (!form.label.trim()) throw new Error('Informe o nome do gasto.');
+      if (!amount || amount < 0) throw new Error('Informe um valor válido.');
+      if (form.scope === 'product' && !form.productId) throw new Error('Escolha o produto.');
+      if (form.scope === 'variant' && !form.variantId) throw new Error('Escolha a variação.');
+      const { error } = await supabase.from('partnership_cost_rules' as any).insert({
+        tenant_id: tenantId,
+        scope: form.scope,
+        product_id: form.scope === 'general' ? null : form.productId || null,
+        variant_id: form.scope === 'variant' ? form.variantId : null,
+        category: form.category.trim() || 'operacional',
+        label: form.label.trim(),
+        amount_type: form.amountType,
+        amount,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Custo registrado. O histórico não pode ser apagado pelo painel.');
+      setForm({ scope: 'general', productId: '', variantId: '', category: 'operacional', label: '', amountType: 'fixed_per_unit', amount: '' });
+      qc.invalidateQueries({ queryKey: ['partnership-cost-rules', tenantId] });
+      qc.invalidateQueries({ queryKey: ['partnership-profit-report', tenantId] });
+    },
+    onError: (error: any) => toast.error(error?.message || 'Não foi possível registrar o custo.'),
+  });
+
+  const createSettlement = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await (supabase as any).rpc('create_partnership_settlement', {
+        _tenant_id: tenantId, _period_start: periodStart, _period_end: periodEnd,
+      });
+      if (error) throw error;
+      return data as string;
+    },
+    onSuccess: (id) => {
+      toast.success('Fechamento oficial salvo com rastreabilidade.');
+      setSelectedSettlement(id);
+      qc.invalidateQueries({ queryKey: ['partnership-settlements', tenantId] });
+    },
+    onError: (error: any) => toast.error(error?.message?.includes('duplicate') ? 'Já existe um fechamento oficial para este período.' : (error?.message || 'Não foi possível fechar o período.')),
+  });
+
+  const receiveSettlement = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any).rpc('mark_partnership_settlement_received', { _settlement_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Repasse marcado como recebido pelo Super Admin.');
+      qc.invalidateQueries({ queryKey: ['partnership-settlements', tenantId] });
+    },
+    onError: (error: any) => toast.error(error?.message || 'Somente o Super Admin pode marcar como recebido.'),
+  });
+
+  const variantsForProduct = useMemo(() => catalog.variants.filter(v => v.product_id === form.productId), [catalog.variants, form.productId]);
+  const report = reportQuery.data;
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-primary/30 bg-primary/5">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+            <div>
+              <p className="font-semibold text-foreground">Sociedade — lucro líquido rastreável</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                O sistema usa o preço realmente vendido, o custo do produto/variação cadastrado e os gastos abaixo. O lucro líquido positivo é dividido em 50% para a plataforma e 50% para a loja/sócio. Registros são históricos: para corrigir um gasto, lance uma nova regra.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Tabs value={subTab} onValueChange={(value) => setSubTab(value as typeof subTab)}>
+        <TabsList className="grid h-auto w-full grid-cols-3">
+          <TabsTrigger value="report" className="gap-1 text-xs sm:text-sm"><ClipboardList className="h-3.5 w-3.5" /> Apuração</TabsTrigger>
+          <TabsTrigger value="rules" className="gap-1 text-xs sm:text-sm"><ReceiptText className="h-3.5 w-3.5" /> Gastos</TabsTrigger>
+          <TabsTrigger value="history" className="gap-1 text-xs sm:text-sm"><History className="h-3.5 w-3.5" /> Fechamentos</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="report" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Período da apuração</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1"><Label>De</Label><Input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)} /></div>
+                <div className="space-y-1"><Label>Até</Label><Input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} /></div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                <span>Considera somente pedidos entregues e não fiados.</span>
+                <Button size="sm" onClick={() => createSettlement.mutate()} disabled={createSettlement.isPending || reportQuery.isLoading || !report}>
+                  <LockKeyhole className="mr-1.5 h-3.5 w-3.5" /> {createSettlement.isPending ? 'Salvando...' : 'Gerar fechamento oficial'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {reportQuery.isLoading && <div className="py-8 text-center text-sm text-muted-foreground">Calculando vendas, custos e divisão...</div>}
+          {reportQuery.error && <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">Não foi possível calcular este período. Confira as datas e tente novamente.</div>}
+          {report && (
+            <>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <Metric title="Vendas" value={money(report.summary.sales_total)} tone="text-foreground" />
+                <Metric title="Custos totais" value={money(report.summary.product_cost_total + report.summary.operating_cost_total)} tone="text-red-400" />
+                <Metric title="Lucro líquido" value={money(report.summary.net_profit)} tone={report.summary.net_profit >= 0 ? 'text-green-400' : 'text-red-400'} />
+                <Metric title="Sua parte (50%)" value={money(report.summary.owner_share)} tone="text-primary" />
+              </div>
+              <Card>
+                <CardHeader className="pb-3"><CardTitle className="text-base">Resultado por produto e variação</CardTitle></CardHeader>
+                <CardContent className="p-0">
+                  {report.lines.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">Nenhuma venda entregue no período.</p> : (
+                    <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-xs">
+                      <thead className="bg-muted/50"><tr>
+                        <th className="p-2 text-left">Produto / variação</th><th className="p-2 text-right">Qtd.</th><th className="p-2 text-right">Vendas</th><th className="p-2 text-right">Custo produto</th><th className="p-2 text-right">Gastos</th><th className="p-2 text-right">Lucro líquido</th><th className="p-2 text-right">Sua parte</th><th className="p-2 text-right">Loja</th>
+                      </tr></thead>
+                      <tbody>{report.lines.map((line, index) => <tr key={`${line.product_id || line.product_name}-${line.variant_id || index}`} className="border-t">
+                        <td className="p-2"><div className="font-medium text-foreground">{line.product_name}</div><div className="text-muted-foreground">{line.variant_name || 'Base'} · preço médio {money(line.sale_unit_price)}</div></td>
+                        <td className="p-2 text-right">{line.units}</td><td className="p-2 text-right">{money(line.sales_total)}</td><td className="p-2 text-right text-red-400">{money(line.product_cost_total)}</td><td className="p-2 text-right text-red-400">{money(line.operating_cost_total)}</td><td className={`p-2 text-right font-semibold ${line.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{money(line.net_profit)}</td><td className="p-2 text-right font-semibold text-primary">{money(line.owner_share)}</td><td className="p-2 text-right font-semibold text-foreground">{money(line.operator_share)}</td>
+                      </tr>)}</tbody>
+                    </table></div>
+                  )}
+                </CardContent>
+              </Card>
+              <p className="text-[11px] text-muted-foreground">Custo do produto vem de <code>cost_price</code> da variação; sem variação, usa <code>original_price</code> do produto. Gastos por pedido são rateados proporcionalmente ao valor de cada item.</p>
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="rules" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><Plus className="h-4 w-4 text-primary" /> Registrar gasto da sociedade</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1"><Label>Aplicação</Label><select value={form.scope} onChange={e => setForm({ ...form, scope: e.target.value as Scope, productId: '', variantId: '' })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="general">Geral da loja</option><option value="product">Produto específico</option><option value="variant">Variação específica</option></select></div>
+                <div className="space-y-1"><Label>Categoria</Label><Input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="checkout, motoboy, desconto..." /></div>
+              </div>
+              {form.scope !== 'general' && <div className="space-y-1"><Label>Produto</Label><select value={form.productId} onChange={e => setForm({ ...form, productId: e.target.value, variantId: '' })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecione</option>{catalog.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
+              {form.scope === 'variant' && <div className="space-y-1"><Label>Variação</Label><select value={form.variantId} onChange={e => setForm({ ...form, variantId: e.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecione</option>{variantsForProduct.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></div>}
+              <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1"><Label>Nome do gasto</Label><Input value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} placeholder="Taxa do checkout" /></div><div className="space-y-1"><Label>Como calcular</Label><select value={form.amountType} onChange={e => setForm({ ...form, amountType: e.target.value as AmountType })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">{Object.entries(amountTypeLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div></div>
+              <div className="flex gap-2"><div className="relative flex-1"><span className="pointer-events-none absolute left-3 top-2.5 text-sm text-muted-foreground">{form.amountType === 'percentage_sale' ? '%' : 'R$'}</span><Input className="pl-9" type="number" min="0" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="0,00" /></div><Button onClick={() => addRule.mutate()} disabled={addRule.isPending}>{addRule.isPending ? 'Registrando...' : 'Registrar'}</Button></div>
+              <div className="flex items-start gap-2 rounded-md bg-muted/40 p-2 text-[11px] text-muted-foreground"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />Se houver gasto geral, de produto e de variação na mesma categoria, o sistema usa o mais específico. Um lançamento novo substitui o anterior apenas nos cálculos futuros; o histórico continua intacto.</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Histórico de gastos — somente inclusão</CardTitle></CardHeader>
+            <CardContent>{rulesLoading ? <p className="py-4 text-center text-sm text-muted-foreground">Carregando...</p> : rules.length === 0 ? <p className="py-4 text-center text-sm text-muted-foreground">Nenhum gasto configurado.</p> : <div className="space-y-2">{rules.map(rule => <div key={rule.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div><p className="font-medium text-sm text-foreground">{rule.label}</p><p className="text-[11px] text-muted-foreground">{rule.category} · {scopeLabel[rule.scope]} · {amountTypeLabel[rule.amount_type]} · {dateBR(rule.created_at)}</p></div><span className="font-semibold text-red-400">{rule.amount_type === 'percentage_sale' ? `${Number(rule.amount).toFixed(2).replace('.', ',')}%` : money(rule.amount)}</span></div>)}</div>}</CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-4 space-y-3">
+          <Card><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><WalletCards className="h-4 w-4 text-primary" /> Fechamentos oficiais</CardTitle></CardHeader><CardContent><p className="text-xs text-muted-foreground">Cada fechamento guarda um snapshot dos produtos, variações, custos e divisão daquele período. Não há botão de apagar ou editar.</p></CardContent></Card>
+          {settlementsLoading ? <p className="py-6 text-center text-sm text-muted-foreground">Carregando histórico...</p> : settlements.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhum fechamento oficial ainda.</p> : settlements.map(settlement => <Card key={settlement.id} className={selectedSettlement === settlement.id ? 'border-primary/60' : ''}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-foreground">{dateBR(settlement.period_start)} a {dateBR(settlement.period_end)}</p><p className="text-[11px] text-muted-foreground">Criado em {new Date(settlement.created_at).toLocaleString('pt-BR')}</p></div><Badge variant={settlement.status === 'received' ? 'default' : 'secondary'}>{settlement.status === 'received' ? 'Recebido' : 'Aguardando recebimento'}</Badge></div><div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"><div><span className="text-[11px] text-muted-foreground">Vendas</span><p className="font-semibold">{money(settlement.sales_total)}</p></div><div><span className="text-[11px] text-muted-foreground">Lucro líquido</span><p className={`font-semibold ${settlement.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{money(settlement.net_profit)}</p></div><div><span className="text-[11px] text-muted-foreground">Sua parte</span><p className="font-semibold text-primary">{money(settlement.owner_share)}</p></div><div><span className="text-[11px] text-muted-foreground">Parte da loja</span><p className="font-semibold">{money(settlement.operator_share)}</p></div></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setSelectedSettlement(selectedSettlement === settlement.id ? null : settlement.id)}>{selectedSettlement === settlement.id ? 'Ocultar snapshot' : 'Ver snapshot'}</Button>{settlement.status === 'open' && (isSuperAdmin ? <Button size="sm" onClick={() => receiveSettlement.mutate(settlement.id)} disabled={receiveSettlement.isPending}><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Marcar como recebido</Button> : <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1.5 text-[11px] text-muted-foreground"><LockKeyhole className="h-3 w-3" /> Só o Super Admin marca recebido</span>)}</div>{selectedSettlement === settlement.id && <div className="overflow-x-auto rounded-md border"><table className="w-full min-w-[700px] text-xs"><thead className="bg-muted/50"><tr><th className="p-2 text-left">Produto / variação</th><th className="p-2 text-right">Vendas</th><th className="p-2 text-right">Custos</th><th className="p-2 text-right">Lucro</th><th className="p-2 text-right">Sua parte</th></tr></thead><tbody>{(settlement.snapshot?.lines || []).map((line, index) => <tr key={`${line.product_name}-${index}`} className="border-t"><td className="p-2">{line.product_name} · {line.variant_name}</td><td className="p-2 text-right">{money(line.sales_total)}</td><td className="p-2 text-right text-red-400">{money(line.product_cost_total + line.operating_cost_total)}</td><td className="p-2 text-right">{money(line.net_profit)}</td><td className="p-2 text-right text-primary">{money(line.owner_share)}</td></tr>)}</tbody></table></div>}</CardContent></Card>)}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function Metric({ title, value, tone }: { title: string; value: string; tone: string }) {
+  return <Card><CardContent className="p-3"><p className="text-[11px] text-muted-foreground">{title}</p><p className={`mt-1 text-lg font-bold ${tone}`}>{value}</p></CardContent></Card>;
+}

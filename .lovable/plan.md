@@ -41,3 +41,9 @@ Já temos (não vou refazer): PDV web + maquininha, mesas/comanda, QR mesa, gar�
 
 ## Confirmação
 Posso começar pela **Onda 1 (Estoque profundo)** que é o gap mais citado pelo mercado vs F-Rest, OU prefere que eu siga outra ordem / pule alguma onda? Responde só "1" (ou a ordem que quiser) que eu já começo.
+## Sociedade — lucro líquido e repasse 50/50 (entregue)
+- Adicionar a subaba Sociedade ao Financeiro Avançado, reutilizando a aparência e os componentes existentes.
+- Permitir custos append-only por escopo geral, produto ou variação, com cálculo por unidade, percentual da venda ou valor por pedido rateado.
+- Apurar somente pedidos entregues e não fiados, usando o preço efetivamente vendido, `cost_price` da variação e fallback para `original_price` do produto.
+- Gerar fechamento oficial imutável com snapshot por produto/variação, lucro líquido positivo e divisão de 50% para a plataforma e 50% para a loja/sócio.
+- Restringir leitura e inclusão ao tenant do administrador; o Super Admin pode consultar lojas e é o único autorizado a marcar o repasse como recebido. Não expor edição/exclusão no painel.

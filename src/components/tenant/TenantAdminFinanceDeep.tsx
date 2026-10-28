@@ -15,6 +15,7 @@ import { useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { fileToScanPayload } from '@/lib/file-to-image';
 import NfeReviewDialog from './NfeReviewDialog';
+import TenantSocietyTab from './TenantSocietyTab';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 interface Props { tenantId: string }
@@ -64,6 +65,7 @@ export default function TenantAdminFinanceDeep({ tenantId }: Props) {
     { id: 'apr', label: 'Contas' },
     { id: 'cashflow', label: 'Fluxo Projetado' },
     { id: 'dre', label: 'DRE Comparativo' },
+    { id: 'society', label: 'Sociedade' },
   ]);
   return (
     <div className="space-y-4">
@@ -79,6 +81,7 @@ export default function TenantAdminFinanceDeep({ tenantId }: Props) {
         <TabsContent value="apr" className="mt-4"><APRTab tenantId={tenantId} /></TabsContent>
         <TabsContent value="cashflow" className="mt-4"><CashFlowTab tenantId={tenantId} /></TabsContent>
         <TabsContent value="dre" className="mt-4"><DRETab tenantId={tenantId} /></TabsContent>
+        <TabsContent value="society" className="mt-4"><TenantSocietyTab tenantId={tenantId} /></TabsContent>
       </Tabs>
     </div>
   );
