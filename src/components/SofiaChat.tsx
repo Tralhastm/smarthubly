@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, Sparkles, Loader2 } from 'lucide-react';
+import { MessageCircle, X, Send, Sparkles, Loader2, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -21,6 +22,13 @@ interface SofiaChatProps {
 const SUPA_URL = import.meta.env.VITE_SUPABASE_URL;
 const PUBLISHABLE = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
 const CHAT_URL = `${SUPA_URL}/functions/v1/ai-chat-unified/sofia-agent`;
+const FEEDBACK_CATEGORIES = [
+  { value: 'incorrect', label: 'Resposta incorreta' },
+  { value: 'incomplete', label: 'Faltou detalhe' },
+  { value: 'current_data', label: 'Preço, estoque ou pedido' },
+  { value: 'navigation', label: 'Onde fica / como usar' },
+  { value: 'other', label: 'Outro motivo' },
+] as const;
 
 const SofiaChat = ({
   role = 'visitor',
@@ -38,6 +46,9 @@ const SofiaChat = ({
     typeof document !== 'undefined' && document.body.dataset.claraOpen === 'true'
   );
   const [suggestClara, setSuggestClara] = useState(false);
+  const [feedbackByMessage, setFeedbackByMessage] = useState<Record<number, { rating: 'helpful' | 'not_helpful'; category?: string }>>({});
+  const [feedbackSending, setFeedbackSending] = useState<number | null>(null);
+  const [pendingReviewIndex, setPendingReviewIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -90,13 +101,15 @@ const SofiaChat = ({
     };
 
     try {
-      // Fetch simplificado e direto, idêntico ao teste de diagnóstico que funcionou no console.
+      const { data: { session } } = await supabase.auth.getSession();
+      const accessToken = role === 'merchant' ? session?.access_token : PUBLISHABLE;
+      if (role === 'merchant' && !accessToken) throw new Error('Sua sessão do painel expirou. Entre novamente para consultar os dados atuais da loja.');
       const resp = await fetch(CHAT_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'apikey': PUBLISHABLE,
-          'Authorization': `Bearer ${PUBLISHABLE}`,
+          'Authorization': `Bearer ${accessToken}`,
           'x-client-info': 'smarthubly-web'
         },
         body: JSON.stringify({ 
@@ -104,7 +117,8 @@ const SofiaChat = ({
           role, 
           tenantId, 
           supplierId, 
-          driverId 
+          driverId,
+          surface: role === 'merchant' ? 'tenant_admin_chat' : 'sofia_chat'
         })
       });
 
@@ -151,6 +165,33 @@ const SofiaChat = ({
       setError(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendFeedback = async (messageIndex: number, rating: 'helpful' | 'not_helpful', category?: string) => {
+    if (role !== 'merchant' || !tenantId || feedbackByMessage[messageIndex] || feedbackSending !== null) return;
+    setFeedbackSending(messageIndex);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Sua sessão expirou. Entre novamente para enviar a avaliação.');
+      const response = await fetch(CHAT_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': PUBLISHABLE,
+          'Authorization': `Bearer ${session.access_token}`,
+          'x-client-info': 'smarthubly-sofia-feedback'
+        },
+        body: JSON.stringify({ _path: 'feedback', tenantId, rating, category })
+      });
+      if (!response.ok) throw new Error('Não foi possível registrar a avaliação.');
+      setFeedbackByMessage(previous => ({ ...previous, [messageIndex]: { rating, category } }));
+      setPendingReviewIndex(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não foi possível registrar a avaliação.');
+    } finally {
+      setFeedbackSending(null);
     }
   };
 
@@ -269,15 +310,35 @@ const SofiaChat = ({
                     <Sparkles className="h-3.5 w-3.5 text-primary" />
                   </div>
                 )}
-                <div
-                  className={cn(
-                    'rounded-2xl px-3 py-2 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap break-words',
-                    m.role === 'user'
-                      ? 'bg-primary text-primary-foreground rounded-tr-sm'
-                      : 'bg-secondary text-foreground rounded-tl-sm'
+                <div className="flex max-w-[88%] flex-col gap-1.5">
+                  <div
+                    className={cn(
+                      'rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words',
+                      m.role === 'user'
+                        ? 'bg-primary text-primary-foreground rounded-tr-sm'
+                        : 'bg-secondary text-foreground rounded-tl-sm'
+                    )}
+                  >
+                    {m.role === 'assistant' ? renderContent(m.content) : m.content}
+                  </div>
+                  {m.role === 'assistant' && role === 'merchant' && tenantId && i === messages.length - 1 && messages.slice(0, i).some(message => message.role === 'user') && !loading && (
+                    <div className="flex flex-wrap items-center gap-2 px-1 text-[11px] text-muted-foreground">
+                      {feedbackByMessage[i] ? (
+                        <span>{feedbackByMessage[i].rating === 'not_helpful' ? `Obrigado. Sinal enviado para revisão (${FEEDBACK_CATEGORIES.find(category => category.value === feedbackByMessage[i].category)?.label || 'categoria registrada'}); o texto da conversa não é salvo nem altera a base automaticamente.` : 'Obrigado. Avaliação registrada; o texto da conversa não é salvo nem altera a base automaticamente.'}</span>
+                      ) : (
+                        <>
+                          <span>Foi útil?</span>
+                          <button onClick={() => void sendFeedback(i, 'helpful')} disabled={feedbackSending !== null} aria-label="Marcar resposta como útil" title="Útil" className="rounded p-1 hover:bg-secondary disabled:opacity-50">
+                            {feedbackSending === i ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
+                          </button>
+                          <button onClick={() => setPendingReviewIndex(i)} disabled={feedbackSending !== null} aria-label="Marcar resposta para revisão" title="Não ajudou" className="rounded p-1 hover:bg-secondary disabled:opacity-50">
+                            <ThumbsDown className="h-3.5 w-3.5" />
+                          </button>
+                          {pendingReviewIndex === i && <div className="basis-full rounded-lg border border-border bg-background p-2"><p className="mb-2">O que faltou? Escolha uma categoria; o texto da conversa não será enviado.</p><div className="flex flex-wrap gap-1.5">{FEEDBACK_CATEGORIES.map(category => <button key={category.value} onClick={() => void sendFeedback(i, 'not_helpful', category.value)} disabled={feedbackSending !== null} className="rounded-full border border-border px-2 py-1 text-[10px] hover:bg-secondary disabled:opacity-50">{category.label}</button>)}<button onClick={() => setPendingReviewIndex(null)} disabled={feedbackSending !== null} className="rounded-full px-2 py-1 text-[10px] text-muted-foreground hover:bg-secondary">Cancelar</button></div></div>}
+                        </>
+                      )}
+                    </div>
                   )}
-                >
-                  {m.role === 'assistant' ? renderContent(m.content) : m.content}
                 </div>
               </div>
             ))}

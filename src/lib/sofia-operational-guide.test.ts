@@ -43,6 +43,17 @@ describe('guia operacional da Sofia', () => {
     expect(guide).toContain('A Sofia não envia a campanha pelo chat');
   });
 
+  it('inclui regras de dados atuais, resolução com evidência e feedback supervisionado', () => {
+    const productGuide = getSofiaOperationalGuidance('Como vejo o preço atual do produto com variantes?');
+    const troubleshootingGuide = getSofiaOperationalGuidance('Deu erro e não consigo concluir o pedido; como resolver?');
+    const learningGuide = getSofiaOperationalGuidance('Como a Sofia aprende com meu feedback?');
+
+    expect(productGuide).toContain('catálogo atual');
+    expect(productGuide).toContain('preço-base + ajuste');
+    expect(troubleshootingGuide).toContain('Resolver problemas com evidência');
+    expect(learningGuide).toContain('não treinamento automático');
+  });
+
   it('retorna uma orientação segura para pergunta sem tópico reconhecido', () => {
     const guide = getSofiaOperationalGuidance('Pode me ajudar?');
 

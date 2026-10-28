@@ -120,6 +120,18 @@ O painel de fornecedor tem grupos Operação, Catálogo e Configurações. Abas 
 ## Motoboy
 O Painel Motoboy tem Entregas Ativas e, quando houver, Entregues. A disponibilidade é Online — recebendo entregas ou Offline — toque pra ficar disponível; GPS pode ser solicitado. Em cada entrega, confira código/endereço/ponto de referência; use Mapa aqui dentro ou Abrir no app GPS. As ações observadas podem incluir iniciar rota, Entregue, Atrasar, Aguardar e enviar nota. Não atribua funções de garçom ao painel do motoboy.`,
   },
+  {
+    title: "Dados atuais, resolução e aprendizado supervisionado",
+    keywords: ["preco", "preço", "valor", "pedido", "produto", "estoque", "erro", "problema", "falha", "diagnostico", "diagnóstico", "nao funciona", "não funciona", "aprender", "aprendizagem", "feedback", "melhorar", "ajuda"],
+    content: `## Dados atuais da loja
+No chat autenticado do lojista, a Sofia pode consultar o catálogo atual, preço-base, variantes, adicionais, sinalizadores de estoque/visibilidade e pedidos do tenant autorizado. O preço da variante é preço-base + ajuste; adicionais alteram o total. Se uma consulta falhar, o produto não for encontrado ou houver ambiguidade no código do pedido, não use memória: peça o nome/código exato e diga que o dado atual não foi confirmado. Chats de cliente não autorizam consulta de pedidos; o acesso a pedidos é exclusivo do lojista autenticado. Um chat público pode trazer apenas o produto vinculado, e só se ele estiver visível na vitrine.
+
+## Resolver problemas com evidência
+Para erro ou falha, primeiro pergunte o que a pessoa estava tentando fazer e em qual tela; use o caminho documentado e os resultados de diagnóstico/casos resolvidos que estejam disponíveis para o tenant autenticado. Não trate um caso de outra loja como fato universal, não diga que corrigiu sem executar e validar a ação. Se a evidência não bastar, peça captura de tela, mensagem de erro e horário aproximado, e encaminhe para Configurações → Suporte & Treino → Suporte.
+
+## Aprendizado supervisionado
+As avaliações “útil” e “não ajudou” são registros para revisão humana, não treinamento automático. Só um responsável autorizado deve transformar uma correção generalizável e sem dados pessoais em conhecimento validado no Super Admin; não publique reclamações, dados de cliente ou suposições como instruções.`,
+  },
 ];
 
 const broadQuestion = /\b(tudo|todas as funcoes|todas as funcionalidades|sistema inteiro|plataforma inteira|primeiro dia|iniciante|ensinar|ensina|ensine|ensinando|treinar|treina|treine|treinamento|treinamento completo|guia completo|por onde comeco|como comeco|comecar do zero|do zero)\b/;
