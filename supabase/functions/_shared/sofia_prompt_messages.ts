@@ -10,7 +10,9 @@ export function getSofiaTrustedMessages(messages: SofiaMessage[], fallbackQuesti
     .filter((message) => message?.role === "user")
     .map((message) => String(message.content || "").trim())
     .filter(Boolean)
-    .slice(-6)
+    // Só a pergunta anterior pode ser necessária para resolver “tem certeza?”;
+    // perguntas mais antigas fazem o modelo responder novamente assuntos encerrados.
+    .slice(-2)
     .map((content) => ({ role: "user" as const, content: content.slice(0, 4000) }));
 
   if (userMessages.length) return userMessages;

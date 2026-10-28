@@ -59,6 +59,20 @@ const EVIDENCE: SofiaSourceEvidence[] = [
     verifiedCommit: "6797419"
   },
   {
+    id: "catalog-bulk-photo-delete",
+    keywords: ["apagar fotos em massa", "excluir fotos em massa", "apagar fotos", "fotos dos produtos", "excluir fotos", "fotos de ia", "fotos do google", "fotos importadas da web"],
+    title: "Excluir fotos em massa por origem",
+    route: "Catálogo → Produtos",
+    action: "Usar Excluir N fotos de IA ou Excluir N fotos do Google, conforme os botões exibidos",
+    effect: "Apaga somente as fotos da origem escolhida; fotos da outra origem e uploads manuais são preservados. Exige confirmação no navegador. Não é o mesmo que Apagar Tudo, que exclui produtos.",
+    dataAccess: "products.image/media e storage; chama ai-media-unified/delete com source=ai ou google",
+    automatic: false,
+    destructive: true,
+    external: false,
+    source: "src/components/tenant/TenantAdminProducts.tsx:651-669,1626-1640",
+    verifiedCommit: "6797419"
+  },
+  {
     id: "society-cost-rule",
     keywords: ["gasto sociedade", "custo sociedade", "regra sociedade", "apuracao sociedade", "apuração sociedade"],
     title: "Cadastrar gasto na Sociedade",

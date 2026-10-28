@@ -106,17 +106,26 @@ describe('guia operacional da Sofia', () => {
     expect(descriptionEvidence).toContain('Iniciar geração');
   });
 
+  it('confirma exclusão de fotos em massa por origem', () => {
+    const photoEvidence = getSofiaSourceEvidence('Preciso apagar as fotos dos produtos em massa');
+
+    expect(photoEvidence).toContain('Excluir N fotos de IA');
+    expect(photoEvidence).toContain('Excluir N fotos do Google');
+    expect(photoEvidence).toContain('Não é o mesmo que Apagar Tudo');
+  });
+
   it('remove respostas antigas da Sofia do contexto enviado ao modelo', () => {
     const trusted = getSofiaTrustedMessages([
       { role: 'user', content: 'Onde ficam os produtos?' },
       { role: 'assistant', content: 'Resposta antiga errada: esse botão não existe.' },
-      { role: 'user', content: 'Como exporto o catálogo?' },
+      { role: 'user', content: 'Como despacho para motoboy?' },
       { role: 'assistant', content: 'Resposta antiga errada: use CSV.' },
+      { role: 'user', content: 'TEM CERTEZA?' },
     ], 'fallback');
 
     expect(trusted).toEqual([
-      { role: 'user', content: 'Onde ficam os produtos?' },
-      { role: 'user', content: 'Como exporto o catálogo?' },
+      { role: 'user', content: 'Como despacho para motoboy?' },
+      { role: 'user', content: 'TEM CERTEZA?' },
     ]);
     expect(trusted.some((message) => message.content.includes('Resposta antiga'))).toBe(false);
   });
