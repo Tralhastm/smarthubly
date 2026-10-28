@@ -11,6 +11,25 @@ import SofiaChat from '@/components/SofiaChat';
 import SofiaFAQ from '@/components/SofiaFAQ';
 
 const OWNER_WA = 'https://wa.me/5511912870761?text=Quero%20criar%20minha%20loja%20delivery';
+type PublicTenantCountClient = {
+  from: (relation: 'tenants_public') => {
+    select: (columns: 'id', options: { count: 'exact'; head: true }) => {
+      eq: (column: 'active', value: true) => PromiseLike<{ count: number | null }>;
+    };
+  };
+};
+
+const faqs = [
+  { q: 'Quanto custa pra começar?', a: 'Você escolhe entre dois modelos: (1) % sobre cada venda, a partir de 5% (negociável de acordo com seu volume e nicho), ou (2) R$60/mês fixos com vendas ilimitadas. Sem taxa de adesão, sem fidelidade.' },
+  { q: 'Como funciona a comissão por venda?', a: 'Combinamos uma porcentagem fixa (ex: 5%) que incide sobre cada produto vendido na sua loja. Você só paga quando vende. Ideal pra quem tá começando ou tem ticket variado.' },
+  { q: 'Quando vale a pena a mensalidade fixa?', a: 'Se você fatura mais de R$1.200/mês na loja (com 5% daria R$60), o plano fixo passa a valer mais a pena. Conforme cresce, fica ainda melhor.' },
+  { q: 'Como recebo o dinheiro dos pedidos?', a: 'Você conecta sua conta Mercado Pago e recebe direto na hora (Pix) ou em até 14 dias (cartão). O cliente paga você, não a plataforma.' },
+  { q: 'Preciso ter motoboy próprio?', a: 'Não. Você pode (1) entregar você mesmo, (2) cadastrar seus motoboys, ou (3) usar a integração Lalamove on-demand. Importante: a conta Lalamove é sua — você cria, recarrega e paga as corridas direto pra eles. A plataforma só conecta a API; nenhum valor de entrega passa pela gente.' },
+  { q: 'Funciona pra salão de beleza?', a: 'Sim! Tem módulo de agendamento completo: cliente escolhe serviço, horário disponível, e cai na sua agenda. Igual restaurante mas com hora marcada.' },
+  { q: 'A IA responde os clientes mesmo?', a: 'Sim. O chatbot conhece seus produtos, preços, horários e tira dúvidas. Quando precisar de humano, encaminha pro seu WhatsApp.' },
+  { q: 'Posso cancelar quando quiser?', a: 'Pode. Não tem fidelidade. Sua loja fica online enquanto você quiser.' },
+  { q: 'Vocês cobram mais alguma coisa?', a: 'Não. A % combinada (ou os R$60 do plano fixo) é tudo que você paga pra plataforma. A taxa de entrega vai integral pro motoboy/Lalamove. Sem taxa escondida.' },
+];
 
 const Index = () => {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -21,7 +40,7 @@ const Index = () => {
     const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute('content', 'SmartHubly: crie seu marketplace em minutos. % justa por venda (a partir de 5%) ou R$60/mês. IA, agendamento, cliente é seu. Sem comissão abusiva.');
 
-    (supabase as any).from('tenants_public').select('id', { count: 'exact', head: true }).eq('active', true)
+    (supabase as unknown as PublicTenantCountClient).from('tenants_public').select('id', { count: 'exact', head: true }).eq('active', true)
       .then(({ count }: { count: number | null }) => setStoreCount(count || 0));
   }, []);
 
@@ -57,18 +76,6 @@ const Index = () => {
     { feature: 'Atende serviços (salão, etc)', us: true, ifood: false, anota: false },
     { feature: 'IA atendente', us: true, ifood: false, anota: false },
     { feature: 'Setup em minutos', us: true, ifood: false, anota: true },
-  ];
-
-  const faqs = [
-    { q: 'Quanto custa pra começar?', a: 'Você escolhe entre dois modelos: (1) % sobre cada venda, a partir de 5% (negociável de acordo com seu volume e nicho), ou (2) R$60/mês fixos com vendas ilimitadas. Sem taxa de adesão, sem fidelidade.' },
-    { q: 'Como funciona a comissão por venda?', a: 'Combinamos uma porcentagem fixa (ex: 5%) que incide sobre cada produto vendido na sua loja. Você só paga quando vende. Ideal pra quem tá começando ou tem ticket variado.' },
-    { q: 'Quando vale a pena a mensalidade fixa?', a: 'Se você fatura mais de R$1.200/mês na loja (com 5% daria R$60), o plano fixo passa a valer mais a pena. Conforme cresce, fica ainda melhor.' },
-    { q: 'Como recebo o dinheiro dos pedidos?', a: 'Você conecta sua conta Mercado Pago e recebe direto na hora (Pix) ou em até 14 dias (cartão). O cliente paga você, não a plataforma.' },
-    { q: 'Preciso ter motoboy próprio?', a: 'Não. Você pode (1) entregar você mesmo, (2) cadastrar seus motoboys, ou (3) usar a integração Lalamove on-demand. Importante: a conta Lalamove é sua — você cria, recarrega e paga as corridas direto pra eles. A plataforma só conecta a API; nenhum valor de entrega passa pela gente.' },
-    { q: 'Funciona pra salão de beleza?', a: 'Sim! Tem módulo de agendamento completo: cliente escolhe serviço, horário disponível, e cai na sua agenda. Igual restaurante mas com hora marcada.' },
-    { q: 'A IA responde os clientes mesmo?', a: 'Sim. O chatbot conhece seus produtos, preços, horários e tira dúvidas. Quando precisar de humano, encaminha pro seu WhatsApp.' },
-    { q: 'Posso cancelar quando quiser?', a: 'Pode. Não tem fidelidade. Sua loja fica online enquanto você quiser.' },
-    { q: 'Vocês cobram mais alguma coisa?', a: 'Não. A % combinada (ou os R$60 do plano fixo) é tudo que você paga pra plataforma. A taxa de entrega vai integral pro motoboy/Lalamove. Sem taxa escondida.' },
   ];
 
   useEffect(() => {
@@ -367,7 +374,7 @@ const Index = () => {
       {/* Sofia — IA atendente 24h (papel: visitante) */}
       <SofiaChat
         role="visitor"
-        greeting="Oi! Sou a **Sofia** 👋 Posso tirar suas dúvidas sobre a plataforma, preços, recursos ou te ajudar a começar agora. O que você quer saber?"
+        greeting="Oi! Sou a Sofia 👋 Posso tirar suas dúvidas sobre a plataforma, preços, recursos ou te ajudar a começar agora. O que você quer saber?"
       />
     </div>
   );

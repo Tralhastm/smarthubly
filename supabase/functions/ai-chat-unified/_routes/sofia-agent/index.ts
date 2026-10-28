@@ -512,7 +512,7 @@ async function trySofiaPublicStream(messages, role, admin, liveContext = "", ten
   }
 
   liveContext = `${databaseContext}${liveContext}`;
-  const operationalGuidance = getSofiaOperationalGuidance(userQuestion);
+  const operationalGuidance = getSofiaOperationalGuidance(userQuestion, role);
   const systemPrompt = `Você é a **Sofia**, a assistente inteligente da plataforma SmartHubly.
 Sua missão é ajudar visitantes a entenderem a plataforma, lojistas a gerenciarem seus negócios e interessados a criarem suas próprias lojas.
 
@@ -529,7 +529,7 @@ ${PLATFORM_KNOWLEDGE}
 ${operationalGuidance}
 
 # REGRAS
-1. Se o usuário quiser criar uma loja, direcione para o botão "Quero criar minha loja" ou peça para entrar em contato no WhatsApp +55 11 91287-0761.
+1. Se o usuário quiser criar uma loja, direcione para “Quero criar minha loja” e depois para o WhatsApp oficial ou “Conversar com a IA” na seção de contato. Para role visitor, não afirme que há cadastro automático nem invente uma conta no site; não passe caminhos internos do painel antes que o acesso exista. Dê uma próxima ação clara e poucos preparativos opcionais.
 2. Se o usuário for um lojista (merchant), ajude com dúvidas sobre o painel admin.
 3. NUNCA responda sobre assuntos fora da SmartHubly.
 4. Use os caminhos e rótulos documentados acima. Não invente nomes de telas, subabas ou botões. Se houver variação, peça uma captura de tela ou explique que o menu pode estar oculto/renomeado pela configuração da loja.
@@ -552,7 +552,7 @@ REGRAS DE CONTEXTO: use os dados vivos acima para responder com precisão; não 
   const response = await callAiStream(admin, {
     systemPrompt,
     messages,
-    temperature: 0.7,
+    temperature: 0.25,
     maxTokens: 1400
   });
   return { response };

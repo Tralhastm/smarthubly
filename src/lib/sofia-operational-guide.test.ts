@@ -35,6 +35,19 @@ describe('guia operacional da Sofia', () => {
     }
   });
 
+  it('orienta visitante iniciante pelo fluxo público real, sem fingir que já tem acesso ao painel', () => {
+    const guide = getSofiaOperationalGuidance(
+      'Sou iniciante e ainda não tenho uma loja. Me explica o caminho mais simples para começar, passo a passo?',
+      'visitor',
+    );
+
+    expect(guide).toContain('Quero criar minha loja');
+    expect(guide).toContain('WhatsApp oficial (+55 11 91287-0761)');
+    expect(guide).toContain('não diga “crie sua conta no site”');
+    expect(guide).not.toContain('Configurações → Aparência');
+    expect(guide).not.toContain('Asaas');
+  });
+
   it('não sugere enviar WhatsApp ou campanha diretamente pelo chat', () => {
     const guide = getSofiaOperationalGuidance('Como faço um post e envio WhatsApp para clientes?');
 

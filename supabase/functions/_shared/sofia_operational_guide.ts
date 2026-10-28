@@ -135,10 +135,21 @@ As avaliações “útil” e “não ajudou” são registros para revisão hum
 ];
 
 const broadQuestion = /\b(tudo|todas as funcoes|todas as funcionalidades|sistema inteiro|plataforma inteira|primeiro dia|iniciante|ensinar|ensina|ensine|ensinando|treinar|treina|treine|treinamento|treinamento completo|guia completo|por onde comeco|como comeco|comecar do zero|do zero)\b/;
+const visitorStartQuestion = /\b(iniciante|comecar|comeco|criar|minha loja|nova loja|primeiro dia|passo a passo|do zero|ainda nao tenho loja|nao tenho loja)\b/;
 
-export function getSofiaOperationalGuidance(question: string): string {
+const visitorOnboarding = `## Começar como visitante, sem loja criada
+1. No topo da página, clique em “Quero criar minha loja”; isso leva à seção de contato.
+2. Na seção de contato, escolha o WhatsApp oficial (+55 11 91287-0761) para falar com a equipe, ou “Conversar com a IA” para tirar dúvidas.
+3. Para a primeira mensagem, basta dizer o nome e o tipo do negócio, se já souber. Fotos, catálogo e outros detalhes podem ser organizados depois; não envie senhas, tokens ou dados de pagamento pelo chat.
+4. Combine com a equipe a criação/acesso da loja e o plano. A página pública informa comissão negociada a partir de 5% por venda ou R$ 60/mês; confirme as condições com a equipe.
+
+Não há um cadastro automático confirmado nesta página: não diga “crie sua conta no site” nem passe caminhos do painel antes de a equipe disponibilizar o acesso. Dê uma ação inicial clara e evite listar tarefas administrativas para quem ainda não tem loja.`;
+
+export function getSofiaOperationalGuidance(question: string, role = "merchant"): string {
   const normalizedQuestion = normalize(question || "");
   if (!normalizedQuestion) return navigation;
+
+  if (role === "visitor" && visitorStartQuestion.test(normalizedQuestion)) return visitorOnboarding;
 
   const broad = broadQuestion.test(normalizedQuestion);
   const selected = broad
