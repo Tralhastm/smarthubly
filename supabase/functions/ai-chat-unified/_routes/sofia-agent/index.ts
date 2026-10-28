@@ -267,6 +267,7 @@ import {
   selectRelevantSofiaCases,
   selectRelevantSofiaKnowledge,
   shouldLookupSofiaCases,
+  shouldLookupSofiaOrders,
   shouldLookupSofiaProducts
 } from "../../../_shared/sofia_runtime_knowledge.ts";
 // Helper para streaming da Sofia pública (similar ao da Store)

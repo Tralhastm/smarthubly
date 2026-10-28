@@ -50,6 +50,8 @@ describe('recuperação de dados e conhecimento da Sofia', () => {
     expect(shouldLookupSofiaProducts(broadCatalogRequest)).toBe(true);
     expect(getSofiaProductSearchTerms(broadCatalogRequest)).toEqual([]);
     expect(shouldLookupSofiaProducts('Como funciona a entrega?')).toBe(false);
+    expect(shouldLookupSofiaOrders('oi')).toBe(false);
+    expect(shouldLookupSofiaOrders('Bom dia, tudo bem?')).toBe(false);
     expect(shouldLookupSofiaOrders('Qual o status do pedido #a1b2c3?')).toBe(true);
     expect(shouldLookupSofiaOrders('Como funciona pagamento por Pix?')).toBe(false);
     expect(shouldListRecentSofiaOrders('Mostre os pedidos recentes')).toBe(true);
