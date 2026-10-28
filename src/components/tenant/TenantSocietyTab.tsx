@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +16,8 @@ interface Props { tenantId: string }
 type Scope = 'general' | 'product' | 'variant';
 type AmountType = 'fixed_per_unit' | 'percentage_sale' | 'fixed_per_order';
 type AmountKind = 'percentage' | 'fixed';
+type SplitParticipant = { name: string; percent: number };
+type SplitAllocation = { name: string; percent: number; amount: number };
 
 type CatalogProduct = { id: string; name: string; price: number; original_price?: number | null };
 type CatalogVariant = { id: string; product_id: string; name: string; price_delta?: number | null; cost_price?: number | null };
@@ -26,11 +28,12 @@ type CostRule = {
 type ProfitLine = {
   product_id: string | null; product_name: string; variant_id: string | null; variant_name: string;
   units: number; sale_unit_price: number; sales_total: number; product_cost_total: number;
-  operating_cost_total: number; net_profit: number; owner_share: number; operator_share: number;
+  operating_cost_total: number; net_profit: number; owner_share: number; operator_share: number; split_allocations?: SplitAllocation[];
 };
 type Report = {
   period_start: string; period_end: string; owner_percent: number;
-  summary: { units: number; sales_total: number; product_cost_total: number; operating_cost_total: number; net_profit: number; owner_share: number; operator_share: number };
+  summary: { units: number; sales_total: number; product_cost_total: number; operating_cost_total: number; net_profit: number; owner_share: number; operator_share: number; split_allocations?: SplitAllocation[] };
+  split_allocations?: SplitAllocation[];
   lines: ProfitLine[];
 };
 type Settlement = {
@@ -50,6 +53,7 @@ const amountTypeFor = (kind: AmountKind, scope: Scope): AmountType => kind === '
   ? 'percentage_sale'
   : scope === 'general' ? 'fixed_per_order' : 'fixed_per_unit';
 const amountKindFor = (amountType: AmountType): AmountKind => amountType === 'percentage_sale' ? 'percentage' : 'fixed';
+const defaultSplit: SplitParticipant[] = [{ name: 'Plataforma', percent: 50 }, { name: 'Loja', percent: 50 }];
 
 export default function TenantSocietyTab({ tenantId }: Props) {
   const qc = useQueryClient();
@@ -57,6 +61,7 @@ export default function TenantSocietyTab({ tenantId }: Props) {
   const [periodStart, setPeriodStart] = useState(isoMonthStart);
   const [periodEnd, setPeriodEnd] = useState(isoToday);
   const [selectedSettlement, setSelectedSettlement] = useState<string | null>(null);
+  const [splitDraft, setSplitDraft] = useState<SplitParticipant[]>(defaultSplit);
   const [form, setForm] = useState({
     amountType: 'percentage_sale' as AmountType,
     label: '',
@@ -94,6 +99,20 @@ export default function TenantSocietyTab({ tenantId }: Props) {
       return (data || []) as CostRule[];
     },
   });
+
+  const splitConfigQuery = useQuery({
+    queryKey: ['partnership-split-config', tenantId],
+    enabled: !!tenantId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).rpc('get_partnership_split_config', { _tenant_id: tenantId });
+      if (error) throw error;
+      return (data || defaultSplit) as SplitParticipant[];
+    },
+  });
+
+  useEffect(() => {
+    if (splitConfigQuery.data) setSplitDraft(splitConfigQuery.data.map(participant => ({ name: participant.name, percent: Number(participant.percent) || 0 })));
+  }, [splitConfigQuery.data]);
 
   const reportQuery = useQuery({
     queryKey: ['partnership-profit-report', tenantId, periodStart, periodEnd],
@@ -157,6 +176,29 @@ export default function TenantSocietyTab({ tenantId }: Props) {
     onError: (error: any) => toast.error(error?.message || 'Não foi possível registrar o custo.'),
   });
 
+  const saveSplit = useMutation({
+    mutationFn: async () => {
+      const participants = splitDraft.map(participant => ({ name: participant.name.trim(), percent: Number(participant.percent) || 0 }));
+      if (participants.length < 2) throw new Error('Adicione pelo menos duas pessoas na divisão.');
+      if (participants.some(participant => !participant.name)) throw new Error('Informe o nome de todas as pessoas.');
+      if (participants.some(participant => participant.percent <= 0)) throw new Error('Cada percentual deve ser maior que zero.');
+      const participantNames = participants.map(participant => participant.name.toLocaleLowerCase());
+      if (new Set(participantNames).size !== participantNames.length) throw new Error('Use um nome diferente para cada pessoa.');
+      const total = participants.reduce((sum, participant) => sum + participant.percent, 0);
+      if (Math.abs(total - 100) > 0.01) throw new Error(`A soma dos percentuais deve ser 100%. Atualmente está em ${total.toFixed(2).replace('.', ',')}%.`);
+      const { data, error } = await (supabase as any).rpc('save_partnership_split_config', { _tenant_id: tenantId, _participants: participants });
+      if (error) throw error;
+      return data as SplitParticipant[];
+    },
+    onSuccess: (data) => {
+      setSplitDraft(data);
+      toast.success('Divisão da sociedade atualizada.');
+      qc.invalidateQueries({ queryKey: ['partnership-split-config', tenantId] });
+      qc.invalidateQueries({ queryKey: ['partnership-profit-report', tenantId] });
+    },
+    onError: (error: any) => toast.error(error?.message || 'Não foi possível salvar a divisão.'),
+  });
+
   const createSettlement = useMutation({
     mutationFn: async () => {
       const { data, error } = await (supabase as any).rpc('create_partnership_settlement', {
@@ -199,7 +241,7 @@ export default function TenantSocietyTab({ tenantId }: Props) {
             <div>
               <p className="font-semibold text-foreground">Sociedade — lucro líquido rastreável</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                O sistema usa o preço realmente vendido, o custo do produto/variação cadastrado e os gastos abaixo. O lucro líquido positivo é dividido em 50% para a plataforma e 50% para a loja/sócio. Registros são históricos: para corrigir um gasto, lance uma nova regra.
+                O sistema usa o preço realmente vendido, o custo do produto/variação cadastrado e os gastos abaixo. O lucro líquido positivo é dividido entre as pessoas e percentuais configurados abaixo. Registros são históricos: para corrigir um gasto, lance uma nova regra.
               </p>
             </div>
           </div>
@@ -214,6 +256,16 @@ export default function TenantSocietyTab({ tenantId }: Props) {
         </TabsList>
 
         <TabsContent value="report" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Como dividir o lucro líquido</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">Defina quantas pessoas participam e quanto cada uma recebe. A soma dos percentuais precisa ser exatamente 100%. Esta configuração vale para novas apurações; fechamentos oficiais antigos continuam com o snapshot original.</p>
+              <div className="space-y-2">
+                {splitDraft.map((participant, index) => <div key={`${index}-${participant.name}`} className="flex items-center gap-2"><Input value={participant.name} onChange={e => setSplitDraft(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, name: e.target.value } : item))} placeholder="Nome da pessoa" /><div className="relative w-28 shrink-0"><Input type="number" min="0.01" max="100" step="0.01" value={participant.percent || ''} onChange={e => setSplitDraft(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, percent: Number(e.target.value) } : item))} className="pr-7" /><span className="pointer-events-none absolute right-3 top-2.5 text-sm text-muted-foreground">%</span></div><Button type="button" size="icon" variant="ghost" onClick={() => setSplitDraft(current => current.length > 2 ? current.filter((_, itemIndex) => itemIndex !== index) : current)} disabled={splitDraft.length <= 2} aria-label="Remover participante">×</Button></div>)}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setSplitDraft(current => [...current, { name: `Pessoa ${current.length + 1}`, percent: 0 }])}><Plus className="mr-1.5 h-3.5 w-3.5" /> Adicionar pessoa</Button><span className={`text-xs font-medium ${Math.abs(splitDraft.reduce((sum, participant) => sum + (Number(participant.percent) || 0), 0) - 100) < 0.01 ? 'text-green-500' : 'text-destructive'}`}>Total: {splitDraft.reduce((sum, participant) => sum + (Number(participant.percent) || 0), 0).toFixed(2).replace('.', ',')}%</span><Button size="sm" onClick={() => saveSplit.mutate()} disabled={saveSplit.isPending || splitConfigQuery.isLoading}>{saveSplit.isPending ? 'Salvando...' : 'Salvar divisão'}</Button></div>
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Período da apuração</CardTitle></CardHeader>
             <CardContent className="space-y-3">
@@ -238,7 +290,7 @@ export default function TenantSocietyTab({ tenantId }: Props) {
                 <Metric title="Vendas" value={money(report.summary.sales_total)} tone="text-foreground" />
                 <Metric title="Custos totais" value={money(report.summary.product_cost_total + report.summary.operating_cost_total)} tone="text-red-400" />
                 <Metric title="Lucro líquido" value={money(report.summary.net_profit)} tone={report.summary.net_profit >= 0 ? 'text-green-400' : 'text-red-400'} />
-                <Metric title="Sua parte (50%)" value={money(report.summary.owner_share)} tone="text-primary" />
+                {(report.summary.split_allocations || []).map(participant => <Metric key={participant.name} title={`${participant.name} (${Number(participant.percent).toFixed(2).replace('.', ',')}%)`} value={money(participant.amount)} tone="text-primary" />)}
               </div>
               <Card>
                 <CardHeader className="pb-3"><CardTitle className="text-base">Resultado por produto e variação</CardTitle></CardHeader>
@@ -246,11 +298,11 @@ export default function TenantSocietyTab({ tenantId }: Props) {
                   {report.lines.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">Nenhuma venda entregue no período.</p> : (
                     <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-xs">
                       <thead className="bg-muted/50"><tr>
-                        <th className="p-2 text-left">Produto / variação</th><th className="p-2 text-right">Qtd.</th><th className="p-2 text-right">Vendas</th><th className="p-2 text-right">Custo produto</th><th className="p-2 text-right">Gastos</th><th className="p-2 text-right">Lucro líquido</th><th className="p-2 text-right">Sua parte</th><th className="p-2 text-right">Loja</th>
+                        <th className="p-2 text-left">Produto / variação</th><th className="p-2 text-right">Qtd.</th><th className="p-2 text-right">Vendas</th><th className="p-2 text-right">Custo produto</th><th className="p-2 text-right">Gastos</th><th className="p-2 text-right">Lucro líquido</th><th className="p-2 text-right">Divisão</th>
                       </tr></thead>
                       <tbody>{report.lines.map((line, index) => <tr key={`${line.product_id || line.product_name}-${line.variant_id || index}`} className="border-t">
                         <td className="p-2"><div className="font-medium text-foreground">{line.product_name}</div><div className="text-muted-foreground">{line.variant_name || 'Base'} · preço médio {money(line.sale_unit_price)}</div></td>
-                        <td className="p-2 text-right">{line.units}</td><td className="p-2 text-right">{money(line.sales_total)}</td><td className="p-2 text-right text-red-400">{money(line.product_cost_total)}</td><td className="p-2 text-right text-red-400">{money(line.operating_cost_total)}</td><td className={`p-2 text-right font-semibold ${line.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{money(line.net_profit)}</td><td className="p-2 text-right font-semibold text-primary">{money(line.owner_share)}</td><td className="p-2 text-right font-semibold text-foreground">{money(line.operator_share)}</td>
+                        <td className="p-2 text-right">{line.units}</td><td className="p-2 text-right">{money(line.sales_total)}</td><td className="p-2 text-right text-red-400">{money(line.product_cost_total)}</td><td className="p-2 text-right text-red-400">{money(line.operating_cost_total)}</td><td className={`p-2 text-right font-semibold ${line.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{money(line.net_profit)}</td><td className="p-2 text-right"><div className="space-y-1">{(line.split_allocations || []).map(participant => <div key={participant.name}><span className="text-muted-foreground">{participant.name}:</span> <strong>{money(participant.amount)}</strong></div>)}</div></td>
                       </tr>)}</tbody>
                     </table></div>
                   )}
@@ -283,7 +335,7 @@ export default function TenantSocietyTab({ tenantId }: Props) {
 
         <TabsContent value="history" className="mt-4 space-y-3">
           <Card><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><WalletCards className="h-4 w-4 text-primary" /> Fechamentos oficiais</CardTitle></CardHeader><CardContent><p className="text-xs text-muted-foreground">Cada fechamento guarda um snapshot dos produtos, variações, custos e divisão daquele período. Não há botão de apagar ou editar.</p></CardContent></Card>
-          {settlementsLoading ? <p className="py-6 text-center text-sm text-muted-foreground">Carregando histórico...</p> : settlements.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhum fechamento oficial ainda.</p> : settlements.map(settlement => <Card key={settlement.id} className={selectedSettlement === settlement.id ? 'border-primary/60' : ''}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-foreground">{dateBR(settlement.period_start)} a {dateBR(settlement.period_end)}</p><p className="text-[11px] text-muted-foreground">Criado em {new Date(settlement.created_at).toLocaleString('pt-BR')}</p></div><Badge variant={settlement.status === 'received' ? 'default' : 'secondary'}>{settlement.status === 'received' ? 'Recebido' : 'Aguardando recebimento'}</Badge></div><div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"><div><span className="text-[11px] text-muted-foreground">Vendas</span><p className="font-semibold">{money(settlement.sales_total)}</p></div><div><span className="text-[11px] text-muted-foreground">Lucro líquido</span><p className={`font-semibold ${settlement.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{money(settlement.net_profit)}</p></div><div><span className="text-[11px] text-muted-foreground">Sua parte</span><p className="font-semibold text-primary">{money(settlement.owner_share)}</p></div><div><span className="text-[11px] text-muted-foreground">Parte da loja</span><p className="font-semibold">{money(settlement.operator_share)}</p></div></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setSelectedSettlement(selectedSettlement === settlement.id ? null : settlement.id)}>{selectedSettlement === settlement.id ? 'Ocultar snapshot' : 'Ver snapshot'}</Button>{settlement.status === 'open' && (isSuperAdmin ? <Button size="sm" onClick={() => receiveSettlement.mutate(settlement.id)} disabled={receiveSettlement.isPending}><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Marcar como recebido</Button> : <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1.5 text-[11px] text-muted-foreground"><LockKeyhole className="h-3 w-3" /> Só o Super Admin marca recebido</span>)}</div>{selectedSettlement === settlement.id && <div className="overflow-x-auto rounded-md border"><table className="w-full min-w-[700px] text-xs"><thead className="bg-muted/50"><tr><th className="p-2 text-left">Produto / variação</th><th className="p-2 text-right">Vendas</th><th className="p-2 text-right">Custos</th><th className="p-2 text-right">Lucro</th><th className="p-2 text-right">Sua parte</th></tr></thead><tbody>{(settlement.snapshot?.lines || []).map((line, index) => <tr key={`${line.product_name}-${index}`} className="border-t"><td className="p-2">{line.product_name} · {line.variant_name}</td><td className="p-2 text-right">{money(line.sales_total)}</td><td className="p-2 text-right text-red-400">{money(line.product_cost_total + line.operating_cost_total)}</td><td className="p-2 text-right">{money(line.net_profit)}</td><td className="p-2 text-right text-primary">{money(line.owner_share)}</td></tr>)}</tbody></table></div>}</CardContent></Card>)}
+          {settlementsLoading ? <p className="py-6 text-center text-sm text-muted-foreground">Carregando histórico...</p> : settlements.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">Nenhum fechamento oficial ainda.</p> : settlements.map(settlement => <Card key={settlement.id} className={selectedSettlement === settlement.id ? 'border-primary/60' : ''}><CardContent className="space-y-3 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-foreground">{dateBR(settlement.period_start)} a {dateBR(settlement.period_end)}</p><p className="text-[11px] text-muted-foreground">Criado em {new Date(settlement.created_at).toLocaleString('pt-BR')}</p></div><Badge variant={settlement.status === 'received' ? 'default' : 'secondary'}>{settlement.status === 'received' ? 'Recebido' : 'Aguardando recebimento'}</Badge></div><div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"><div><span className="text-[11px] text-muted-foreground">Vendas</span><p className="font-semibold">{money(settlement.sales_total)}</p></div><div><span className="text-[11px] text-muted-foreground">Lucro líquido</span><p className={`font-semibold ${settlement.net_profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>{money(settlement.net_profit)}</p></div><div><span className="text-[11px] text-muted-foreground">Sua parte</span><p className="font-semibold text-primary">{money(settlement.owner_share)}</p></div><div><span className="text-[11px] text-muted-foreground">Parte da loja</span><p className="font-semibold">{money(settlement.operator_share)}</p></div></div>{(settlement.snapshot?.summary.split_allocations || []).length > 0 && <div className="flex flex-wrap gap-2 rounded-md bg-muted/40 p-2 text-xs">{(settlement.snapshot?.summary.split_allocations || []).map(participant => <span key={participant.name}><strong>{participant.name}</strong> ({Number(participant.percent).toFixed(2).replace('.', ',')}%): {money(participant.amount)}</span>)}</div>}<div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setSelectedSettlement(selectedSettlement === settlement.id ? null : settlement.id)}>{selectedSettlement === settlement.id ? 'Ocultar snapshot' : 'Ver snapshot'}</Button>{settlement.status === 'open' && (isSuperAdmin ? <Button size="sm" onClick={() => receiveSettlement.mutate(settlement.id)} disabled={receiveSettlement.isPending}><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Marcar como recebido</Button> : <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1.5 text-[11px] text-muted-foreground"><LockKeyhole className="h-3 w-3" /> Só o Super Admin marca recebido</span>)}</div>{selectedSettlement === settlement.id && <div className="overflow-x-auto rounded-md border"><table className="w-full min-w-[700px] text-xs"><thead className="bg-muted/50"><tr><th className="p-2 text-left">Produto / variação</th><th className="p-2 text-right">Vendas</th><th className="p-2 text-right">Custos</th><th className="p-2 text-right">Lucro</th><th className="p-2 text-right">Divisão</th></tr></thead><tbody>{(settlement.snapshot?.lines || []).map((line, index) => <tr key={`${line.product_name}-${index}`} className="border-t"><td className="p-2">{line.product_name} · {line.variant_name}</td><td className="p-2 text-right">{money(line.sales_total)}</td><td className="p-2 text-right text-red-400">{money(line.product_cost_total + line.operating_cost_total)}</td><td className="p-2 text-right">{money(line.net_profit)}</td><td className="p-2 text-right"><div className="space-y-1">{(line.split_allocations || []).map(participant => <div key={participant.name}><span className="text-muted-foreground">{participant.name}:</span> {money(participant.amount)}</div>)}</div></td></tr>)}</tbody></table></div>}</CardContent></Card>)}
         </TabsContent>
       </Tabs>
     </div>
