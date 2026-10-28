@@ -255,6 +255,7 @@ async function applyPlan(admin, plan, tenantId, opts) {
 import { PLATFORM_KNOWLEDGE } from "../../../_shared/platform_knowledge.ts";
 import { getSofiaOperationalGuidance } from "../../../_shared/sofia_operational_guide.ts";
 import { getSofiaSourceEvidence } from "../../../_shared/sofia_source_catalog.ts";
+import { searchSofiaRepository } from "../../../_shared/sofia_repository_reader.ts";
 import {
   calculateSofiaVariantSalePrice,
   getSofiaLowestInStockVariantPrice,
@@ -518,6 +519,7 @@ async function trySofiaPublicStream(messages, role, admin, liveContext = "", ten
   liveContext = `${databaseContext}${liveContext}`;
   const operationalGuidance = getSofiaOperationalGuidance(userQuestion, role);
   const sourceEvidence = getSofiaSourceEvidence(userQuestion);
+  const repositoryEvidence = await searchSofiaRepository(userQuestion);
   const systemPrompt = `Você é a **Sofia**, a assistente inteligente da plataforma SmartHubly.
 Sua missão é ajudar visitantes a entenderem a plataforma, lojistas a gerenciarem seus negócios e interessados a criarem suas próprias lojas.
 
@@ -536,6 +538,10 @@ ${operationalGuidance}
 # EVIDÊNCIA READ-ONLY DO CÓDIGO-FONTE
 ${sourceEvidence}
 Use esta evidência como fonte prioritária para caminhos, botões e efeitos. Ela é somente leitura: não execute escrita, não afirme que consultou o código ao usuário como se tivesse feito uma ação externa e não extrapole além do que a evidência confirma. Se vier “NENHUMA EVIDÊNCIA”, diga que não conseguiu confirmar o detalhe e peça uma captura de tela ou encaminhe para Suporte & Treino.
+
+# BUSCA REAL NO REPOSITÓRIO VERSIONADO — SOMENTE LEITURA
+${repositoryEvidence}
+O repositório acima foi apenas lido e pesquisado. Nunca execute, proponha ou simule alterações no código, banco ou infraestrutura a partir dessa busca. Use trechos reais para confirmar nomes e efeitos; se a busca estiver indisponível ou não encontrar correspondência, admita o limite em vez de completar a lacuna.
 
 # REGRAS
 1. Se o usuário quiser criar uma loja, direcione para “Quero criar minha loja” e depois para o WhatsApp oficial ou “Conversar com a IA” na seção de contato. Para role visitor, não afirme que há cadastro automático nem invente uma conta no site; não passe caminhos internos do painel antes que o acesso exista. Informe os preços públicos confirmados (a partir de 5% por venda ou R$ 60/mês) e não invente domínio/formato de URL: diga que a equipe confirma o link. Responda em até quatro passos curtos; para preparativos, cite apenas nome e tipo do negócio como opcionais. Diga explicitamente que fotos, catálogo, preços e pagamentos podem ficar para depois do acesso; não liste esses itens como tarefas prévias.
