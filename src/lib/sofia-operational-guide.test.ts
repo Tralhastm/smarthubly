@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getSofiaOperationalGuidance } from '../../supabase/functions/_shared/sofia_operational_guide';
 import { getSofiaSourceEvidence } from '../../supabase/functions/_shared/sofia_source_catalog';
+import { getSofiaTrustedMessages } from '../../supabase/functions/_shared/sofia_prompt_messages';
 
 describe('guia operacional da Sofia', () => {
   it('entrega caminho financeiro correto e separa lucro de saldo bancário', () => {
@@ -103,6 +104,21 @@ describe('guia operacional da Sofia', () => {
     expect(exportEvidence).toContain('CSV/Excel não são botões confirmados');
     expect(descriptionEvidence).toContain('Gerar descrições em massa');
     expect(descriptionEvidence).toContain('Iniciar geração');
+  });
+
+  it('remove respostas antigas da Sofia do contexto enviado ao modelo', () => {
+    const trusted = getSofiaTrustedMessages([
+      { role: 'user', content: 'Onde ficam os produtos?' },
+      { role: 'assistant', content: 'Resposta antiga errada: esse botão não existe.' },
+      { role: 'user', content: 'Como exporto o catálogo?' },
+      { role: 'assistant', content: 'Resposta antiga errada: use CSV.' },
+    ], 'fallback');
+
+    expect(trusted).toEqual([
+      { role: 'user', content: 'Onde ficam os produtos?' },
+      { role: 'user', content: 'Como exporto o catálogo?' },
+    ]);
+    expect(trusted.some((message) => message.content.includes('Resposta antiga'))).toBe(false);
   });
 
   it('inclui regras de dados atuais, resolução com evidência e feedback supervisionado', () => {
