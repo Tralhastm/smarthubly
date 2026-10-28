@@ -15,6 +15,7 @@ interface Props { tenantId: string }
 
 type Scope = 'general' | 'product' | 'variant';
 type AmountType = 'fixed_per_unit' | 'percentage_sale' | 'fixed_per_order';
+type AmountKind = 'percentage' | 'fixed';
 
 type CatalogProduct = { id: string; name: string; price: number; original_price?: number | null };
 type CatalogVariant = { id: string; product_id: string; name: string; price_delta?: number | null; cost_price?: number | null };
@@ -43,12 +44,12 @@ const dateBR = (value?: string | null) => value ? new Date(`${value.slice(0, 10)
 const isoToday = () => new Date().toISOString().slice(0, 10);
 const isoMonthStart = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; };
 
-const amountTypeLabel: Record<AmountType, string> = {
-  fixed_per_unit: 'R$ por unidade vendida',
-  percentage_sale: '% sobre a venda',
-  fixed_per_order: 'R$ por pedido (rateado pelos itens)',
-};
 const scopeLabel: Record<Scope, string> = { general: 'Geral', product: 'Produto', variant: 'Variação' };
+const amountKindLabel: Record<AmountKind, string> = { percentage: 'Percentual (%)', fixed: 'Valor fixo (R$)' };
+const amountTypeFor = (kind: AmountKind, scope: Scope): AmountType => kind === 'percentage'
+  ? 'percentage_sale'
+  : scope === 'general' ? 'fixed_per_order' : 'fixed_per_unit';
+const amountKindFor = (amountType: AmountType): AmountKind => amountType === 'percentage_sale' ? 'percentage' : 'fixed';
 
 export default function TenantSocietyTab({ tenantId }: Props) {
   const qc = useQueryClient();
@@ -57,12 +58,11 @@ export default function TenantSocietyTab({ tenantId }: Props) {
   const [periodEnd, setPeriodEnd] = useState(isoToday);
   const [selectedSettlement, setSelectedSettlement] = useState<string | null>(null);
   const [form, setForm] = useState({
+    amountType: 'percentage_sale' as AmountType,
+    label: '',
     scope: 'general' as Scope,
     productId: '',
     variantId: '',
-    category: 'operacional',
-    label: '',
-    amountType: 'fixed_per_unit' as AmountType,
     amount: '',
   });
 
@@ -133,15 +133,15 @@ export default function TenantSocietyTab({ tenantId }: Props) {
     mutationFn: async () => {
       const amount = Number(form.amount.replace(',', '.'));
       if (!form.label.trim()) throw new Error('Informe o nome do gasto.');
-      if (!amount || amount < 0) throw new Error('Informe um valor válido.');
-      if (form.scope === 'product' && !form.productId) throw new Error('Escolha o produto.');
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error('Informe um valor maior que zero.');
+      if ((form.scope === 'product' || form.scope === 'variant') && !form.productId) throw new Error('Escolha o produto.');
       if (form.scope === 'variant' && !form.variantId) throw new Error('Escolha a variação.');
       const { error } = await supabase.from('partnership_cost_rules' as any).insert({
         tenant_id: tenantId,
         scope: form.scope,
         product_id: form.scope === 'general' ? null : form.productId || null,
         variant_id: form.scope === 'variant' ? form.variantId : null,
-        category: form.category.trim() || 'operacional',
+        category: 'personalizado',
         label: form.label.trim(),
         amount_type: form.amountType,
         amount,
@@ -149,8 +149,8 @@ export default function TenantSocietyTab({ tenantId }: Props) {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success('Custo registrado. O histórico não pode ser apagado pelo painel.');
-      setForm({ scope: 'general', productId: '', variantId: '', category: 'operacional', label: '', amountType: 'fixed_per_unit', amount: '' });
+      toast.success('Gasto adicionado ao histórico da sociedade.');
+      setForm({ amountType: 'percentage_sale', label: '', scope: 'general', productId: '', variantId: '', amount: '' });
       qc.invalidateQueries({ queryKey: ['partnership-cost-rules', tenantId] });
       qc.invalidateQueries({ queryKey: ['partnership-profit-report', tenantId] });
     },
@@ -186,6 +186,8 @@ export default function TenantSocietyTab({ tenantId }: Props) {
   });
 
   const variantsForProduct = useMemo(() => catalog.variants.filter(v => v.product_id === form.productId), [catalog.variants, form.productId]);
+  const productName = (productId: string | null | undefined) => catalog.products.find(product => product.id === productId)?.name || 'Produto não encontrado';
+  const variantName = (variantId: string | null) => catalog.variants.find(variant => variant.id === variantId)?.name || 'Variação não encontrada';
   const report = reportQuery.data;
 
   return (
@@ -261,22 +263,21 @@ export default function TenantSocietyTab({ tenantId }: Props) {
 
         <TabsContent value="rules" className="mt-4 space-y-4">
           <Card>
-            <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><Plus className="h-4 w-4 text-primary" /> Registrar gasto da sociedade</CardTitle></CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><Plus className="h-4 w-4 text-primary" /> Adicionar gasto da sociedade</CardTitle></CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1"><Label>Aplicação</Label><select value={form.scope} onChange={e => setForm({ ...form, scope: e.target.value as Scope, productId: '', variantId: '' })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="general">Geral da loja</option><option value="product">Produto específico</option><option value="variant">Variação específica</option></select></div>
-                <div className="space-y-1"><Label>Categoria</Label><Input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} placeholder="checkout, motoboy, desconto..." /></div>
-              </div>
-              {form.scope !== 'general' && <div className="space-y-1"><Label>Produto</Label><select value={form.productId} onChange={e => setForm({ ...form, productId: e.target.value, variantId: '' })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecione</option>{catalog.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
-              {form.scope === 'variant' && <div className="space-y-1"><Label>Variação</Label><select value={form.variantId} onChange={e => setForm({ ...form, variantId: e.target.value })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecione</option>{variantsForProduct.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></div>}
-              <div className="grid gap-3 sm:grid-cols-2"><div className="space-y-1"><Label>Nome do gasto</Label><Input value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} placeholder="Taxa do checkout" /></div><div className="space-y-1"><Label>Como calcular</Label><select value={form.amountType} onChange={e => setForm({ ...form, amountType: e.target.value as AmountType })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">{Object.entries(amountTypeLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div></div>
-              <div className="flex gap-2"><div className="relative flex-1"><span className="pointer-events-none absolute left-3 top-2.5 text-sm text-muted-foreground">{form.amountType === 'percentage_sale' ? '%' : 'R$'}</span><Input className="pl-9" type="number" min="0" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="0,00" /></div><Button onClick={() => addRule.mutate()} disabled={addRule.isPending}>{addRule.isPending ? 'Registrando...' : 'Registrar'}</Button></div>
-              <div className="flex items-start gap-2 rounded-md bg-muted/40 p-2 text-[11px] text-muted-foreground"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />Se houver gasto geral, de produto e de variação na mesma categoria, o sistema usa o mais específico. Um lançamento novo substitui o anterior apenas nos cálculos futuros; o histórico continua intacto.</div>
+              <div className="space-y-1"><Label>1. Tipo do gasto</Label><select value={amountKindFor(form.amountType)} onChange={e => { const kind = e.target.value as AmountKind; setForm({ ...form, amountType: amountTypeFor(kind, form.scope) }); }} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="percentage">{amountKindLabel.percentage}</option><option value="fixed">{amountKindLabel.fixed}</option></select></div>
+              <div className="space-y-1"><Label>2. Nome do gasto</Label><Input value={form.label} onChange={e => setForm({ ...form, label: e.target.value })} placeholder="Taxa do checkout, motoboy, embalagem..." /></div>
+              <div className="space-y-1"><Label>3. Onde esse gasto se aplica?</Label><select value={form.scope} onChange={e => { const scope = e.target.value as Scope; setForm({ ...form, scope, productId: '', variantId: '', amountType: amountTypeFor(amountKindFor(form.amountType), scope) }); }} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="general">Todas as vendas / gasto geral da loja</option><option value="product">Um produto específico</option><option value="variant">Uma variação específica</option></select></div>
+              {form.scope !== 'general' && <div className="space-y-1"><Label>Produto</Label><select value={form.productId} onChange={e => setForm({ ...form, productId: e.target.value, variantId: '' })} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecione um produto</option>{catalog.products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>}
+              {form.scope === 'variant' && <div className="space-y-1"><Label>Variação</Label><select value={form.variantId} onChange={e => setForm({ ...form, variantId: e.target.value })} disabled={!form.productId} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="">Selecione uma variação</option>{variantsForProduct.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}</select></div>}
+              <div className="space-y-1"><Label>Valor do gasto</Label><div className="flex gap-2"><div className="relative flex-1"><span className="pointer-events-none absolute left-3 top-2.5 text-sm text-muted-foreground">{form.amountType === 'percentage_sale' ? '%' : 'R$'}</span><Input className="pl-9" type="text" inputMode="decimal" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} placeholder="0,00" /></div><Button onClick={() => addRule.mutate()} disabled={addRule.isPending}>{addRule.isPending ? 'Adicionando...' : 'Adicionar gasto'}</Button></div></div>
+              <p className="text-xs text-muted-foreground">Cadastre quantos gastos forem necessários, cada um com seu próprio nome. Para corrigir um gasto, faça um novo lançamento; os fechamentos antigos permanecem imutáveis.</p>
+              <div className="flex items-start gap-2 rounded-md bg-muted/40 p-2 text-[11px] text-muted-foreground"><AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />O sistema calcula automaticamente se o valor fixo será aplicado por pedido ou por unidade, conforme o escopo escolhido.</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-base">Histórico de gastos — somente inclusão</CardTitle></CardHeader>
-            <CardContent>{rulesLoading ? <p className="py-4 text-center text-sm text-muted-foreground">Carregando...</p> : rules.length === 0 ? <p className="py-4 text-center text-sm text-muted-foreground">Nenhum gasto configurado.</p> : <div className="space-y-2">{rules.map(rule => <div key={rule.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div><p className="font-medium text-sm text-foreground">{rule.label}</p><p className="text-[11px] text-muted-foreground">{rule.category} · {scopeLabel[rule.scope]} · {amountTypeLabel[rule.amount_type]} · {dateBR(rule.created_at)}</p></div><span className="font-semibold text-red-400">{rule.amount_type === 'percentage_sale' ? `${Number(rule.amount).toFixed(2).replace('.', ',')}%` : money(rule.amount)}</span></div>)}</div>}</CardContent>
+            <CardContent>{rulesLoading ? <p className="py-4 text-center text-sm text-muted-foreground">Carregando...</p> : rules.length === 0 ? <p className="py-4 text-center text-sm text-muted-foreground">Nenhum gasto configurado.</p> : <div className="space-y-2">{rules.map(rule => <div key={rule.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"><div><p className="font-medium text-sm text-foreground">{rule.label}</p><p className="text-[11px] text-muted-foreground">{rule.amount_type === 'percentage_sale' ? 'Percentual (%)' : 'Valor fixo (R$)'} · {scopeLabel[rule.scope]}{rule.scope === 'product' && rule.product_id ? ` · ${productName(rule.product_id)}` : ''}{rule.scope === 'variant' && rule.variant_id ? ` · ${productName(rule.product_id)} / ${variantName(rule.variant_id)}` : ''} · {dateBR(rule.created_at)}</p></div><span className="font-semibold text-red-400">{rule.amount_type === 'percentage_sale' ? `${Number(rule.amount).toFixed(2).replace('.', ',')}%` : money(rule.amount)}</span></div>)}</div>}</CardContent>
           </Card>
         </TabsContent>
 
