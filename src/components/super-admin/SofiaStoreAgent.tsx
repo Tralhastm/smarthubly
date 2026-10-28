@@ -9,10 +9,6 @@ import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
 // Agora unificado: ai-chat-unified/sofia-agent/{plan,plans,apply,rollback,plan-detail,retry-images}
 
-// Detecta intenção de aplicar direto: "aplica", "aplica tudo", "faz e aplica", "aplica ja"
-const wantsAutoApply = (text: string): boolean =>
-  /\baplica\b/i.test(text) || /\baplicar\b/i.test(text) || /\bj\s*[aá]\s+aplica/i.test(text) || /faz\s+e\s+aplica/i.test(text);
-
 type PlanItem = {
   id: string;
   newName?: string;
@@ -89,7 +85,8 @@ const SofiaStoreAgent = ({ tenantId, tenantName }: { tenantId: string; tenantNam
     setCurrent(null);
     setDetails(null);
     try {
-      const data = await invoke('plan', { tenantId, messages: [{ role: 'user', content: text }], autoApply: wantsAutoApply(text) });
+      // Toda solicitação começa como plano pendente. Aplicação somente pelo botão explícito.
+      const data = await invoke('plan', { tenantId, messages: [{ role: 'user', content: text }] });
       setCurrent(data);
       toast.success(data.status === 'applied' ? 'Sofia aplicou as mudanças direto!' : 'Sofia montou o plano! Revise antes de aplicar.');
       await loadPlans();

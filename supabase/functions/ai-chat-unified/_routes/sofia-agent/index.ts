@@ -862,33 +862,13 @@ Responda apenas com o JSON do plano. Produtos com imagem faltando e visíveis na
         status: "pending"
       }).select("id").single();
       if (planErr) throw planErr;
-      const autoApply = Boolean(body?.autoApply);
-      let applyResult = null;
-      if (autoApply) {
-        const { applied, errors } = await applyPlan(admin, safePlan, tenantId);
-        await admin.from("store_agent_plans").update({
-          status: applied.length > 0 ? "applied" : "failed",
-          applied_by: userId,
-          applied_at: new Date().toISOString(),
-          snapshot_after: {
-            applied,
-            errors
-          }
-        }).eq("id", planRow.id);
-        applyResult = {
-          applied,
-          errors
-        };
-      }
       return json({
         planId: planRow.id,
         rationale: safePlan.rationale,
         tenantChanges: safePlan.tenantChanges,
         productChanges: safePlan.productChanges,
-        status: applyResult ? applyResult.applied.length > 0 ? "applied" : "failed" : "pending",
-        applied: applyResult?.applied,
-        errors: applyResult?.errors,
-        message: applyResult ? applyResult.applied.length > 0 ? `Aplicado direto! ${applyResult.applied.length} mudança(s) na sua loja. Recarregue a loja para ver.` : "Nada foi aplicado — verifique os erros." : "Plano pronto! Revise abaixo e toque em APLICAR quando aprovar."
+        status: "pending",
+        message: "Plano pronto! Revise abaixo e toque em APLICAR quando aprovar."
       });
     }
     if ((path === "plans" || path === "plan-detail") && method === "POST") {
