@@ -74,6 +74,16 @@ describe('guia operacional da Sofia', () => {
     expect(guide).toContain('A Sofia não envia a campanha pelo chat');
   });
 
+  it('orienta ocultação de esgotados pelo botão real de Produtos, não por Automações', () => {
+    const guide = getSofiaOperationalGuidance('Como deixo os produtos esgotados ocultos do catálogo do cliente?');
+
+    expect(guide).toContain('Catálogo → Produtos');
+    expect(guide).toContain('Ocultar indisponíveis');
+    expect(guide).toContain('store_visible=false');
+    expect(guide).toContain('não invente um seletor em Configurações → Automações');
+    expect(guide).toContain('não prometa ocultação automática sempre que o estoque zerar');
+  });
+
   it('inclui regras de dados atuais, resolução com evidência e feedback supervisionado', () => {
     const productGuide = getSofiaOperationalGuidance('Como vejo o preço atual do produto com variantes?');
     const troubleshootingGuide = getSofiaOperationalGuidance('Deu erro e não consigo concluir o pedido; como resolver?');
