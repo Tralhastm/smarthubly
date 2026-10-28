@@ -63,16 +63,16 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
       idempotencyKey = `billing-test-${recipientEmail}-${Date.now()}`;
     }
 
-    const { data, error } = await supabase.functions.invoke("send-transactional-email", {
-      body: {
-        templateName: "billing-invoice",
-        recipientEmail,
-        idempotencyKey,
-        templateData,
+    const transactionalResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/notify-unified/send-transactional`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
       },
+      body: JSON.stringify({ templateName: "billing-invoice", recipientEmail, idempotencyKey, templateData }),
     });
-
-    if (error) throw error;
+    const data = await transactionalResponse.json().catch(() => ({}));
+    if (!transactionalResponse.ok) throw new Error(data?.error || `Falha no envio transacional (${transactionalResponse.status})`);
     if ((data as any)?.error) throw new Error((data as any).error);
 
     return new Response(JSON.stringify({ success: true, to: recipientEmail, ...data }), {

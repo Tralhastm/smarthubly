@@ -54,19 +54,16 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
 
     const idempotencyKey = `credit-${credit_account_id}-${(acc.reminders_sent || 0) + 1}-${Date.now()}`;
 
-    const { data: sendResp, error: sendErr } = await supabase.functions.invoke(
-      "send-transactional-email",
-      {
-        body: {
-          templateName: "credit-reminder",
-          recipientEmail: recipient,
-          idempotencyKey,
-          templateData,
-        },
-      }
-    );
-
-    if (sendErr) throw sendErr;
+    const transactionalResponse = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/notify-unified/send-transactional`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      },
+      body: JSON.stringify({ templateName: "credit-reminder", recipientEmail: recipient, idempotencyKey, templateData }),
+    });
+    const sendResp = await transactionalResponse.json().catch(() => ({}));
+    if (!transactionalResponse.ok) throw new Error(sendResp?.error || `Falha no envio transacional (${transactionalResponse.status})`);
     if ((sendResp as any)?.error) throw new Error((sendResp as any).error);
 
     // Atualizar contador (apenas se não foi teste)
