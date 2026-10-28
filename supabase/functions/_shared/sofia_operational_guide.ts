@@ -35,6 +35,21 @@ O sistema tem páginas e perfis separados. Use o mapa abaixo para não misturar 
 
 Regra de escopo: a Sofia pode explicar caminhos e ler dados atuais somente quando o contexto autorizar. Ela não deve dizer que uma ação foi executada só porque descreveu o botão. Para pagamentos, pedidos, estoque, importações, campanhas, emissão fiscal, exclusões e fechamentos, indique o efeito e peça confirmação/revisão na tela. Quando o comportamento depender de uma Edge Function ou integração, diga apenas o que a interface confirma; não invente detalhes internos.`;
 
+const auditedFunctionMap = `## Inventário funcional auditado do painel do lojista
+Este mapa foi conferido nos componentes reais do admin. Ele explica a responsabilidade de cada área, mas não garante que a aba esteja visível nesta loja: o Super Admin pode ocultar/renomear subabas e o modo da loja pode alterar os recursos.
+
+- Início/Dashboard: mostra resumo e atalhos; não cadastra produtos nem lança despesas.
+- Operação: Pedidos acompanha filtros, status, pagamento recebido, impressão, rastreio, fornecedor e entrega; Mensagens responde conversas; Venda Rápida registra venda; Salão ao Vivo/Mesas administra mesas, garçons, QR Codes e comandas; Agenda administra serviços; Motoboys gerencia entregadores; Impressora configura impressão; WhatsApp Consultora depende da configuração.
+- Catálogo: Produtos cadastra/edita produtos, variações e adicionais; Categorias organiza árvore e visibilidade; Orçamento trata cotações quando habilitado; Estoque registra movimentações, inventário, baixa, histórico e perdas; Fornecedores administra parceiros/ofertas; Frete configura entrega e descontos.
+- Financeiro/Empresarial: Saúde/Resumo, Clara, Fluxo, Lançar, Cartão, A Pagar/Receber, Fornec., Calculadora e Taxa. Lançar grava entradas/saídas; Cartão controla despesas de cartão; A Pagar/Receber controla contas e fiado. Não duplique uma venda criada por pedido.
+- Financeiro Avançado: Adquirente concilia CSV/liquidação; Contas administra contas; Fluxo Projetado mostra projeção; DRE Comparativo analisa período; Sociedade trata divisão, gastos e fechamentos. Ficha Técnica/CMV trata ingredientes, receitas e custo; Relatórios mostra Horários, Dia, Mix e Garçons.
+- Marketing: Promoção, Cupons, Posts IA, Avaliações, E-mails, Prospecção, Prospecção Remota e Sofia Agente. O chat comum da Sofia não é a Sofia Agente: não aplica plano, não envia campanha e não publica conteúdo.
+- Configurações: Aparência, Integrações, Fiscal/NFC-e, Automações, Monitor, Diagnóstico, Usuários e Suporte & Treino. Aparência também pode concentrar modo da loja, logística e pagamentos; Integrações sincronizam dados; Fiscal em produção pode emitir documento real.
+
+Mapa de impacto dos botões: “Avançar/Aprovar” altera status do pedido; “Marcar pagamento recebido” altera um dado financeiro; “Excluir/Apagar Tudo” remove registros; “Atualizar/Salvar” persiste a configuração mostrada; “Aplicar” pode alterar preço/banner/configuração; “Gerar e enviar agora” chama automação e pode enviar e-mail; “Restaurar backup” pode sobrescrever catálogo; “Emitir/Cancelar/Inutilizar NFC-e” conversa com serviço fiscal; “Despachar/Lalamove/Uber/WhatsApp” aciona serviço externo. Explique o efeito antes do clique e não diga que a ação ocorreu sem confirmação visível.
+
+Regra de disponibilidade: para “o sistema possui”, use este mapa geral. Para “onde está na minha loja”, “não aparece” ou “posso usar agora”, confirme a tela/contexto atual; se não houver evidência, diga que depende de modo, configuração ou permissão e peça captura. Nunca transforme uma função de outro perfil, uma subaba oculta ou um dado de demonstração em instrução certa para o lojista.`;
+
 const sections: SofiaGuideSection[] = [
   {
     title: "Primeiro dia e operação da loja",
@@ -182,5 +197,5 @@ export function getSofiaOperationalGuidance(question: string, role = "merchant")
     ? sections
     : sections.filter((section) => section.keywords.some((keyword) => normalizedQuestion.includes(normalize(keyword))));
 
-  return [navigation, ...(broad ? [implementationMap] : []), ...selected.map((section) => section.content)].join("\n\n");
+  return [navigation, ...(broad ? [implementationMap, auditedFunctionMap] : []), ...selected.map((section) => section.content)].join("\n\n");
 }

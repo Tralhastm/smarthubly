@@ -43,6 +43,10 @@ describe('guia operacional da Sofia', () => {
     expect(guide).toContain('/loja/:slug/motoboy/:token');
     expect(guide).toContain('/kds');
     expect(guide).toContain('não devem ser orientadas como se fossem funções comuns do lojista');
+    expect(guide).toContain('## Inventário funcional auditado do painel do lojista');
+    expect(guide).toContain('“Restaurar backup” pode sobrescrever catálogo');
+    expect(guide).toContain('Gerar e enviar agora” chama automação e pode enviar e-mail');
+    expect(guide).toContain('uma subaba oculta ou um dado de demonstração');
   });
 
   it('orienta visitante iniciante pelo fluxo público real, sem fingir que já tem acesso ao painel', () => {
