@@ -3,6 +3,7 @@
 // (excluindo os que estão em email_unsubscribes).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { getAuthUser, isTenantAdmin } from "../../../_shared/auth.ts";
+import { getBrevoApiKey } from "../../../_shared/brevo.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,7 +13,6 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
-const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY")!;
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/brevo";
 
 const SPAM_NOTICE = `<p style="color:#888;font-size:12px;margin-top:24px">Não recebeu algum e-mail nosso? Confira sua caixa de spam ou promoções.</p>`;
@@ -33,6 +33,8 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
     if (!campaignId) return new Response(JSON.stringify({ error: "campaignId required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const supa = createClient(SUPABASE_URL, SERVICE_KEY);
+    const brevoApiKey = await getBrevoApiKey(supa);
+    if (!brevoApiKey) return new Response(JSON.stringify({ error: "Brevo API key not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     const { data: c } = await supa.from("marketing_campaigns").select("*").eq("id", campaignId).single();
     if (!c) return new Response(JSON.stringify({ error: "campaign not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
@@ -86,7 +88,7 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-            "X-Connection-Api-Key": BREVO_API_KEY,
+            "X-Connection-Api-Key": brevoApiKey,
           },
           body: JSON.stringify({
             sender: { name: t.brevo_sender_name || t.name, email: t.brevo_sender_email },

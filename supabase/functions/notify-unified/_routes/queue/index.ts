@@ -1,5 +1,6 @@
 import { sendLovableEmail } from 'npm:@lovable.dev/email-js'
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { getBrevoApiKey } from '../../../_shared/brevo.ts'
 
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
@@ -17,9 +18,9 @@ function parseSender(from: unknown): { name: string; email: string } {
   }
 }
 
-async function sendViaBrevoGateway(payload: Record<string, any>): Promise<void> {
+async function sendViaBrevoGateway(payload: Record<string, any>, supabase: any): Promise<void> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY')
-  const brevoKey = Deno.env.get('BREVO_API_KEY')
+  const brevoKey = await getBrevoApiKey(supabase)
   if (!lovableKey || !brevoKey) {
     await sendLovableEmail(
       {
@@ -305,7 +306,7 @@ export async function queue(req: Request, body?: unknown): Promise<Response> {
       }
 
       try {
-        await sendViaBrevoGateway(payload)
+        await sendViaBrevoGateway(payload, supabase)
 
         // Log success
         await supabase.from('email_send_log').insert({

@@ -6,6 +6,7 @@
 // pra não vazar PII em emails sem opt-in claro).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { getBrevoApiKey } from "../_shared/brevo.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -27,7 +28,7 @@ Deno.serve(async (req) => {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    const BREVO_API_KEY = Deno.env.get("BREVO_API_KEY");
+    const brevoApiKey = await getBrevoApiKey(supa);
     const GATEWAY_URL = "https://connector-gateway.lovable.dev/brevo";
 
     let totalCoupons = 0, totalSuggestions = 0, totalEmails = 0;
@@ -67,7 +68,7 @@ Deno.serve(async (req) => {
         totalSuggestions++;
 
         // Envia e-mail via Brevo se loja configurou
-        if (cart.customer_email && t.marketing_emails_enabled && t.abandoned_cart_email_enabled && t.brevo_sender_email && LOVABLE_API_KEY && BREVO_API_KEY) {
+        if (cart.customer_email && t.marketing_emails_enabled && t.abandoned_cart_email_enabled && t.brevo_sender_email && LOVABLE_API_KEY && brevoApiKey) {
           // checa unsubscribe
           const { data: unsub } = await supa.from("email_unsubscribes").select("id").eq("tenant_id", t.id).eq("email", cart.customer_email.toLowerCase()).maybeSingle();
           if (unsub) continue;
@@ -87,7 +88,7 @@ Deno.serve(async (req) => {
           try {
             const r = await fetch(`${GATEWAY_URL}/smtp/email`, {
               method: "POST",
-              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": BREVO_API_KEY },
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${LOVABLE_API_KEY}`, "X-Connection-Api-Key": brevoApiKey },
               body: JSON.stringify({
                 sender: { name: t.brevo_sender_name || t.name, email: t.brevo_sender_email },
                 to: [{ email: cart.customer_email, name: cart.customer_name || "" }],
