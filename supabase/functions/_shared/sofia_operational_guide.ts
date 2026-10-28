@@ -22,6 +22,19 @@ Mapa padrão do painel do lojista:
 
 Há também painéis separados para fornecedor e motoboy. Se a pessoa não disser em qual painel está, pergunte se é lojista, fornecedor, motoboy ou cliente antes de dar um caminho específico. Se um item não aparecer, confira se ela está no grupo correto e explique que o modo da loja, permissões ou configuração do Super Admin pode ocultá-lo. Se o rótulo na tela não bater, peça uma captura de tela; não invente um botão equivalente.`;
 
+const implementationMap = `## Mapa do sistema verificado no código
+O sistema tem páginas e perfis separados. Use o mapa abaixo para não misturar funções de painéis diferentes:
+- Cliente/vitrine: /loja/:slug mostra a vitrine; /meus-pedidos lista pedidos do cliente; /pedido/:id acompanha um pedido; /pagar/:orderId abre o pagamento; /chat e /suporte tratam conversa; /mesa/:code abre uma sessão de mesa; /garcom/:token é o painel do garçom; /pdv é o PDV/maquininha; /kds é a cozinha; /totem é o autoatendimento.
+- Lojista: /loja/:slug/admin é o painel com Dashboard, Pedidos, Mensagens, Venda Rápida, Salão ao Vivo, Mesas, Agenda, Motoboys, Impressora, Produtos, Categorias, Orçamento, Estoque, Fornecedores, Frete, Empresarial, Financeiro Avançado, relatórios, vendas, comissões, vendedores, BI, marketing e configurações. O Super Admin pode ocultar ou renomear abas; por isso o caminho é uma referência, não uma promessa de que a aba existe.
+- Fornecedor: /loja/:slug/fornecedor/:token tem Pedidos, Entregas, Motoboys, Estoque, Importar / Exportar, Chats, Avaliações, Frete, Lalamove e Meus dados. Atualiza sua oferta/estoque e despacha pedidos; não é o cadastro geral de produtos do lojista.
+- Motoboy: /loja/:slug/motoboy/:token tem status online/offline, entregas ativas/entregues, código de conferência, endereço, mapa/GPS e atualização de rota, atraso ou observação. Não é painel de pedidos completo nem de garçom.
+- Garçom/mesa: /garcom/:token valida o token, acompanha mesas/comandas, recebe solicitações e pode receber pagamento; /mesa/:code é a sessão da mesa. Não confunda com o KDS.
+- Operação de cozinha: /kds filtra por setor e move cartões entre Na fila, Em preparo, Pronto e concluído/entregue; o acesso é pelo link Cozinha do cabeçalho, não por uma subaba lateral.
+- PDV: /pdv separa atendimento de balcão e mesa, monta carrinho, seleciona pagamento e mostra comprovante; não descreva isso como o mesmo fluxo de Venda Rápida sem confirmar a tela.
+- Plataforma: /super-admin é reservado ao Super Admin; /vendedores é a rede de vendedores. Essas áreas não devem ser orientadas como se fossem funções comuns do lojista.
+
+Regra de escopo: a Sofia pode explicar caminhos e ler dados atuais somente quando o contexto autorizar. Ela não deve dizer que uma ação foi executada só porque descreveu o botão. Para pagamentos, pedidos, estoque, importações, campanhas, emissão fiscal, exclusões e fechamentos, indique o efeito e peça confirmação/revisão na tela. Quando o comportamento depender de uma Edge Function ou integração, diga apenas o que a interface confirma; não invente detalhes internos.`;
+
 const sections: SofiaGuideSection[] = [
   {
     title: "Primeiro dia e operação da loja",
@@ -79,7 +92,13 @@ O caminho é Financeiro → Financeiro Avançado → DRE Comparativo. O DRE usa 
 Financeiro Avançado também tem Adquirente, Contas, Fluxo Projetado e Sociedade. Adquirente importa dados/CSV para conciliação; ações observadas incluem Marcar liquidado e Marcar divergente. Fluxo Projetado mostra projeções, não dinheiro já recebido.
 
 ## Sociedade
-Caminho: Financeiro → Financeiro Avançado → Sociedade. Subabas: Apuração, Gastos e Fechamentos. Em Apuração, configure participantes/percentuais que totalizem 100%, use Salvar divisão, informe o período De/Até e use Gerar fechamento oficial. Em Gastos, cada nova regra é um novo lançamento; não edite nem apague lançamentos antigos para corrigir histórico. Fechamentos oficiais anteriores são snapshots imutáveis. Antes de confirmar um fechamento, confira o período e a divisão. Se houver dúvida sobre valores, não invente cálculos: peça o período e indique a tela/relatório correspondente.`,
+Caminho: Financeiro → Financeiro Avançado → Sociedade. Subabas: Apuração, Gastos e Fechamentos.
+- Em Apuração, a tela lê produtos e variações do catálogo, permite definir participantes e percentuais e exige pelo menos duas pessoas, nomes diferentes, percentuais positivos e soma exatamente igual a 100%; depois use Salvar divisão. Informe De/Até para consultar o relatório.
+- O relatório é calculado pelo RPC do sistema usando preço realmente vendido, custo cadastrado do produto/variação e gastos aplicáveis; mostra unidades, vendas, custo do produto, gastos operacionais, lucro líquido e divisões. Não substitua esses valores por uma conta inventada no chat.
+- Em Gastos, preencha nome do gasto, valor maior que zero, tipo Percentual (%) ou Valor fixo (R$), escopo Geral/Produto/Variação e, quando exigido, o produto e a variação; depois adicione. Escopo Geral usa valor fixo por pedido ou percentual da venda; Produto/Variação usa valor fixo por unidade ou percentual da venda. Cada adição grava uma nova regra histórica.
+- Para corrigir um gasto, lance uma nova regra; não edite nem apague lançamentos antigos. A tela não oferece edição/exclusão desses registros como correção de histórico.
+- Em Fechamentos, Gerar fechamento oficial grava um snapshot do período e da divisão vigente; não gere outro fechamento para o mesmo período sem conferir a mensagem de duplicidade. Fechamentos antigos mantêm o snapshot original mesmo que a divisão atual mude. Marcar repasse como recebido é uma ação do Super Admin, não uma ação comum do lojista.
+- Antes de confirmar, confira período, participantes, percentuais e regras. Se faltarem custos cadastrados, o lucro pode ficar incompleto; diga isso claramente.`,
   },
   {
     title: "Marketing e comunicação",
@@ -163,5 +182,5 @@ export function getSofiaOperationalGuidance(question: string, role = "merchant")
     ? sections
     : sections.filter((section) => section.keywords.some((keyword) => normalizedQuestion.includes(normalize(keyword))));
 
-  return [navigation, ...selected.map((section) => section.content)].join("\n\n");
+  return [navigation, ...(broad ? [implementationMap] : []), ...selected.map((section) => section.content)].join("\n\n");
 }

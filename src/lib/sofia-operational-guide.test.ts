@@ -35,6 +35,16 @@ describe('guia operacional da Sofia', () => {
     }
   });
 
+  it('inclui o mapa de perfis e rotas reais quando a pessoa pede o sistema inteiro', () => {
+    const guide = getSofiaOperationalGuidance('Mapeie todas as funções do sistema e me ensine a plataforma inteira.');
+
+    expect(guide).toContain('## Mapa do sistema verificado no código');
+    expect(guide).toContain('/loja/:slug/fornecedor/:token');
+    expect(guide).toContain('/loja/:slug/motoboy/:token');
+    expect(guide).toContain('/kds');
+    expect(guide).toContain('não devem ser orientadas como se fossem funções comuns do lojista');
+  });
+
   it('orienta visitante iniciante pelo fluxo público real, sem fingir que já tem acesso ao painel', () => {
     const guide = getSofiaOperationalGuidance(
       'Sou iniciante e ainda não tenho uma loja. Me explica o caminho mais simples para começar, passo a passo?',
@@ -69,6 +79,17 @@ describe('guia operacional da Sofia', () => {
     expect(productGuide).toContain('preço-base + ajuste');
     expect(troubleshootingGuide).toContain('Resolver problemas com evidência');
     expect(learningGuide).toContain('não treinamento automático');
+  });
+
+  it('explica o cadastro de gastos da Sociedade conforme a implementação', () => {
+    const guide = getSofiaOperationalGuidance('Como cadastro um gasto no módulo Sociedade?');
+
+    expect(guide).toContain('Financeiro → Financeiro Avançado → Sociedade');
+    expect(guide).toContain('Geral/Produto/Variação');
+    expect(guide).toContain('valor maior que zero');
+    expect(guide).toContain('Cada adição grava uma nova regra histórica');
+    expect(guide).toContain('não edite nem apague lançamentos antigos');
+    expect(guide).toContain('soma exatamente igual a 100%');
   });
 
   it('orienta a importação em massa do painel do fornecedor e não inventa aplicação pelo chat', () => {
