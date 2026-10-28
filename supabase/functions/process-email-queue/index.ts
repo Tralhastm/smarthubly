@@ -1,3 +1,4 @@
+import { sendLovableEmail } from 'npm:@lovable.dev/email-js'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const MAX_RETRIES = 5
@@ -19,7 +20,26 @@ function parseSender(from: unknown): { name: string; email: string } {
 async function sendViaBrevoGateway(payload: Record<string, any>): Promise<void> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY')
   const brevoKey = Deno.env.get('BREVO_API_KEY')
-  if (!lovableKey || !brevoKey) throw new Error('Brevo gateway não configurado')
+  if (!lovableKey || !brevoKey) {
+    await sendLovableEmail(
+      {
+        run_id: payload.run_id,
+        to: payload.to,
+        from: payload.from,
+        sender_domain: payload.sender_domain,
+        subject: payload.subject,
+        html: payload.html,
+        text: payload.text,
+        purpose: payload.purpose,
+        label: payload.label,
+        idempotency_key: payload.idempotency_key,
+        unsubscribe_token: payload.unsubscribe_token,
+        message_id: payload.message_id,
+      },
+      { apiKey: lovableKey ?? '', sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
+    )
+    return
+  }
 
   const response = await fetch(BREVO_GATEWAY_URL, {
     method: 'POST',
