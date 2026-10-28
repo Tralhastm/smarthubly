@@ -1,0 +1,137 @@
+export interface SofiaGuideSection {
+  title: string;
+  keywords: string[];
+  content: string;
+}
+
+const normalize = (value: string) => value
+  .toLocaleLowerCase("pt-BR")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "");
+
+const navigation = `## Como a navegação funciona
+No painel da loja, a navegação padrão tem grupos de primeiro nível: Início, Operação, Catálogo, Financeiro, Marketing e Configurações. Dentro do grupo ficam abas menores. Os nomes podem ser alterados ou ocultados pelo Super Admin, e recursos dependem do modo/ativação da loja. Trate os rótulos abaixo como padrões do código, não como garantia de que toda loja terá a mesma tela.
+
+Mapa padrão do painel do lojista:
+- Início: Dashboard.
+- Operação: Pedidos, Mensagens, Venda Rápida, Salão ao Vivo, Mesas (Garçom), Agenda, Motoboys, Impressora e, em lojas compatíveis, WhatsApp Consultora.
+- Catálogo: Produtos, Categorias, Orçamento, Estoque, Fornecedores e Frete.
+- Financeiro: Ficha Técnica/CMV, Inteligência de Preços, Empresarial, Financeiro Avançado, Relatórios Op., Vendas, Comissões, Vendedores, Curva ABC, BI / Previsão e Cobranças.
+- Marketing: Promoção, Sofia Agente, Prospecção Remota, Prospecção, Posts IA, Cupons, Avaliações, E-mails; Cliques e Cupons (teste) podem estar ocultos ou ser específicos de afiliados.
+- Configurações: Aparência, Integrações, Fiscal (NFC-e), Automações, Monitor, Diagnóstico, Usuários e Suporte & Treino.
+
+Há também painéis separados para fornecedor e motoboy. Se a pessoa não disser em qual painel está, pergunte se é lojista, fornecedor, motoboy ou cliente antes de dar um caminho específico. Se um item não aparecer, confira se ela está no grupo correto e explique que o modo da loja, permissões ou configuração do Super Admin pode ocultá-lo. Se o rótulo na tela não bater, peça uma captura de tela; não invente um botão equivalente.`;
+
+const sections: SofiaGuideSection[] = [
+  {
+    title: "Primeiro dia e operação da loja",
+    keywords: ["comecar", "começar", "iniciante", "primeiro dia", "configurar loja", "operar", "visao geral", "tudo", "sistema inteiro", "plataforma toda", "ensinar", "ensina", "ensine", "ensinando", "treinar", "treina", "treine", "treinamento", "tutorial", "guia completo"],
+    content: `## Roteiro de primeiro dia
+1. Abra Configurações → Aparência para revisar o tipo da loja e os ajustes que aparecem nessa tela; finalize com Salvar todas as configurações.
+2. Abra Catálogo → Categorias para organizar categorias e subcategorias.
+3. Abra Catálogo → Produtos, escolha Novo Produto, preencha os dados que a tela pedir e use Salvar. Não diga que variantes ou adicionais são obrigatórios no cadastro básico.
+4. Abra Operação → Pedidos para acompanhar as vendas recebidas.
+5. Se usar cozinha, abra o link Cozinha no cabeçalho do painel; KDS não é uma subaba do menu lateral.
+6. Para conferir resultado financeiro, use Financeiro → Empresarial e, quando precisar comparar períodos, Financeiro → Financeiro Avançado → DRE Comparativo.
+7. Ative integrações, automações ou emissão fiscal somente depois de revisar o que cada opção faz.
+
+Dashboard mostra um resumo e atalhos. O menu é em dois níveis: primeiro selecione o grupo e depois a aba correspondente. “Configurações” é o nome do grupo; a aba visual/geral da loja se chama “Aparência”. “Catálogo” também é um grupo: as abas de cadastro são “Produtos” e “Categorias”.`,
+  },
+  {
+    title: "Pedidos, mensagens e cozinha",
+    keywords: ["pedido", "pedidos", "status", "cliente", "mensagem", "chat", "suporte", "cozinha", "kds", "preparo", "entrega", "retirada", "salao", "salão", "mesa", "garcom", "garçom", "comanda", "venda rapida", "venda rápida", "impressora", "agenda", "agendamento", "motoboy"],
+    content: `## Pedidos, atendimento e operação
+- Pedidos fica em Operação → Pedidos. Os filtros padrão incluem Todos, Aguardando Aprovação, Recebido, Em Preparo, Saiu para Entrega, Pronto p/ Retirada, Entregue e Cancelado. Abra o pedido, confira os dados e use Aprovar pedido ou Avançar → [próximo status], conforme a ação exibida. Ver linha do tempo mostra o histórico. Ações variam conforme pedido, modo da loja e permissões.
+- Mensagens fica em Operação → Mensagens e reúne conversas disponíveis para a loja. Para chats vinculados a pedido ou produto, responda só com fatos confirmados no contexto; encaminhe decisões de estoque, prazo, pagamento ou negociação à loja/fornecedor quando não houver confirmação.
+- Venda Rápida é a área para registrar uma venda diretamente no painel; antes de confirmar, confira os itens, valores e forma de pagamento apresentados.
+- Salão ao Vivo mostra a operação presencial em tempo real. O caminho padrão das mesas é Operação → Mesas (Garçom): use Ativar quando a loja quiser habilitar o fluxo; cadastre o garçom em Garçons → Adicionar; cadastre mesas em Cadastrar mesas → Adicionar, +5 mesas ou +10 mesas; gere/consulte QR Codes por Imprimir QR Codes, Link ou Abrir. Mesas ocupadas agora podem ter ações Editar, Mover e Liberar. Não prometa atribuição automática de garçom sem confirmar a configuração da loja.
+- Para a cozinha, clique em Cozinha no cabeçalho. No KDS, selecione o setor se necessário e use as colunas Na fila, Em preparo e Pronto; ações observadas: Iniciar preparo, Marcar pronto e Entregue. O estado exato depende do pedido.
+- Motoboys abre o gerenciamento de entregadores do lojista; Impressora configura a impressão de comandas; Agenda é para horários de serviços quando o recurso estiver ativo. Se precisar de instruções detalhadas de um botão não listado, peça que a pessoa abra a tela e descreva ou envie captura.
+
+Não declare que um pedido foi pago, enviado, cancelado ou alterado sem consultar o contexto vivo. A Sofia orienta; só execute uma ação quando a interface/endpoint oferecer essa ação e a pessoa tiver solicitado com clareza.`,
+  },
+  {
+    title: "Catálogo, produtos, estoque e fornecedores",
+    keywords: ["produto", "produtos", "catalogo", "catálogo", "categoria", "categorias", "estoque", "fornecedor", "fornecedores", "frete", "orcamento", "orçamento", "ficha tecnica", "ficha técnica", "cmv", "preco", "preço", "variacao", "variação", "adicional"],
+    content: `## Catálogo e custos
+- Catálogo → Produtos: use Novo Produto para cadastrar; preencha nome, preço, categoria e demais dados presentes no formulário; confira disponibilidade e use Salvar. A tela também pode mostrar Adicionar Produtos (IA), Atualizar Produtos (IA) ou Colar lista; explique cada opção conforme o rótulo visível, sem prometer resultado da IA.
+- Catálogo → Categorias abre Categorias e subcategorias. Ações observadas: Nova categoria raiz, Adicionar, Renomear, Adicionar subcategoria, Ocultar da loja/Mostrar na loja e Excluir. Antes de Excluir, avise que pode remover a categoria; se houver dúvida, prefira ocultar.
+- Catálogo → Estoque controla disponibilidade/quantidade conforme o modo da loja. Confira o produto antes de alterar; a tela ou integração pode atualizar a disponibilidade da loja.
+- Catálogo → Fornecedores reúne fornecedores associados a produtos, quando o modo de dropshipping/parceria estiver habilitado. Catálogo → Frete trata da entrega; Lalamove/Uber Direct e campos disponíveis variam por configuração.
+- Catálogo → Orçamento aparece apenas quando o recurso está habilitado; é diferente de registrar venda ou despesa financeira.
+- Financeiro → Ficha Técnica/CMV guarda composição/custos usados para estimar custo dos produtos. Não invente CMV quando a ficha não estiver preenchida.
+- Financeiro → Inteligência de Preços, Vendas, Comissões, Vendedores, Curva ABC e BI / Previsão são telas analíticas/operacionais. Oriente o lojista a abrir a aba pelo nome e escolher o período/filtros exibidos; não afirme resultado sem consultar a tela.
+
+Produtos, estoque e fornecedores podem afetar o que aparece na loja. Antes de uma alteração, confirme o produto correto e explique o efeito esperado; não diga que há uma opção de desfazer se ela não estiver visível.`,
+  },
+  {
+    title: "Financeiro, DRE e Sociedade",
+    keywords: ["financeiro", "despesa", "gasto", "entrada", "saida", "saída", "cartao", "cartão", "lucro", "dre", "saldo", "contas", "pagar", "receber", "fiado", "adquirente", "taxa", "sociedade", "fechamento", "apuracao", "apuração", "custo", "cmv", "investimento", "divida", "dívida"],
+    content: `## Financeiro geral
+O caminho padrão é Financeiro → Empresarial. As subabas padrão são Saúde, Clara, Fluxo, Lançar, Cartão, A Pagar / Receber, Fornec., Calculadora e Taxa. Para registrar algo manualmente: abra Lançar → Registrar entrada ou saída, selecione categoria e valor, informe descrição/data e classifique como cartão ou outro tipo conforme o formulário; depois use o botão de salvar exibido. Não registre manualmente de novo uma venda já gerada por pedido entregue.
+A Pagar / Receber contém Contas (geral) e Fiado (clientes); há ação Adicionar conta. Para obrigações futuras use a conta correspondente, sem registrar como despesa paga antes do pagamento.
+
+## Lucro e saldo não são iguais
+Pedidos entregues geram receita automaticamente; pedidos cancelados não são receita realizada e vendas fiadas não devem ser tratadas como recebidas até o pagamento. Todas as despesas do período entram no lucro líquido, inclusive compra no cartão ainda não paga. Cartão pendente afeta o saldo disponível/projetado, mas não significa que o dinheiro já saiu da conta. Diferencie sempre receita, despesas, lucro líquido, saldo bancário já pago e saldo disponível. Taxa padrão da plataforma só se aplica conforme o modo de cobrança vigente; acordo ativo da Sociedade altera a cobrança padrão prevista para essa loja.
+
+## DRE e financeiro avançado
+O caminho é Financeiro → Financeiro Avançado → DRE Comparativo. O DRE usa pedidos entregues automaticamente e considera custos registrados disponíveis no banco, incluindo despesas do período; dados incompletos de ficha técnica/CMV podem limitar o custo calculado. Não prometa que todo custo está correto se não houver dados suficientes.
+Financeiro Avançado também tem Adquirente, Contas, Fluxo Projetado e Sociedade. Adquirente importa dados/CSV para conciliação; ações observadas incluem Marcar liquidado e Marcar divergente. Fluxo Projetado mostra projeções, não dinheiro já recebido.
+
+## Sociedade
+Caminho: Financeiro → Financeiro Avançado → Sociedade. Subabas: Apuração, Gastos e Fechamentos. Em Apuração, configure participantes/percentuais que totalizem 100%, use Salvar divisão, informe o período De/Até e use Gerar fechamento oficial. Em Gastos, cada nova regra é um novo lançamento; não edite nem apague lançamentos antigos para corrigir histórico. Fechamentos oficiais anteriores são snapshots imutáveis. Antes de confirmar um fechamento, confira o período e a divisão. Se houver dúvida sobre valores, não invente cálculos: peça o período e indique a tela/relatório correspondente.`,
+  },
+  {
+    title: "Marketing e comunicação",
+    keywords: ["marketing", "promocao", "promoção", "cupom", "cupons", "post", "instagram", "email", "e-mail", "campanha", "avaliacao", "avaliação", "prospeccao", "prospecção", "lead", "whatsapp", "clique", "sofia agente"],
+    content: `## Marketing
+- Marketing → Promoção controla o banner da loja; revise o texto e o estado antes de salvar. Refinar com IA sugere texto, não substitui a revisão.
+- Marketing → Cupons cria código/desconto; confira tipo, validade, valor mínimo e limite de uso na tela antes de salvar.
+- Marketing → Posts IA oferece formatos como Post do dia, Story, Bio Instagram, Roteiro Reels, Carrossel, Disparo WhatsApp e Hashtags. Neste painel, Disparo WhatsApp prepara texto para copiar; não prometa que a mensagem será enviada automaticamente. Não prometa geração de imagem nessa tela, pois a opção não aparece na instância do painel do lojista auditada.
+- Marketing → E-mails tem as áreas Configurações e Campanhas. Campanhas pode oferecer Enviar agora para todos clientes; antes de orientar, avise que isso envia comunicação em massa e peça revisão da lista, assunto e conteúdo. A Sofia não envia a campanha pelo chat.
+- Marketing → Avaliações reúne comentários/respostas; sugestões de IA podem exigir aprovação. Marketing → Prospecção e Prospecção Remota tratam de busca/contato de leads, conforme recursos da loja; nunca invente leads, dados de contato ou envio realizado.
+- Marketing → Sofia Agente é diferente do chat de ajuda da Sofia: a aba permite montar planos de alterações da loja. Revise o plano antes de aplicar; não diga que algo foi alterado até haver confirmação explícita na interface.
+- Cliques e Cupons (teste) podem não aparecer para lojas comuns.
+
+Não prometa automação, envio, imagem ou lead concluído sem confirmação na tela/contexto.`,
+  },
+  {
+    title: "Configurações, integrações, fiscal e automações",
+    keywords: ["configuracao", "configuração", "aparencia", "aparência", "integracao", "integração", "fiscal", "nfce", "nfc-e", "nota", "automacao", "automação", "monitor", "diagnostico", "diagnóstico", "usuario", "usuário", "acesso", "pagamento", "asaas", "mercado pago", "send my file", "stone", "lalamove", "uber direct"],
+    content: `## Configurações e acessos
+Configurações → Aparência é a tela geral observada para tipo da loja e ajustes visuais/operacionais; revise os campos disponíveis e use Salvar todas as configurações. Não afirme que horário ou qualquer opção específica está nesta tela sem ver o campo.
+Configurações → Integrações apresenta, entre outras, Send My File, Asaas e Mercado Pago conforme a tela. Para Send My File, revise URLs, integração ativa e itens de sincronização antes de Salvar configurações; Empurrar catálogo agora ou sincronização automática podem afetar sistemas conectados. Lalamove/Uber Direct podem estar em Aparência; Stone é tratado em Financeiro Avançado → Adquirente. Não revele tokens/chaves em respostas.
+Configurações → Fiscal (NFC-e) abre Emissão Fiscal (NFC-e). A interface lista provedores como Focus NFe, NFE.io e WebmaniaBR; PlugNotas aparece como “em breve”. Escolha Homologação (teste) para teste. Produção (vale fiscal) pode emitir documento fiscal real; não oriente ativação sem revisão das credenciais/dados do emitente e confirmação do responsável fiscal.
+
+## Automações, Monitor e Diagnóstico
+Configurações → Automações mostra controles individuais, prazo de cancelamento de Pix, Caixa de Sugestões, histórico e ações condicionais como Testar agora ou Gerar e enviar agora. Entre os controles visíveis estão cancelar Pix, confirmações automáticas de Pix/cartão, lançamento de taxa, promoções por estoque baixo, cupom para carrinho abandonado, top vendidos, lembrete de fiado, relatório semanal, auto-categorização, combos, pico de demanda, reconciliação Mercado Pago, backup, antifraude, resposta IA a avaliações, pedido fantasma e afiliados. A disponibilidade pode variar.
+A Caixa de Sugestões pode ter Aplicar, Visto e Descartar. Aplicar pode alterar preço/banner ou iniciar uma ação; leia a sugestão antes de recomendar. Monitor e Diagnóstico são abas separadas do menu, não subabas de Automações.
+
+## Usuários e suporte
+Configurações → Usuários mostra Aguardando e Aprovados; ações observadas são Aprovar, Rejeitar e Remover. A tela auditada não mostra convite por e-mail, então não prometa que é possível convidar por esse caminho.
+Configurações → Suporte & Treino tem subabas Suporte e Treinamento. Em Suporte, abrir chamado envolve assunto, descrição, categoria e prioridade; depois é possível conversar no chamado ainda aberto. A tela lista vídeos, mas não confirme conteúdo/link sem validar que o vídeo abre.`,
+  },
+  {
+    title: "Painéis de fornecedor e motoboy",
+    keywords: ["fornecedor", "fornecedores", "painel fornecedor", "estoque fornecedor", "motoboy", "entregador", "entrega", "lalamove", "supplier", "driver"],
+    content: `## Fornecedor
+O painel de fornecedor tem grupos Operação, Catálogo e Configurações. Abas padrão: Pedidos, Entregas, Motoboys; Estoque, Importar / Exportar, Chats, Avaliações; Frete, Lalamove e Meus dados. Na tela de Pedidos, confira itens e endereço; ações variam, podendo incluir Avançar, Despachar motoboy, Motoboy da loja ou Lalamove (automático). Ativo/Pausado controla disponibilidade quando exibido. Estoque tem alternância Em estoque/Sem estoque e ajustes de quantidade. Não prometa aceitar qualquer pedido ou trocar a entrega sem conferir as ações visíveis.
+
+## Motoboy
+O Painel Motoboy tem Entregas Ativas e, quando houver, Entregues. A disponibilidade é Online — recebendo entregas ou Offline — toque pra ficar disponível; GPS pode ser solicitado. Em cada entrega, confira código/endereço/ponto de referência; use Mapa aqui dentro ou Abrir no app GPS. As ações observadas podem incluir iniciar rota, Entregue, Atrasar, Aguardar e enviar nota. Não atribua funções de garçom ao painel do motoboy.`,
+  },
+];
+
+const broadQuestion = /\b(tudo|todas as funcoes|todas as funcionalidades|sistema inteiro|plataforma inteira|primeiro dia|iniciante|ensinar|ensina|ensine|ensinando|treinar|treina|treine|treinamento|treinamento completo|guia completo|por onde comeco|como comeco|comecar do zero|do zero)\b/;
+
+export function getSofiaOperationalGuidance(question: string): string {
+  const normalizedQuestion = normalize(question || "");
+  if (!normalizedQuestion) return navigation;
+
+  const broad = broadQuestion.test(normalizedQuestion);
+  const selected = broad
+    ? sections
+    : sections.filter((section) => section.keywords.some((keyword) => normalizedQuestion.includes(normalize(keyword))));
+
+  return [navigation, ...selected.map((section) => section.content)].join("\n\n");
+}

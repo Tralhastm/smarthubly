@@ -1,6 +1,6 @@
 // Conhecimento COMPLETO da plataforma — usado por Sofia, Clara, Cindy e o Vendedor IA.
 // Atualize este arquivo sempre que adicionar uma feature relevante para clientes/lojistas.
-// ÚLTIMA ATUALIZAÇÃO: 16/09/2026 — catálogo MultiTec auditado, ofertas por cor e fichas técnicas revisadas
+// ÚLTIMA ATUALIZAÇÃO: 28/10/2026 — fluxos operacionais, financeiros e de suporte revisados
 // KDS, maquininha Stone/conciliação, fiscal NF-e, subcategorias ilimitadas, carrossel de
 // fotos/vídeo, splash opcional, Sofia Agente com aplicação automática, prospecção avançada
 // e motor de imagens editorial em cascata.
@@ -20,9 +20,9 @@ Cada lojista ganha:
 - WhatsApp do cliente integrado (recebe link do pedido, status, confirmações)
 - Painel de pedidos em tempo real (cozinha vê chegar, status: recebido → preparando → pronto/saindo → entregue)
 - KDS (tela da cozinha) sincronizado com os pedidos, além do painel de operação
-- Atendimento por MESA: cliente escaneia QR code na mesa, abre a comanda, pede pelo cardápio, fecha a conta — o garçom recebe o pedido no app e a mesa aparece em "mesas ocupadas"
-- App do garçom: link/PWA por loja com QR code próprio; recebe pedidos e chamados de mesa em tempo real (push), vê mesas ocupadas e pode transferir comandas entre garçons
-- Painel do garçom controlado pelo admin: o lojista ATIVA/desativa o painel do garçom em Configurações; desativado, o link mostra "indisponível"; ativado, o app abre direto na tela do garçom
+- Atendimento por MESA: cliente escaneia QR code na mesa, abre a comanda e pede pelo cardápio; o fluxo depende da configuração da loja
+- App do garçom: o link/PWA e as funções disponíveis dependem do painel de mesas e da configuração da loja
+- Painel de mesas/garçons: o controle observado fica em Operação → Mesas (Garçom); não presuma que esteja em Configurações
 - Impressão térmica Bluetooth ou via app
 - Calendário de agendamento (pra serviços / horários)
 - Comanda de mesa (garçom abre comanda, soma item, fecha)
@@ -35,47 +35,27 @@ floricultura, materiais de construção, papelaria, óticas, salão/barbearia (a
 estética/manicure (agendamento), vestuário/moda (com categorias e subcategorias), serviços em geral.
 O sistema se adapta automaticamente ao nicho.
 
-## OPERAÇÃO PRO LOJISTA
-- **Painel**: visão geral (pedidos hoje vs ontem, faturamento, gráfico 7d, top 3 produtos, ticket médio, taxa plataforma)
-- **Pedidos**: aba com TODOS os pedidos por status (Recebidos, Preparando, Saindo, Prontos pra retirada, Entregues, Cancelados)
-  - Cancelados mostram MOTIVO (ex: "Pagamento Pix expirado")
-  - Novo pedido avisa o painel E o garçom (se painel ativo) em tempo real, sem precisar recarregar
-- **Mesas ocupadas**: mesas com comanda aberta, pedidos da mesa e garçom responsável — cada chamado de garçom fica registrado na mesa que chamou (não sobrepõe)
-- **KDS**: tela da cozinha sincronizada com os pedidos; quando o painel marca "em preparo" o KDS acompanha
-- **Catálogo**: produtos, categorias, subcategorias (quantas quiser, organizadas hierárquicas), fotos em carrossel (várias fotos + vídeo por produto), estoque, variantes (tamanho, sabor), adicionais (extras pagos)
-  - Auto-categorização por IA do nome do produto
-  - Foto gerada por IA em estilo editorial/profissional (motor novo) se o lojista não tiver
-  - Importação em massa por TXT (cole o cardápio, IA parseia) e por XML de NF-e
-- **Financeiro**: caixa diário, contas a pagar/receber, dívidas, investimentos, relatório PDF
-- **Maquininha / Conciliação Stone**: importa o CSV da maquininha Stone (transaction_date, authorization_code, nsu, card_brand, installments, gross_amount, fee_amount, net_amount, expected_settlement_date) e concilia com as vendas — mostra pendentes e divergentes
-- **Fiscal**: emissão de NF-e em homologação via gateway Focus NFe (sem upload de XML avulso)
-- **Fiado**: lista de clientes com saldo aberto, lembrete automático por WhatsApp/email
-- **Marketing**: cupons, programa de fidelidade, gerador de post pra Insta com IA (texto + imagem editorial), banner de promoção, e-mails de campanha
-- **Configurações**: cores, logo, capa, horário de funcionamento, raio de entrega, frete por bairro/CEP, métodos de pagamento, modo da loja (delivery/pickup/ambos/comanda), ATIVAÇÃO DO PAINEL DO GARÇOM (liga/desliga o app do garçom; quando ativa, atualiza o link/QR automaticamente)
-- **Aparência**: customiza tema (cor primária, fonte, layout), splash da loja (abre no carregamento, opcional — o lojista pode desativar), título e descrição da loja (opcionais), descrição com texto estilo "Invertexto" (decorativo)
-- **Integrações**: Mercado Pago, Lalamove, Uber Direct, Stone, Focus NFe
-- **Usuários**: convida funcionários (garçom, motoboy, gerente)
-- **Sofia Agente**: IA do super admin que edita a loja por comando natural — o lojista diz "deixa a loja premium", "melhora os preços", "troca as fotos" e a Sofia gera um PLANO de mudanças (paleta, textos, fotos, preços). O lojista pode (a) revisar e clicar "Aplicar mudanças" ou (b) falar "aplica" na conversa e ela aplica automaticamente (autoApply). Prospecting embutido: pode pedir pra encontrar clientes na região (ex: "acha lanchonetes que precisam de laticínio em BH") e ela busca e lista leads
-- **Prospecção**: duas abas — Prospecção de rua (leads coletados na rua/Maps) e Prospecção Remota (IA gera e aborda leads automaticamente com mensagens calibradas pra não parecer golpe: apresentação curta, contexto claro, sem frieza de spam)
-- **Automações** (Onda 1 ativas, Onda 2 opcionais, Onda 3 avançadas):
-  1. Cancelar Pix não pago após X min (cliente é avisado pra refazer)
-  2. Lembrete de fiado por email/WhatsApp
-  3. Sugerir promoção quando estoque ≤ 5 (15% off por padrão, lojista aprova na Caixa de Sugestões)
-  4. Reordenar catálogo pelos campeões de venda dos últimos 30d
-  5. Relatório semanal por email
-  6. Categorização noturna automática
-  7. Sugestão de combo pelos itens mais comprados juntos
-  8. Alerta de pico de pedidos
-  9. Reconciliação de pagamentos Mercado Pago
-  10. Detecção de pedido fantasma (cliente abandona)
-  11. Match de afiliados por IA (sugere produtos parceiros)
-  12. Backup noturno do catálogo
-  13. Notificação de novo pedido pro garçom/KDS em tempo real (sem recarregar)
-- **Monitor**: vê o que cada automação fez nas últimas 24h
-- **Diagnóstico**: testa cada automação ao vivo
+- **Pedidos**: grupo Operação → aba Pedidos. Os rótulos padrão de status incluem Aguardando Aprovação, Recebido, Em Preparo, Saiu para Entrega, Pronto p/ Retirada, Entregue e Cancelado; ações dependem do pedido e do modo da loja.
+- **Mesas ocupadas**: Operação → Mesas (Garçom) mostra a operação de mesas/comandas quando habilitada.
+- **KDS**: acessado pelo link **Cozinha** no cabeçalho do admin, não por uma subaba do menu lateral.
+- **Catálogo**: grupo com abas separadas Produtos e Categorias, além de Estoque, Frete, Fornecedores e recursos que dependem da loja.
+- **Financeiro geral**: grupo Financeiro → aba Empresarial. A navegação e as subabas podem ser customizadas/filtradas por loja.
+- **Financeiro avançado**: grupo Financeiro → Financeiro Avançado; inclui Adquirente, Contas, Fluxo Projetado, DRE Comparativo e Sociedade.
+- **Fiscal**: a tela do lojista é Fiscal (NFC-e); lista provedores como Focus NFe, NFE.io e WebmaniaBR, e PlugNotas aparece como “em breve”. Homologação é teste; Produção pode emitir documento fiscal real. Confirme disponibilidade e credenciais na tela.
+- **Fiado**: acompanhe a situação na área A Pagar / Receber; mensagens automáticas dependem de configuração de automação.
+- **Marketing**: cupons, fidelidade, promoção, Posts IA (texto/conteúdo para copiar), avaliações, prospecção e e-mails. O painel de Posts IA do lojista não confirma geração de imagem nem envio direto de WhatsApp.
+- **Configurações**: nome do grupo que contém Aparência, Integrações, Fiscal (NFC-e), Automações, Monitor, Diagnóstico, Usuários e Suporte & Treino. Aparência reúne opções que variam por loja; não presuma horários, logo ou capa se os campos não estiverem na tela.
+- **Integrações**: a tela pode conter Send My File, Asaas e Mercado Pago. Lalamove/Uber Direct podem estar em Aparência; Stone é tratado em Financeiro Avançado → Adquirente. Não revele nem peça que o usuário publique chaves/tokens.
+- **Usuários**: a tela observada mostra solicitações Aguardando/Aprovados e ações Aprovar, Rejeitar e Remover; não prometa convite por e-mail nesse caminho.
+- **Sofia Agente**: existe como aba Marketing → Sofia Agente no painel do lojista; é diferente do chat de suporte. Monta planos de alterações: revise o plano e só diga que algo mudou após confirmação visível de aplicação. Há também ferramentas de conhecimento no Super Admin.
+- **Automações**: a tela lista controles individuais (Pix/cartão, taxas, promoções, carrinho, fiado, relatórios, categorização, combos, demanda, reconciliação, backup, antifraude, avaliações, pedidos fantasma e afiliados). A disponibilidade e os efeitos dependem das opções exibidas.
+- **Caixa de Sugestões**: Aplicar, Visto e Descartar variam por sugestão; Aplicar pode alterar preço/banner ou iniciar uma ação. Leia antes de recomendar.
+- **Monitor** e **Diagnóstico**: abas separadas no grupo Configurações, não subabas de Automações.
+
+- **Suporte & Treino**: no grupo Configurações, tem subabas Suporte e Treinamento; no suporte, abrir chamado envolve assunto, descrição, categoria e prioridade.
 
 ## EXPERIÊNCIA DO CLIENTE FINAL
-- Abre o link da loja, vê splash da marca (opcional), banner de promoção, capa, horário e descrição
+- Abre o link da loja e vê os elementos da vitrine configurados e visíveis
 - Cardápio responsivo com estilos de card e carrossel; busca e filtro por categoria/subcategoria
 - Clicou no CARD do produto → card expande (splash) com preço, fotos/vídeo e botão "adicionar ao carrinho"
 - Adiciona ao carrinho, escolhe variante e adicionais
@@ -125,18 +105,19 @@ as cores do comércio, o domínio que o lojista quiser (custom domain disponíve
 - iFood cobra 12-27% por pedido + assinatura. Aqui o lojista decide entre % BAIXA ou mensalidade.
 - iFood é dono do cliente. Aqui o cliente é do lojista (lista de WhatsApp, email, fidelidade).
 - iFood ranqueia quem paga mais. Aqui o lojista controla a vitrine.
-- iFood não tem fiado, agendamento, comanda de mesa, garçom no celular, KDS, conciliação de maquininha, NF-e, integração com financeiro próprio.
+- iFood não tem fiado, agendamento, comanda de mesa, garçom no celular, KDS, conciliação de maquininha, emissão fiscal integrada e conexão com o financeiro próprio.
 - Aqui tem TUDO num lugar só: pedido + mesa + cozinha + financeiro + marketing + fidelidade + automação.
 
-## GUIA OPERACIONAL PARA INICIANTES — NÃO INVENTAR CAMINHOS
-- Para começar: no painel da loja, abra **Configurações** e configure identidade, horários, entrega e pagamentos; depois abra **Catálogo** para categorias, produtos, preços, custos, variantes, adicionais e estoque; por fim abra **Pedidos** para acompanhar o primeiro pedido.
-- Operação: o pedido percorre Recebido → Preparando → Pronto/Saindo → Entregue. Só pedido entregue e não marcado como fiado é receita realizada. Pedido cancelado não é receita.
-- Financeiro geral: abra **Financeiro**. As subabas reais são **Saúde**, **Clara**, **Fluxo**, **Lançar**, **Cartão**, **A Pagar / Receber**, **Fornec.**, **Calculadora** e **Taxa**. Para registrar uma saída, use **Lançar**; informe categoria, valor, descrição, data e se é cartão. Para boleto ou valor futuro, use **A Pagar / Receber**.
-- Financeiro avançado: abra **Financeiro Avançado**. As subabas reais são **Adquirente**, **Contas**, **Fluxo Projetado**, **DRE Comparativo** e **Sociedade**. **Adquirente** importa CSV e concilia; **Contas** controla contas a pagar/receber; **Fluxo Projetado** mostra futuro; **DRE Comparativo** compara meses; **Sociedade** divide o lucro entre participantes.
-- Regra financeira: vendas de pedidos entregues entram automaticamente; não lance manualmente a mesma venda. Entradas manuais são apenas valores que não vieram de pedido. Todas as despesas entram no lucro líquido real, mesmo que uma compra no cartão ainda não tenha sido paga; cartão pendente reduz o saldo disponível, mas não o saldo bancário já pago. Explique sempre a diferença entre receita, despesas totais, lucro líquido, saldo em conta e saldo disponível.
-- DRE: acessar **Financeiro Avançado → DRE Comparativo**. O DRE considera pedidos entregues automaticamente, CMV quando há ficha técnica, taxa de plataforma e todas as despesas do período. Não diga que é necessário cadastrar manualmente cada venda.
-- Instrução segura: se o nome de uma aba ou botão não estiver neste guia, peça ao usuário uma captura de tela ou diga que o rótulo pode variar; nunca invente “Relatórios > DRE” ou “Nova Despesa” como se fossem caminhos garantidos.
-- Roteiro completo de primeiro dia: Configurações → Catálogo → Produtos → Pedidos → KDS/Mesas (se usados) → Financeiro → Marketing → Integrações → Usuários → Automações → Suporte & Treino. Em cada etapa, explique o objetivo, o próximo clique e como desfazer ou revisar.
+- Navegação padrão em dois níveis: **Início**, **Operação**, **Catálogo**, **Financeiro**, **Marketing** e **Configurações** são grupos; a aba inicial chama-se **Dashboard**. Abas podem ser renomeadas/ocultadas pelo Super Admin ou filtradas por modo/recursos da loja.
+- Para começar: **Configurações → Aparência** para revisar os campos disponíveis; **Catálogo → Categorias** e **Catálogo → Produtos** para organizar e cadastrar; **Operação → Pedidos** para acompanhar pedidos. Não prometa um campo de horário sem vê-lo na tela.
+- Operação: os rótulos padrão incluem Recebido → Em Preparo → Saiu para Entrega ou Pronto p/ Retirada → Entregue, conforme o pedido. Pedido cancelado não é receita realizada; pedido fiado só é receita recebida após pagamento.
+- Financeiro geral: **Financeiro → Empresarial**. Subabas padrão: Saúde, Clara, Fluxo, Lançar, Cartão, A Pagar / Receber, Fornec., Calculadora e Taxa. Para registrar manualmente, abra **Lançar** e use as opções exibidas. Para obrigações futuras ou fiado, abra **A Pagar / Receber**.
+- Financeiro avançado: **Financeiro → Financeiro Avançado**. Subabas padrão: Adquirente, Contas, Fluxo Projetado, DRE Comparativo e Sociedade.
+- Regra financeira: vendas de pedidos entregues entram automaticamente; não lance de novo a mesma venda. Todas as despesas do período entram no lucro líquido, inclusive cartão pendente; cartão pendente não significa que o valor já saiu da conta. Taxa padrão da plataforma depende do modo de cobrança e do acordo vigente; não afirme cobrança duplicada.
+- DRE: **Financeiro → Financeiro Avançado → DRE Comparativo**. Usa pedidos entregues automaticamente e despesas registradas; qualidade do CMV depende das fichas técnicas e dados existentes. Não diga que é necessário cadastrar manualmente cada venda.
+- Sociedade: **Financeiro → Financeiro Avançado → Sociedade**; abas **Apuração**, **Gastos** e **Fechamentos**. Fechamentos oficiais antigos são imutáveis; correções de regras devem ser novos lançamentos.
+- Instrução segura: se o nome de uma aba/botão não estiver confirmado, peça captura de tela ou diga que o rótulo pode variar; nunca invente “Relatórios > DRE” ou “Nova Despesa” como caminho garantido.
+- Para ensinar um fluxo completo, use também o guia operacional carregado especificamente no chat da Sofia. Explique o objetivo e os próximos passos; não prometa uma ação de desfazer se ela não estiver visível.
 `.trim();
 // Estratégia / vocabulário do dono — pra usar no Vendedor IA principalmente.
 export const SALES_PLAYBOOK = `
