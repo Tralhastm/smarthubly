@@ -18,8 +18,8 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const body = await req.json().catch(() => ({}));
-    const { invoice_id, test_email } = body as { invoice_id?: string; test_email?: string };
+    const requestBody = (parsed && typeof parsed === "object" ? parsed : {}) as { invoice_id?: string; test_email?: string };
+    const { invoice_id, test_email } = requestBody;
 
     let recipientEmail = test_email;
     let templateData: Record<string, any>;

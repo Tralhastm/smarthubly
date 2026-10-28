@@ -63,13 +63,13 @@ if (req.method === 'OPTIONS') {
   let messageId: string
   let templateData: Record<string, any> = {}
   try {
-    const body = await req.json()
-    templateName = body.templateName || body.template_name
-    recipientEmail = body.recipientEmail || body.recipient_email
+    const requestBody = (parsed && typeof parsed === 'object' ? parsed : {}) as Record<string, any>
+    templateName = requestBody.templateName || requestBody.template_name
+    recipientEmail = requestBody.recipientEmail || requestBody.recipient_email
     messageId = crypto.randomUUID()
-    idempotencyKey = body.idempotencyKey || body.idempotency_key || messageId
-    if (body.templateData && typeof body.templateData === 'object') {
-      templateData = body.templateData
+    idempotencyKey = requestBody.idempotencyKey || requestBody.idempotency_key || messageId
+    if (requestBody.templateData && typeof requestBody.templateData === 'object') {
+      templateData = requestBody.templateData
     }
   } catch {
     return new Response(

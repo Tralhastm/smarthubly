@@ -34,3 +34,8 @@ jobs:
         run: supabase functions deploy ai-chat-unified --project-ref qbcplbcdxoyqpmcehnvu
         env:
           SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy notify-unified
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase functions deploy notify-unified --project-ref qbcplbcdxoyqpmcehnvu
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}

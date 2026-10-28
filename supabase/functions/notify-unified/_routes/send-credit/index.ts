@@ -18,7 +18,8 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { credit_account_id, test_email } = await req.json();
+    const requestBody = (parsed && typeof parsed === "object" ? parsed : {}) as { credit_account_id?: string; test_email?: string };
+    const { credit_account_id, test_email } = requestBody;
     if (!credit_account_id) throw new Error("credit_account_id obrigatório");
 
     const { data: acc, error } = await supabase
