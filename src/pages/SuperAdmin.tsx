@@ -22,9 +22,10 @@ import SuperAdminSupport from '@/components/super-admin/SuperAdminSupport';
 import SuperAdminAiEditor from '@/components/super-admin/SuperAdminAiEditor';
 import SuperAdminAutoTest from '@/components/super-admin/SuperAdminAutoTest';
 import SuperAdminWhatsAppBots from '@/components/super-admin/SuperAdminWhatsAppBots';
+import SuperAdminSofiaKnowledge from '@/components/super-admin/SuperAdminSofiaKnowledge';
 import { useAuthReady } from '@/hooks/useAuthReady';
 
-type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'workers' | 'users' | 'health' | 'financial' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test' | 'whatsapp_bots';
+type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'workers' | 'users' | 'health' | 'financial' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test' | 'whatsapp_bots' | 'sofia_knowledge';
 
 const ROLE_CHECK_TIMEOUT_MS = 8000;
 
@@ -119,6 +120,7 @@ const SuperAdmin = () => {
     { id: 'ai_editor' as Tab, label: 'Editor IA', icon: <Code2 className="h-4 w-4" /> },
     { id: 'auto_test' as Tab, label: 'AutoTest', icon: <Zap className="h-4 w-4" /> },
     { id: 'whatsapp_bots' as Tab, label: 'Bot WhatsApp', icon: <Bot className="h-4 w-4" /> },
+    { id: 'sofia_knowledge' as Tab, label: 'Conhecimento Sofia', icon: <Sparkles className="h-4 w-4" /> },
   ];
 
   return (
@@ -176,6 +178,7 @@ const SuperAdmin = () => {
           {tab === 'ai_editor' && <SuperAdminAiEditor />}
           {tab === 'auto_test' && <SuperAdminAutoTest />}
           {tab === 'whatsapp_bots' && <SuperAdminWhatsAppBots />}
+          {tab === 'sofia_knowledge' && <SuperAdminSofiaKnowledge />}
         </div>
       </div>
 

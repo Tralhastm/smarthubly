@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { requestSofiaReply } from '@/lib/sofiaClient';
 
 export type OrderChat = {
   id: string;
@@ -19,7 +21,7 @@ export type OrderChat = {
 export type OrderChatMessage = {
   id: string;
   chat_id: string;
-  sender_type: 'customer' | 'store';
+  sender_type: 'customer' | 'store' | 'sofia';
   content: string;
   created_at: string;
 };
@@ -74,7 +76,13 @@ export function useCustomerOrderChat(order: { id: string; tenant_id: string; cus
     if (error) { setMessages(prev => prev.filter(m => m.id !== tempId)); return; }
     const row = Array.isArray(data) ? data[0] : data;
     if (row) setMessages(prev => prev.some(m => m.id === row.id) ? prev.filter(m => m.id !== tempId) : [...prev.filter(m => m.id !== tempId), row]);
-  }, [chat, ensureChat, order?.id]);
+    if (!error && order) {
+      void requestSofiaReply([...messages, { role: 'user', content: trimmed }], { role: 'merchant', surface: 'order_chat', orderId: order.id, chatId: c.id, sessionToken: token, context: `Chat do pedido ${order.id}. A Sofia participa como assistente de atendimento. Responda sobre status, itens, pagamento, preparo e entrega somente com o que estiver confirmado no contexto disponível; se faltar dado, oriente o cliente a aguardar a loja.` }).then(async answer => {
+        if (!answer) return;
+        await (supabase as any).rpc('send_sofia_order_chat_message', { _chat_id: c.id, _token: token, _content: answer });
+      }).catch(() => {});
+    }
+  }, [chat, ensureChat, order?.id, order?.tenant_id, messages]);
 
   const markRead = useCallback(async () => {
     if (!chat) return;

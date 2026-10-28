@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { requestSofiaReply } from '@/lib/sofiaClient';
 
 export type SupplierChat = {
   id: string;
@@ -16,7 +18,7 @@ export type SupplierChat = {
 export type ChatMessage = {
   id: string;
   chat_id: string;
-  sender_type: 'customer' | 'supplier';
+  sender_type: 'customer' | 'supplier' | 'sofia';
   content: string;
   original_content: string | null;
   is_filtered: boolean;
@@ -164,6 +166,11 @@ export function useCustomerChat(tenantId: string, productId: string, supplierId:
         if (withoutTemp.some(m => m.id === (data as ChatMessage).id)) return withoutTemp;
         return [...withoutTemp, data as ChatMessage];
       });
+      const token = getSessionToken(`${chat.product_id}_${chat.id}`) || chat.customer_session_token;
+      void requestSofiaReply([{ role: 'user', content: filtered }], { role: 'merchant', surface: 'product_chat', chatId: chat.id, sessionToken: token, context: `Chat sobre o produto ${chat.product_id}. A Sofia deve responder somente com os dados reais do produto e ajudar a classificar a dúvida. Não forneça contato externo, não prometa estoque ou prazo sem evidência e encaminhe decisões comerciais ao fornecedor/loja.` }).then(async answer => {
+        if (!answer) return;
+        await (supabase as any).rpc('send_sofia_supplier_chat_message', { _chat_id: chat.id, _token: token, _content: answer });
+      }).catch(() => {});
     }
   }, [chat]);
 

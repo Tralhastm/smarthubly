@@ -5,9 +5,10 @@ import { ArrowLeft, MessageCircle, Paperclip, Send, Store, X } from 'lucide-reac
 import { useTenantBySlug } from '@/hooks/useTenants';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { requestSofiaReply } from '@/lib/sofiaClient';
 
 type SupportChat = { id: string; tenant_id: string; customer_session_token: string; unread_for_customer: number };
-type SupportMessage = { id: string; chat_id: string; sender_type: 'customer' | 'store'; content: string; created_at: string; attachment_url?: string | null; attachment_name?: string | null; attachment_type?: string | null; attachment_size?: number | null };
+type SupportMessage = { id: string; chat_id: string; sender_type: 'customer' | 'store' | 'sofia'; content: string; created_at: string; attachment_url?: string | null; attachment_name?: string | null; attachment_type?: string | null; attachment_size?: number | null };
 const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
 const isAllowedAttachment = (file: File) => file.type.startsWith('image/') || file.type === 'application/pdf' || file.type.includes('word') || file.type.startsWith('text/');
 const tokenKey = (tenantId: string) => `store_support_session_${tenantId}`;
@@ -83,6 +84,12 @@ export default function TenantStoreSupport() {
       if (message) setMessages(current => current.some(item => item.id === message.id) ? current : [...current, message]);
     }
     if (error) toast.error('Não foi possível enviar a mensagem.');
+    if (!error && tenant && content) {
+      void requestSofiaReply([...messages, { role: 'user', content }], { role: 'merchant', surface: 'store_support', chatId: chat.id, sessionToken: getSessionToken(tenant.id), context: `Chat de Suporte da loja ${tenant.name}. O cliente está falando diretamente com a loja. Responda primeiro a dúvida operacional; não invente informações e encaminhe para a loja quando depender de decisão humana.` }).then(async answer => {
+        if (!answer) return;
+        await (supabase as any).rpc('send_store_support_sofia_message', { _chat_id: chat.id, _session_token: getSessionToken(tenant.id), _content: answer });
+      }).catch(() => {});
+    }
     setSending(false);
   };
 
@@ -108,7 +115,7 @@ export default function TenantStoreSupport() {
       <div className="mb-3 rounded-lg bg-primary/10 p-3 text-xs text-muted-foreground"><MessageCircle className="mr-1 inline h-4 w-4 text-primary" /> Envie sua dúvida. A loja responderá por este chat.</div>
       <div className="flex-1 space-y-2 overflow-y-auto rounded-xl border border-border bg-card p-3">
         {messages.length === 0 && <p className="py-16 text-center text-sm text-muted-foreground">Ainda não há mensagens. Como podemos ajudar?</p>}
-        {messages.map(message => <div key={message.id} className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${message.sender_type === 'customer' ? 'ml-auto bg-primary/10 text-foreground' : 'mr-auto bg-secondary text-foreground'}`}><span className="mb-1 block text-[10px] text-muted-foreground">{message.sender_type === 'customer' ? 'Você' : <><Store className="mr-1 inline h-3 w-3" /> Loja</>} · {new Date(message.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>{message.content}{message.attachment_url && <a href={message.attachment_url} target="_blank" rel="noreferrer" className="mt-2 flex items-center gap-2 rounded-md border border-border/60 bg-background/50 p-2 text-xs text-primary hover:underline">{message.attachment_type?.startsWith('image/') ? <img src={message.attachment_url} alt={message.attachment_name || 'Anexo'} className="h-12 w-12 rounded object-cover" /> : <Paperclip className="h-4 w-4" />}{message.attachment_name || 'Abrir anexo'}</a>}</div>)}
+        {messages.map(message => <div key={message.id} className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${message.sender_type === 'customer' ? 'ml-auto bg-primary/10 text-foreground' : 'mr-auto bg-secondary text-foreground'}`}><span className="mb-1 block text-[10px] text-muted-foreground">{message.sender_type === 'customer' ? 'Você' : message.sender_type === 'sofia' ? <><MessageCircle className="mr-1 inline h-3 w-3" /> Sofia</> : <><Store className="mr-1 inline h-3 w-3" /> Loja</>} · {new Date(message.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>{message.content}{message.attachment_url && <a href={message.attachment_url} target="_blank" rel="noreferrer" className="mt-2 flex items-center gap-2 rounded-md border border-border/60 bg-background/50 p-2 text-xs text-primary hover:underline">{message.attachment_type?.startsWith('image/') ? <img src={message.attachment_url} alt={message.attachment_name || 'Anexo'} className="h-12 w-12 rounded object-cover" /> : <Paperclip className="h-4 w-4" />}{message.attachment_name || 'Abrir anexo'}</a>}</div>)}
         <div ref={bottomRef} />
       </div>
       {attachment && <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs"><span className="flex min-w-0 items-center gap-2 truncate"><Paperclip className="h-4 w-4 shrink-0 text-primary" />{attachment.name}</span><button type="button" onClick={() => { setAttachment(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} aria-label="Remover anexo"><X className="h-4 w-4" /></button></div>}

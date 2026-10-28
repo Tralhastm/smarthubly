@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MessageCircle, Send, Store } from 'lucide-react';
+import { MessageCircle, Send, Sparkles, Store } from 'lucide-react';
 import { useCustomerOrderChat } from '@/hooks/useOrderChat';
 
 type Props = {
@@ -59,7 +59,7 @@ const CustomerOrderChat = ({ order, tenantName }: Props) => {
                   : 'bg-secondary text-foreground mr-auto'
               }`}>
                 <span className="text-[10px] text-muted-foreground block mb-0.5">
-                  {m.sender_type === 'customer' ? 'Você' : <><Store className="inline h-3 w-3 mr-1" />Loja</>}
+                  {m.sender_type === 'customer' ? 'Você' : m.sender_type === 'sofia' ? <><Sparkles className="inline h-3 w-3 mr-1" />Sofia</> : <><Store className="inline h-3 w-3 mr-1" />Loja</>}
                   <span className="ml-2">{new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
                 </span>
                 {m.content}

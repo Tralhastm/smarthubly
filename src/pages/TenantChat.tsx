@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTenantBySlug } from '@/hooks/useTenants';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { filterContactInfo, type ChatMessage, type SupplierChat } from '@/hooks/useSupplierChat';
+import { filterContactInfo, getSessionToken, type ChatMessage, type SupplierChat } from '@/hooks/useSupplierChat';
+import { requestSofiaReply } from '@/lib/sofiaClient';
 import { ArrowLeft, MessageCircle, Send, ShieldAlert, Store } from 'lucide-react';
 
 const SESSION_KEY = 'supplier_chat_sessions';
@@ -161,13 +163,20 @@ const TenantChat = () => {
     setMessages(prev => [...prev, optimisticMsg]);
 
     const { filtered, wasFiltered } = filterContactInfo(content);
-    await supabase.from('supplier_chat_messages').insert({
+    const { error } = await supabase.from('supplier_chat_messages').insert({
       chat_id: selectedChat.id,
       sender_type: 'customer',
       content: filtered,
       original_content: wasFiltered ? content : null,
       is_filtered: wasFiltered,
     });
+    if (!error) {
+      const token = getSessionToken(`${selectedChat.product_id}_${selectedChat.id}`) || selectedChat.customer_session_token;
+      void requestSofiaReply([{ role: 'user', content: filtered }], { role: 'merchant', surface: 'product_chat', chatId: selectedChat.id, sessionToken: token, context: `Chat sobre o produto ${selectedChat.product_name}. A Sofia responde como assistente, sem substituir o fornecedor. Use somente dados confirmados e encaminhe decisões de estoque, prazo ou negociação ao fornecedor.` }).then(async answer => {
+        if (!answer) return;
+        await (supabase as any).rpc('send_sofia_supplier_chat_message', { _chat_id: selectedChat.id, _token: token, _content: answer });
+      }).catch(() => {});
+    }
   };
 
   const formatTime = (dateStr: string) => {
@@ -277,7 +286,7 @@ const TenantChat = () => {
                   : 'bg-secondary text-foreground mr-auto'
               }`}>
                 <span className="text-[10px] text-muted-foreground block mb-0.5">
-                  {m.sender_type === 'customer' ? 'Você' : '🏪 Fornecedor'}
+                  {m.sender_type === 'customer' ? 'Você' : m.sender_type === 'sofia' ? '✨ Sofia' : '🏪 Fornecedor'}
                   <span className="ml-2">{formatTime(m.created_at)}</span>
                 </span>
                 {m.content}
