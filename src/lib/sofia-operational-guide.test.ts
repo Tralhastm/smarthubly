@@ -44,6 +44,8 @@ describe('guia operacional da Sofia', () => {
     expect(guide).toContain('Quero criar minha loja');
     expect(guide).toContain('WhatsApp oficial (+55 11 91287-0761)');
     expect(guide).toContain('não diga “crie sua conta no site”');
+    expect(guide).toContain('5% por venda ou plano fixo de R$ 60/mês');
+    expect(guide).toContain('nunca invente exemplos');
     expect(guide).not.toContain('Configurações → Aparência');
     expect(guide).not.toContain('Asaas');
   });
