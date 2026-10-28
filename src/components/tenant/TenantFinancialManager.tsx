@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { calculatePeriodFinance, isOrderRevenueEntry, isPendingCardExpense } from '@/lib/finance-metrics';
 
 // (CLARA_BASE_URL removido — Clara agora é o painel nativo TenantBusinessPanel, sem iframe externo)
 
@@ -136,39 +137,31 @@ const TenantFinancialManager = ({ tenantId, isDropshipping }: { tenantId: string
     return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
   });
   const monthRev = monthOrders.reduce((s, o) => s + Number(o.total || 0), 0);
-  const monthFees = monthOrders.reduce((s, o) => s + Number(o.platform_fee || 0), 0);
 
   // Manual entries this month.
   // IMPORTANT: entries com marcador "#ORDER_REVENUE:" sao criadas automaticamente
   // pelo trigger recordOrderRevenue quando um pedido vira "delivered". Como ja
   // contamos esses pedidos via `monthRev` (orders entregues), precisamos EXCLUIR
   // essas entries pra evitar dupla contagem (bug R$50,42 -> R$100,84).
-  const isOrderRevenueEntry = (e: { description?: string | null }) =>
-    !!(e.description && e.description.includes('#ORDER_REVENUE:'));
   const monthEntries = entries.filter(e => {
     const d = new Date(e.date);
     return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
   });
-  const monthIn = monthEntries
-    .filter(e => e.type === 'income' && !isOrderRevenueEntry(e))
-    .reduce((s, e) => s + Number(e.amount), 0);
-  // Helper: uma despesa "saiu da conta" SOMENTE se NÃO for cartão pendente.
-  // Cartão pendente (is_credit_card=true E paid=false) NÃO afeta o saldo em conta — só o disponível.
-  const isPendingCardExpense = (e: any) => e.type === 'expense' && e.is_credit_card === true && e.paid === false;
-  const monthOut = monthEntries
-    .filter(e => e.type === 'expense' && !isPendingCardExpense(e))
-    .reduce((s, e) => s + Number(e.amount), 0);
-
-  // TRUE month profit: real orders + manual incomes - fees - manual expenses
-  const monthRealIncome = monthRev + monthIn;
-  const monthRealOutflow = monthFees + monthOut;
-  const monthProfit = monthRealIncome - monthRealOutflow;
+  const monthFinance = calculatePeriodFinance({ realizedOrders: monthOrders, entries: monthEntries });
+  const monthRealIncome = monthFinance.income;
+  // Fluxo de caixa: só o que já saiu da conta.
+  const monthRealOutflow = monthFinance.cashOutflow;
+  // Lucro líquido real: todas as despesas do período, inclusive cartão ainda não pago.
+  const monthProfit = monthFinance.profit;
   const monthMargin = monthRealIncome > 0 ? (monthProfit / monthRealIncome) * 100 : 0;
 
   // Lifetime — exclui order-revenue entries (não contar pedidos 2x) e cartão pendente (ainda não saiu)
   const totalIn = entries.filter(e => e.type === 'income' && !isOrderRevenueEntry(e)).reduce((s, e) => s + Number(e.amount), 0);
   const totalOut = entries
     .filter(e => e.type === 'expense' && !isPendingCardExpense(e))
+    .reduce((s, e) => s + Number(e.amount), 0);
+  const totalExpenses = entries
+    .filter(e => e.type === 'expense')
     .reduce((s, e) => s + Number(e.amount), 0);
   // SALDO NA CONTA: dinheiro físico hoje. Cartão pendente NÃO entra.
   const accountBalance = (totalIn + orderRevenue) - (totalOut + orderFees);
@@ -179,7 +172,7 @@ const TenantFinancialManager = ({ tenantId, isDropshipping }: { tenantId: string
   const monthsActiveSet = new Set(allDates.map(d => d.slice(0, 7)));
   const monthsActive = Math.max(monthsActiveSet.size, 1);
   const avgMonthlyRevenue = (orderRevenue + totalIn) / monthsActive;
-  const avgMonthlyExpense = (orderFees + totalOut) / monthsActive;
+  const avgMonthlyExpense = (orderFees + totalExpenses) / monthsActive;
   const avgMonthlyProfit = avgMonthlyRevenue - avgMonthlyExpense;
 
   // Pending receivables (orders not yet delivered/cancelled)
@@ -522,6 +515,16 @@ const TenantFinancialManager = ({ tenantId, isDropshipping }: { tenantId: string
                   </div>
                 </div>
                 <p className="text-lg font-bold text-red-400">R${monthRealOutflow.toFixed(2)}</p>
+              </div>
+              <div className={`flex items-center justify-between rounded-lg p-3 ${monthProfit >= 0 ? 'bg-primary/10' : 'bg-red-500/15'}`}>
+                <div className="flex items-center gap-2">
+                  <TrendingUp className={`h-5 w-5 ${monthProfit >= 0 ? 'text-primary' : 'text-red-400'}`} />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Lucro líquido real</p>
+                    <p className="text-[10px] text-muted-foreground">Entradas − todas as despesas, mesmo cartão pendente</p>
+                  </div>
+                </div>
+                <p className={`text-lg font-bold ${monthProfit >= 0 ? 'text-primary' : 'text-red-400'}`}>R${monthProfit.toFixed(2)}</p>
               </div>
               <div className="flex items-center justify-between rounded-lg bg-orange-500/10 p-3">
                 <div className="flex items-center gap-2">

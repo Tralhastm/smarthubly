@@ -127,6 +127,16 @@ as cores do comércio, o domínio que o lojista quiser (custom domain disponíve
 - iFood ranqueia quem paga mais. Aqui o lojista controla a vitrine.
 - iFood não tem fiado, agendamento, comanda de mesa, garçom no celular, KDS, conciliação de maquininha, NF-e, integração com financeiro próprio.
 - Aqui tem TUDO num lugar só: pedido + mesa + cozinha + financeiro + marketing + fidelidade + automação.
+
+## GUIA OPERACIONAL PARA INICIANTES — NÃO INVENTAR CAMINHOS
+- Para começar: no painel da loja, abra **Configurações** e configure identidade, horários, entrega e pagamentos; depois abra **Catálogo** para categorias, produtos, preços, custos, variantes, adicionais e estoque; por fim abra **Pedidos** para acompanhar o primeiro pedido.
+- Operação: o pedido percorre Recebido → Preparando → Pronto/Saindo → Entregue. Só pedido entregue e não marcado como fiado é receita realizada. Pedido cancelado não é receita.
+- Financeiro geral: abra **Financeiro**. As subabas reais são **Saúde**, **Clara**, **Fluxo**, **Lançar**, **Cartão**, **A Pagar / Receber**, **Fornec.**, **Calculadora** e **Taxa**. Para registrar uma saída, use **Lançar**; informe categoria, valor, descrição, data e se é cartão. Para boleto ou valor futuro, use **A Pagar / Receber**.
+- Financeiro avançado: abra **Financeiro Avançado**. As subabas reais são **Adquirente**, **Contas**, **Fluxo Projetado**, **DRE Comparativo** e **Sociedade**. **Adquirente** importa CSV e concilia; **Contas** controla contas a pagar/receber; **Fluxo Projetado** mostra futuro; **DRE Comparativo** compara meses; **Sociedade** divide o lucro entre participantes.
+- Regra financeira: vendas de pedidos entregues entram automaticamente; não lance manualmente a mesma venda. Entradas manuais são apenas valores que não vieram de pedido. Todas as despesas entram no lucro líquido real, mesmo que uma compra no cartão ainda não tenha sido paga; cartão pendente reduz o saldo disponível, mas não o saldo bancário já pago. Explique sempre a diferença entre receita, despesas totais, lucro líquido, saldo em conta e saldo disponível.
+- DRE: acessar **Financeiro Avançado → DRE Comparativo**. O DRE considera pedidos entregues automaticamente, CMV quando há ficha técnica, taxa de plataforma e todas as despesas do período. Não diga que é necessário cadastrar manualmente cada venda.
+- Instrução segura: se o nome de uma aba ou botão não estiver neste guia, peça ao usuário uma captura de tela ou diga que o rótulo pode variar; nunca invente “Relatórios > DRE” ou “Nova Despesa” como se fossem caminhos garantidos.
+- Roteiro completo de primeiro dia: Configurações → Catálogo → Produtos → Pedidos → KDS/Mesas (se usados) → Financeiro → Marketing → Integrações → Usuários → Automações → Suporte & Treino. Em cada etapa, explique o objetivo, o próximo clique e como desfazer ou revisar.
 `.trim();
 // Estratégia / vocabulário do dono — pra usar no Vendedor IA principalmente.
 export const SALES_PLAYBOOK = `
