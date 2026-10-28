@@ -22,7 +22,10 @@ function aliases(question: string): string[] {
     sociedade: ["partnership", "society", "settlement"],
     pedido: ["order", "orders", "order_items"],
     fornecedor: ["supplier", "supplier_product_prices", "import-supplier-catalog"],
-    aplicar: ["apply", "autoApply", "store_agent_plans"]
+    aplicar: ["apply", "autoApply", "store_agent_plans"],
+    exportar: ["export", "exportCatalogHtml", "exportCatalogTxt"],
+    baixar: ["download", "export", "exportCatalogHtml", "exportCatalogTxt"],
+    descricao: ["description", "bulkDescription", "Gerar descrições em massa"]
   };
   return Array.from(new Set([...terms, ...Object.entries(extra).flatMap(([key, values]) => q.includes(key) ? values : [])]));
 }

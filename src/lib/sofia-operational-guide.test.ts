@@ -95,6 +95,16 @@ describe('guia operacional da Sofia', () => {
     expect(unknownEvidence).toContain('NENHUMA EVIDÊNCIA FUNCIONAL ESPECÍFICA');
   });
 
+  it('confirma os botões literais de exportação e descrições em massa em Produtos', () => {
+    const exportEvidence = getSofiaSourceEvidence('Como faço para exportar o catálogo de produtos e baixar no PC?');
+    const descriptionEvidence = getSofiaSourceEvidence('Tem botão para gerar descrições em massa?');
+
+    expect(exportEvidence).toContain('Exportar HTML ou Exportar TXT');
+    expect(exportEvidence).toContain('CSV/Excel não são botões confirmados');
+    expect(descriptionEvidence).toContain('Gerar descrições em massa');
+    expect(descriptionEvidence).toContain('Iniciar geração');
+  });
+
   it('inclui regras de dados atuais, resolução com evidência e feedback supervisionado', () => {
     const productGuide = getSofiaOperationalGuidance('Como vejo o preço atual do produto com variantes?');
     const troubleshootingGuide = getSofiaOperationalGuidance('Deu erro e não consigo concluir o pedido; como resolver?');

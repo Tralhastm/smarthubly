@@ -31,6 +31,34 @@ const EVIDENCE: SofiaSourceEvidence[] = [
     verifiedCommit: "6797419"
   },
   {
+    id: "catalog-export",
+    keywords: ["exportar catalogo", "exportar catálogo", "baixar catalogo", "baixar catálogo", "download produtos", "exportar produtos", "exportacao catalogo", "exportação catálogo", "exportar"],
+    title: "Exportar catálogo de produtos",
+    route: "Catálogo → Produtos",
+    action: "Exportar HTML ou Exportar TXT; no HTML é possível escolher incluir comissão, custo e produtos indisponíveis",
+    effect: "Gera um download local do catálogo; não altera produtos nem cria registros. CSV/Excel não são botões confirmados nesta tela.",
+    dataAccess: "leitura de products, variantes, imagens e dados de catálogo",
+    automatic: false,
+    destructive: false,
+    external: false,
+    source: "src/components/tenant/TenantAdminProducts.tsx:1578-1601",
+    verifiedCommit: "6797419"
+  },
+  {
+    id: "catalog-bulk-descriptions",
+    keywords: ["gerar descricoes em massa", "gerar descrições em massa", "descricao em massa", "descrição em massa", "descricoes dos produtos", "descrições dos produtos", "gerar descricao produtos", "gerar descrição produtos"],
+    title: "Gerar descrições em massa",
+    route: "Catálogo → Produtos",
+    action: "Clicar Gerar descrições em massa; revisar regras e opção Sobrescrever descrições existentes; clicar Iniciar geração",
+    effect: "Pesquisa especificações públicas e grava a descrição produto a produto via ai-media-unified. Sem Sobrescrever, processa apenas produtos sem descrição; pode ser interrompido após o produto atual.",
+    dataAccess: "products.description; chamada ai-media-unified/describe",
+    automatic: false,
+    destructive: false,
+    external: true,
+    source: "src/components/tenant/TenantAdminProducts.tsx:485-531,1572-1576,1667-1701",
+    verifiedCommit: "6797419"
+  },
+  {
     id: "society-cost-rule",
     keywords: ["gasto sociedade", "custo sociedade", "regra sociedade", "apuracao sociedade", "apuração sociedade"],
     title: "Cadastrar gasto na Sociedade",
