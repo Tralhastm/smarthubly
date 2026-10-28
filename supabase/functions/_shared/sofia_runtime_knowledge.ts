@@ -67,6 +67,12 @@ export function isSofiaInStock(value: unknown): boolean {
   return value !== false && String(value).toLowerCase() !== 'false';
 }
 
+export function isSofiaPaymentReceived(value: unknown): boolean {
+  if (value === true) return true;
+  return ['true', '1', 'yes', 'y', 'sim', 'pago', 'received', 'recebido']
+    .includes(String(value ?? '').trim().toLowerCase());
+}
+
 export function scoreSofiaProductMatch(product: Record<string, unknown>, terms: string[]): number {
   if (!terms.length) return 0;
   const searchable = normalizeSofiaText(`${product.name ?? ''} ${product.description ?? ''} ${product.category ?? ''} ${product.subcategory ?? ''}`);

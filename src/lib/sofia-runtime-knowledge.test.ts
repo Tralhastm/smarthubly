@@ -7,6 +7,7 @@ import {
   getSofiaProductSearchTerms,
   isSofiaFeedbackCategory,
   isSofiaInStock,
+  isSofiaPaymentReceived,
   planSofiaOrderLookup,
   redactSofiaText,
   scoreSofiaProductMatch,
@@ -42,6 +43,15 @@ describe('recuperação de dados e conhecimento da Sofia', () => {
       { in_stock: 'false', price_delta: -80 },
       { in_stock: true, price_delta: 10 },
     ])).toBe(110);
+  });
+
+  it('interpreta corretamente o recebimento de pagamento booleano ou armazenado como texto', () => {
+    expect(isSofiaPaymentReceived(true)).toBe(true);
+    expect(isSofiaPaymentReceived('true')).toBe(true);
+    expect(isSofiaPaymentReceived('received')).toBe(true);
+    expect(isSofiaPaymentReceived(false)).toBe(false);
+    expect(isSofiaPaymentReceived('false')).toBe(false);
+    expect(isSofiaPaymentReceived(null)).toBe(false);
   });
 
   it('reconhece consulta ampla de catálogo e pedidos sem transformar a frase em busca de produto', () => {
