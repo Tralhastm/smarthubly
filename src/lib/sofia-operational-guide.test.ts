@@ -77,6 +77,8 @@ describe('guia operacional da Sofia', () => {
     expect(guide).toContain('painel separado do fornecedor');
     expect(guide).toContain('Catálogo → Importar / Exportar');
     expect(guide).toContain('clicar em Atualizar preços');
+    expect(guide).toContain('A tela aceita a lista original');
+    expect(guide).toContain('Não afirme que toda lista precisa ser reformatada para um único padrão');
     expect(guide).toContain('aparecem em Não encontrados e são ignorados');
     expect(guide).toContain('nenhum produto novo é criado');
     expect(guide).toContain('não altera o preço de revenda da loja');
