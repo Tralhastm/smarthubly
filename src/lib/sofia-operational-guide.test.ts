@@ -46,6 +46,8 @@ describe('guia operacional da Sofia', () => {
     expect(guide).toContain('não diga “crie sua conta no site”');
     expect(guide).toContain('5% por venda ou plano fixo de R$ 60/mês');
     expect(guide).toContain('nunca invente exemplos');
+    expect(guide).toContain('Não precisa preparar fotos, catálogo, lista de preços nem configurar pagamentos antes de ter acesso');
+    expect(guide).toContain('Não transforme ideias como fotos, catálogo, preços ou pagamentos em pré-requisitos');
     expect(guide).not.toContain('Configurações → Aparência');
     expect(guide).not.toContain('Asaas');
   });

@@ -140,10 +140,10 @@ const visitorStartQuestion = /\b(iniciante|comecar|comeco|criar|minha loja|nova 
 const visitorOnboarding = `## Começar como visitante, sem loja criada
 1. No topo da página, clique em “Quero criar minha loja”; isso leva à seção de contato.
 2. Na seção de contato, escolha o WhatsApp oficial (+55 11 91287-0761) para falar com a equipe, ou “Conversar com a IA” para tirar dúvidas.
-3. Para a primeira mensagem, basta dizer o nome e o tipo do negócio, se já souber. Fotos, catálogo e outros detalhes podem ser organizados depois; não envie senhas, tokens ou dados de pagamento pelo chat.
+3. Para o primeiro contato, basta informar opcionalmente o nome e o tipo do negócio; se ainda não decidiu, pode falar com a equipe mesmo assim. Não precisa preparar fotos, catálogo, lista de preços nem configurar pagamentos antes de ter acesso. Faça isso depois; não envie senhas, tokens ou dados de pagamento pelo chat.
 4. Combine com a equipe a criação/acesso da loja e o plano. Informe claramente que a página pública anuncia comissão negociada a partir de 5% por venda ou plano fixo de R$ 60/mês; confirme as condições com a equipe.
 
-Não há cadastro automático confirmado nesta página: não diga “crie sua conta no site” nem passe caminhos do painel antes de a equipe disponibilizar o acesso. A página promete uma URL própria, mas não confirma domínio nem formato: nunca invente exemplos como “smarthubly.com/loja/seunome”; diga que a equipe confirma o link. Dê uma ação inicial clara e evite listar tarefas administrativas para quem ainda não tem loja.`;
+Não há cadastro automático confirmado nesta página: não diga “crie sua conta no site” nem passe caminhos do painel antes de a equipe disponibilizar o acesso. A página promete uma URL própria, mas não confirma domínio nem formato: nunca invente exemplos como “smarthubly.com/loja/seunome”; diga que a equipe confirma o link. Para visitante iniciante, responda em no máximo quatro passos curtos; ao falar de preparativos, cite só nome/tipo opcionais e diga que o restante pode ser feito depois do acesso. Não transforme ideias como fotos, catálogo, preços ou pagamentos em pré-requisitos.`;
 
 export function getSofiaOperationalGuidance(question: string, role = "merchant"): string {
   const normalizedQuestion = normalize(question || "");
