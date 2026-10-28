@@ -18,3 +18,7 @@ export async function getBrevoApiKey(supabase: any): Promise<string | null> {
 
   return Deno.env.get('BREVO_API_KEY')?.trim() || null
 }
+
+export function getBrevoSenderEmail(): string {
+  return Deno.env.get('BREVO_SENDER_EMAIL')?.trim() || 'smarthubly@gmail.com'
+}

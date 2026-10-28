@@ -1,13 +1,12 @@
-import { sendLovableEmail } from 'npm:@lovable.dev/email-js'
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { getBrevoApiKey } from '../../../_shared/brevo.ts'
+import { getBrevoApiKey, getBrevoSenderEmail } from '../../../_shared/brevo.ts'
 
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
 const DEFAULT_SEND_DELAY_MS = 200
 const DEFAULT_AUTH_TTL_MINUTES = 15
 const DEFAULT_TRANSACTIONAL_TTL_MINUTES = 60
-const BREVO_GATEWAY_URL = 'https://connector-gateway.lovable.dev/brevo/smtp/email'
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email'
 
 function parseSender(from: unknown): { name: string; email: string } {
   const value = String(from || '').trim()
@@ -19,38 +18,17 @@ function parseSender(from: unknown): { name: string; email: string } {
 }
 
 async function sendViaBrevoGateway(payload: Record<string, any>, supabase: any): Promise<void> {
-  const lovableKey = Deno.env.get('LOVABLE_API_KEY')
   const brevoKey = await getBrevoApiKey(supabase)
-  if (!lovableKey || !brevoKey) {
-    await sendLovableEmail(
-      {
-        run_id: payload.run_id,
-        to: payload.to,
-        from: payload.from,
-        sender_domain: payload.sender_domain,
-        subject: payload.subject,
-        html: payload.html,
-        text: payload.text,
-        purpose: payload.purpose,
-        label: payload.label,
-        idempotency_key: payload.idempotency_key,
-        unsubscribe_token: payload.unsubscribe_token,
-        message_id: payload.message_id,
-      },
-      { apiKey: lovableKey ?? '', sendUrl: Deno.env.get('LOVABLE_SEND_URL') }
-    )
-    return
-  }
+  if (!brevoKey) throw new Error('Missing Brevo API key')
 
-  const response = await fetch(BREVO_GATEWAY_URL, {
+  const response = await fetch(BREVO_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${lovableKey}`,
-      'X-Connection-Api-Key': brevoKey,
+      'api-key': brevoKey,
     },
     body: JSON.stringify({
-      sender: parseSender(payload.from),
+      sender: { name: parseSender(payload.from).name, email: getBrevoSenderEmail() },
       to: [{ email: payload.to }],
       subject: payload.subject,
       htmlContent: payload.html,

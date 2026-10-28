@@ -3,7 +3,7 @@
 // (excluindo os que estão em email_unsubscribes).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { getAuthUser, isTenantAdmin } from "../../../_shared/auth.ts";
-import { getBrevoApiKey } from "../../../_shared/brevo.ts";
+import { getBrevoApiKey, getBrevoSenderEmail } from "../../../_shared/brevo.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,8 +12,7 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/brevo";
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
 const SPAM_NOTICE = `<p style="color:#888;font-size:12px;margin-top:24px">Não recebeu algum e-mail nosso? Confira sua caixa de spam ou promoções.</p>`;
 
@@ -53,7 +52,6 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
       .eq("id", c.tenant_id).single();
     if (!t) return new Response(JSON.stringify({ error: "tenant not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     if (!t.marketing_emails_enabled) return new Response(JSON.stringify({ error: "marketing disabled for this tenant" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    if (!t.brevo_sender_email) return new Response(JSON.stringify({ error: "brevo_sender_email not configured" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     await supa.from("marketing_campaigns").update({ status: "sending" }).eq("id", c.id);
 
@@ -83,15 +81,14 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
         + unsubFooter(t.id, email);
 
       try {
-        const res = await fetch(`${GATEWAY_URL}/smtp/email`, {
+        const res = await fetch(BREVO_API_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-            "X-Connection-Api-Key": brevoApiKey,
+            "api-key": brevoApiKey,
           },
           body: JSON.stringify({
-            sender: { name: t.brevo_sender_name || t.name, email: t.brevo_sender_email },
+            sender: { name: t.brevo_sender_name || t.name, email: getBrevoSenderEmail() },
             to: [{ email, name }],
             subject: c.subject,
             htmlContent: `<html><body style="font-family:Arial,sans-serif;color:#111;max-width:600px;margin:0 auto;padding:20px">${html}</body></html>`,
