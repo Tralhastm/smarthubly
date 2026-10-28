@@ -240,6 +240,14 @@ const TenantOrders = () => {
               {order.delivery_status_note && (
                 <p className="text-xs text-yellow-400 flex items-center gap-1 pt-1">⚠️ {order.delivery_status_note}</p>
               )}
+              {order.status === 'pending_payment' && (
+                <a
+                  href={`/loja/${slug}/pagar/${order.id}`}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-bold text-primary-foreground transition-colors hover:opacity-90"
+                >
+                  <CreditCard className="h-4 w-4" /> Continuar pagamento
+                </a>
+              )}
               {order.status === 'out-for-delivery' && order.delivery_type === 'delivery' && (() => {
                 const trackUrl = order.external_tracking_url || order.lalamove_share_link;
                 const isExternal = !!trackUrl;

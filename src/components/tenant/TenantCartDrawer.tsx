@@ -1080,6 +1080,11 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         //   2) Cria a preferência via Edge Function
         //   3) Só redireciona pro MP após CLIQUE explícito (gesture) → evita auto-launch do app
         //   4) Faz polling e avisa quando pagamento for aprovado
+        // A aba "Pedidos" usa este telefone para recuperar automaticamente o
+        // pedido pendente no mesmo aparelho, sem exigir que o cliente digite o código.
+        try {
+          localStorage.setItem(`lastPhone:${tenant.slug}`, phone.replace(/\D/g, ''));
+        } catch { /* armazenamento indisponível não bloqueia o pagamento */ }
         clearCart(); setStep('cart'); setOpen(false);
         toast({ title: 'Pedido criado! Vamos te guiar pelo pagamento.' });
         navigate(`/loja/${tenant.slug}/pagar/${orderResult.id}`);
