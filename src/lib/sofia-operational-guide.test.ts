@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getSofiaOperationalGuidance } from '../../supabase/functions/_shared/sofia_operational_guide';
+import { getSofiaSourceEvidence } from '../../supabase/functions/_shared/sofia_source_catalog';
 
 describe('guia operacional da Sofia', () => {
   it('entrega caminho financeiro correto e separa lucro de saldo bancário', () => {
@@ -82,6 +83,16 @@ describe('guia operacional da Sofia', () => {
     expect(guide).toContain('store_visible=false');
     expect(guide).toContain('não invente um seletor em Configurações → Automações');
     expect(guide).toContain('não prometa ocultação automática sempre que o estoque zerar');
+  });
+
+  it('consulta evidência read-only para botões específicos e não inventa sem correspondência', () => {
+    const stockEvidence = getSofiaSourceEvidence('Como ocultar produtos esgotados da vitrine?');
+    const unknownEvidence = getSofiaSourceEvidence('Existe um botão secreto para recalcular tudo?');
+
+    expect(stockEvidence).toContain('Catálogo → Produtos');
+    expect(stockEvidence).toContain('store_visible=false');
+    expect(stockEvidence).toContain('commit validado: 6797419');
+    expect(unknownEvidence).toContain('NENHUMA EVIDÊNCIA FUNCIONAL ESPECÍFICA');
   });
 
   it('inclui regras de dados atuais, resolução com evidência e feedback supervisionado', () => {
