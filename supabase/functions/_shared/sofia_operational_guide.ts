@@ -113,9 +113,16 @@ Configurações → Suporte & Treino tem subabas Suporte e Treinamento. Em Supor
   },
   {
     title: "Painéis de fornecedor e motoboy",
-    keywords: ["fornecedor", "fornecedores", "painel fornecedor", "estoque fornecedor", "motoboy", "entregador", "entrega", "lalamove", "supplier", "driver"],
+    keywords: ["fornecedor", "fornecedores", "painel fornecedor", "estoque fornecedor", "motoboy", "entregador", "entrega", "lalamove", "supplier", "driver", "atualizar em massa", "em massa", "envio a lista", "colar lista", "lista de precos", "lista de custo", "importar lista", "importar/exportar", "preco de custo", "precos de custo"],
     content: `## Fornecedor
 O painel de fornecedor tem grupos Operação, Catálogo e Configurações. Abas padrão: Pedidos, Entregas, Motoboys; Estoque, Importar / Exportar, Chats, Avaliações; Frete, Lalamove e Meus dados. Na tela de Pedidos, confira itens e endereço; ações variam, podendo incluir Avançar, Despachar motoboy, Motoboy da loja ou Lalamove (automático). Ativo/Pausado controla disponibilidade quando exibido. Estoque tem alternância Em estoque/Sem estoque e ajustes de quantidade. Não prometa aceitar qualquer pedido ou trocar a entrega sem conferir as ações visíveis.
+
+## Importar preços em massa no painel do fornecedor
+- Se a pessoa está no painel admin do lojista, esta importação não fica em Catálogo → Fornecedores: é no painel separado do fornecedor, em Catálogo → Importar / Exportar. Cole a lista original (uma linha por produto) ou escolha um arquivo .txt. Um formato aceito é Produto - CUSTO: R$ 990,00 - cores; a tela também mostra um exemplo com o preço entre parênteses e a cor depois dele. Colar ou carregar o arquivo apenas preenche a caixa; a gravação começa ao clicar em Atualizar preços.
+- A importação compara a lista com o catálogo já cadastrado do tenant e processa somente correspondências inequívocas com custo válido. Itens que não existem no catálogo aparecem em Não encontrados e são ignorados; nenhum produto novo é criado. Correspondências ambíguas ou sem custo válido são bloqueadas e aparecem como conflitos/erros; confira o resumo antes de concluir que foram aplicadas.
+- O valor importado é o custo/oferta deste fornecedor e, se houver variantes, o custo e a disponibilidade da variante. Isso não altera o preço de revenda da loja nem a quantidade numérica em estoque. Uma cor/variante nova pode ser criada, mas pode ficar pendente de preço de revenda manual.
+- A lista é um snapshot completo das ofertas deste fornecedor: itens/variantes que tinham oferta anterior, mas não aparecem na nova lista, podem ficar desativados para esse fornecedor, e outro fornecedor pode passar a ser a oferta vigente. Use uma lista completa se quiser preservar as ofertas anteriores. A atualização é atômica; se falhar, nenhuma alteração parcial deve ser aplicada.
+- Exportar .txt apenas baixa um arquivo, não atualiza o catálogo. Não recomende colar a lista no chat da Sofia nem usar Marketing → Sofia Agente ou Aplicar Plano; o chat orienta, mas não executa essa importação.
 
 ## Motoboy
 O Painel Motoboy tem Entregas Ativas e, quando houver, Entregues. A disponibilidade é Online — recebendo entregas ou Offline — toque pra ficar disponível; GPS pode ser solicitado. Em cada entrega, confira código/endereço/ponto de referência; use Mapa aqui dentro ou Abrir no app GPS. As ações observadas podem incluir iniciar rota, Entregue, Atrasar, Aguardar e enviar nota. Não atribua funções de garçom ao painel do motoboy.`,

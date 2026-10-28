@@ -71,6 +71,19 @@ describe('guia operacional da Sofia', () => {
     expect(learningGuide).toContain('não treinamento automático');
   });
 
+  it('orienta a importação em massa do painel do fornecedor e não inventa aplicação pelo chat', () => {
+    const guide = getSofiaOperationalGuidance('Mas e para atualizar em massa, tipo só envio a lista e o sistema atualiza?');
+
+    expect(guide).toContain('painel separado do fornecedor');
+    expect(guide).toContain('Catálogo → Importar / Exportar');
+    expect(guide).toContain('clicar em Atualizar preços');
+    expect(guide).toContain('aparecem em Não encontrados e são ignorados');
+    expect(guide).toContain('nenhum produto novo é criado');
+    expect(guide).toContain('não altera o preço de revenda da loja');
+    expect(guide).toContain('snapshot completo das ofertas deste fornecedor');
+    expect(guide).toContain('Não recomende colar a lista no chat da Sofia');
+  });
+
   it('retorna uma orientação segura para pergunta sem tópico reconhecido', () => {
     const guide = getSofiaOperationalGuidance('Pode me ajudar?');
 
