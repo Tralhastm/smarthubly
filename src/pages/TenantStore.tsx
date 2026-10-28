@@ -148,8 +148,8 @@ const TenantStore = () => {
             <span className="font-heading text-lg text-foreground">{tenant.name}</span>
           </div>
           <nav className="flex items-center gap-4">
-            <a href={`/loja/${slug}/chat`} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors">
-              <MessageCircle className="h-4 w-4" /> Chat
+            <a href={`/loja/${slug}/suporte`} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors">
+              <MessageCircle className="h-4 w-4" /> Suporte
             </a>
             {(tenant as any).store_mode === 'affiliate' ? (
               <a href={`/loja/${slug}/salvos`} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors">
@@ -177,7 +177,7 @@ const TenantStore = () => {
             <a href={`/loja/${slug}/meus-pedidos`}>Pedidos</a>
           </nav>
           <div className="juzzy-header-actions">
-            <a href={`/loja/${slug}/chat`} aria-label="Abrir chat"><MessageCircle className="h-5 w-5" /></a>
+            <a href={`/loja/${slug}/suporte`} aria-label="Abrir Suporte"><MessageCircle className="h-5 w-5" /></a>
             <a href="#colecao" className="juzzy-header-cta">Comprar agora</a>
           </div>
         </header>

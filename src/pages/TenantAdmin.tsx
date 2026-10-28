@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import type { Session } from '@supabase/supabase-js';
 import TenantAdminCustomerChats from '@/components/tenant/TenantAdminCustomerChats';
+import TenantAdminStoreSupport from '@/components/tenant/TenantAdminStoreSupport';
 import { useStoreOrderChats } from '@/hooks/useOrderChat';
 import { supabase } from '@/integrations/supabase/client';
 import { useAdminTenantBySlug } from '@/hooks/useTenants';
@@ -449,7 +450,10 @@ const TenantAdmin = () => {
             </>
           )}
           {activeTab === 'customer-chats' && (
-            <TenantAdminCustomerChats tenantId={tenant.id} focusOrderId={focusOrderId} />
+            <>
+              <TenantAdminCustomerChats tenantId={tenant.id} focusOrderId={focusOrderId} />
+              <TenantAdminStoreSupport tenantId={tenant.id} />
+            </>
           )}
           {activeTab === 'orders' && (
             <TenantAdminOrders tenantId={tenant.id} tenantName={tenant.name} />

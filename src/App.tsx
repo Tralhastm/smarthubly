@@ -25,6 +25,7 @@ const TenantSaved = lazy(() => import("./pages/TenantSaved"));
 const SupplierPanel = lazy(() => import("./pages/SupplierPanel"));
 const DriverPanel = lazy(() => import("./pages/DriverPanel"));
 const TenantChat = lazy(() => import("./pages/TenantChat"));
+const TenantStoreSupport = lazy(() => import("./pages/TenantStoreSupport"));
 const WaiterPanel = lazy(() => import("./pages/WaiterPanel"));
 const PdvMaquininha = lazy(() => import("./pages/PdvMaquininha"));
 const Kds = lazy(() => import("./pages/Kds"));
@@ -59,6 +60,7 @@ const App = () => (
                 <Route path="/loja/:slug/pedido/:id" element={<TenantOrderStatus />} />
                 <Route path="/loja/:slug/pagar/:orderId" element={<TenantPaymentGateway />} />
                 <Route path="/loja/:slug/chat" element={<LazyPage><TenantChat /></LazyPage>} />
+                <Route path="/loja/:slug/suporte" element={<LazyPage><TenantStoreSupport /></LazyPage>} />
                 <Route path="/loja/:slug/mesa/:code" element={<TableSession />} />
                 <Route path="/loja/:slug/garcom/:token" element={<LazyPage><WaiterPanel /></LazyPage>} />
                 <Route path="/loja/:slug/pdv" element={<LazyPage><PdvMaquininha /></LazyPage>} />
