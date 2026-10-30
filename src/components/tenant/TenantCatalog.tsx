@@ -56,7 +56,7 @@ const GridCard = ({ product, index, tenantId, addToCart, isDropshipping, niche, 
           ) : (<Package className="h-16 w-16 text-primary/40" />)}
         </div>
         {!product.in_stock && (
-          <span className="absolute top-6 right-6 rounded-full bg-destructive px-3 py-1 text-xs font-medium text-destructive-foreground">{(product as any).catalog_conflict ? 'ESGOTADO' : (product as any).pricing_blocked ? 'Indisponível por prejuízo' : (product as any).manual_blocked ? 'Indisponível' : 'Esgotado'}</span>
+          <span className="absolute top-6 right-6 rounded-full bg-destructive px-3 py-1 text-xs font-medium text-destructive-foreground">Esgotado</span>
         )}
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{product.category}</span>
         <h3 className="font-heading text-lg mt-1 text-foreground">{product.name}</h3>
@@ -109,7 +109,7 @@ const ListRow = ({ product, tenantId, addToCart, isDropshipping, niche, hasExtra
             <h3 className="font-heading text-base text-foreground truncate">{product.name}{onOpenDetails && <span className="ml-1 text-primary/60">›</span>}</h3>
           </div>
           {!product.in_stock && (
-            <span className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-medium text-destructive-foreground shrink-0">{(product as any).catalog_conflict ? 'ESGOTADO' : (product as any).pricing_blocked ? 'Indisponível por prejuízo' : (product as any).manual_blocked ? 'Indisponível' : 'Esgotado'}</span>
+            <span className="rounded-full bg-destructive px-2 py-0.5 text-[10px] font-medium text-destructive-foreground shrink-0">Esgotado</span>
           )}
         </div>
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground" />
@@ -151,9 +151,9 @@ const CompactRow = ({ product, addToCart, niche, hasExtras, displayPrice, displa
         <ExpandableProductDescription value={desc} onOpenDetails={() => onOpenDetails?.(product)} className="whitespace-pre-line pr-2 text-xs leading-relaxed text-muted-foreground" />
         <div className="flex items-center gap-2 mt-1.5">
           {!product.in_stock ? (
-            <span className="text-[10px] text-destructive">{(product as any).catalog_conflict ? 'ESGOTADO' : (product as any).pricing_blocked ? 'Indisponível por prejuízo' : (product as any).manual_blocked ? 'Indisponível manualmente' : 'Esgotado'}</span>
+            <span className="text-[10px] text-destructive">Esgotado</span>
           ) : (
-            <button onClick={(e) => { e.stopPropagation(); hasExtras ? onOpenPicker(product) : addToCart(product); }}
+            <button onClick={(e) => { e.stopPropagation(); if (hasExtras) onOpenPicker(product); else addToCart(product); }}
               className="text-xs font-medium text-primary hover:underline">
               + {hasExtras ? 'Personalizar' : cta}
             </button>
@@ -396,13 +396,20 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
 
   const filtered = useMemo(() => {
     const q = normalize(search.trim());
-    return storefrontProducts.filter(p => {
+    const matchingProducts = storefrontProducts.filter(p => {
       if (!q) return categoryMatches(p);
       const words = q.split(/\s+/).filter(Boolean);
       const haystack = normalize(`${p.name} ${p.description || ''} ${p.category || ''}`);
       const matchSearch = words.every(w => haystack.includes(w));
       return matchSearch && categoryMatches(p);
     });
+    // Mantém todos os produtos na vitrine, mas coloca os que não podem ser
+    // comprados depois dos disponíveis. O sort é estável entre produtos do
+    // mesmo estado para preservar a ordem original do catálogo.
+    return matchingProducts
+      .map((product, index) => ({ product, index }))
+      .sort((a, b) => Number(a.product.in_stock === false) - Number(b.product.in_stock === false) || a.index - b.index)
+      .map(({ product }) => product);
   }, [storefrontProducts, search, categoryMatches]);
 
   useEffect(() => {
@@ -649,7 +656,7 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
                 }} disabled={!detail.in_stock}
                 className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 text-sm font-bold uppercase tracking-wider gradient-primary text-primary-foreground transition hover:opacity-90 disabled:opacity-40">
                 <ShoppingCart className="h-5 w-5" />
-                {detail.in_stock ? 'Adicionar ao carrinho' : 'Indisponível'}
+                {detail.in_stock ? 'Adicionar ao carrinho' : 'Esgotado'}
               </button>
             </div>
           </div>
