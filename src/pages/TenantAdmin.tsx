@@ -263,7 +263,7 @@ const TenantAdmin = () => {
     { id: 'ficha', label: 'Ficha Técnica/CMV', icon: <BookOpen className="h-4 w-4" />, group: 'finance' },
     { id: 'stock', label: 'Estoque', icon: <Package className="h-4 w-4" />, group: 'catalog' },
     { id: 'suppliers', label: 'Fornecedores', icon: <Factory className="h-4 w-4" />, group: 'catalog' },
-    { id: 'price-intelligence', label: 'Inteligência de Preços', icon: <Radar className="h-4 w-4" />, group: 'finance' },
+    { id: 'price-intelligence', label: 'Precificador', icon: <Radar className="h-4 w-4" />, group: 'finance' },
     { id: 'consultora', label: 'WhatsApp Consultora', icon: <Mail className="h-4 w-4" />, group: 'operation' },
     { id: 'shipping', label: 'Frete', icon: <Truck className="h-4 w-4" />, group: 'catalog' },
     { id: 'financial', label: 'Empresarial', icon: <DollarSign className="h-4 w-4" />, group: 'finance' },

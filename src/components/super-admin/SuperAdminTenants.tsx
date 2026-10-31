@@ -64,7 +64,7 @@ const ADMIN_TABS: { id: string; label: string; group: string }[] = [
   { id: 'diagnostic', label: 'Diagnóstico', group: 'Configurações' },
   { id: 'support', label: 'Suporte & Treino', group: 'Configurações' },
   { id: 'users', label: 'Usuários', group: 'Configurações' },
-  { id: 'price-intelligence', label: 'Inteligência de Preços', group: 'Financeiro' },
+  { id: 'price-intelligence', label: 'Precificador', group: 'Financeiro' },
 ];
 
 const AdminTabsConfigEditor = ({ value, onChange }: { value: TabsConfig; onChange: (v: TabsConfig) => void }) => {
