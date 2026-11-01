@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.0";
 
 type InputItem = { name: string };
 type MarketSource = {
-  source: "mercadolivre";
+  source: "serpapi";
   title: string;
   price: number;
   url: string;
@@ -29,25 +29,41 @@ function normalize(value: string) {
 }
 
 function tokens(value: string) {
-  return normalize(value).split(/\s+/).filter((token) => token.length >= 2 && !["com", "para", "original", "lacrado", "gb", "tb"].includes(token));
-}
-
-function requestedCondition(_query: string): "new" {
-  // “Grade A” é uma classificação interna da lista de fornecedor. Todos os
-  // produtos da Mobiletec são pesquisados como novos, lacrados e na caixa.
-  return "new";
+  return normalize(value).split(/\s+/).filter((token) => token.length >= 2);
 }
 
 function cleanResearchName(value: string) {
-  return value.replace(/\bgrade\s*[a-z]\b/gi, " ").replace(/\s+/g, " ").trim();
+  return value
+    .replace(/\bgrade\s*[a-z]\b/gi, " ")
+    .replace(/\b(?:novo|lacrado|na caixa|original)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function equivalent(query: string, title: string) {
-  const titleText = normalize(title);
-  const required = tokens(query);
-  if (!required.length) return false;
-  const critical = required.filter((token) => !["novo", "new", "seminovo", "semi", "usado", "grade", "recondicionado"].includes(token));
-  return critical.length > 0 && critical.every((token) => titleText.includes(token));
+  const queryTokens = tokens(query).filter((token) => !["com", "para", "de", "novo", "lacrado", "original", "gb", "tb"].includes(token));
+  const titleTokens = new Set(tokens(title));
+  if (!queryTokens.length) return false;
+
+  const numeric = queryTokens.filter((token) => /^\d+$/.test(token) && token.length >= 2);
+  const textual = queryTokens.filter((token) => !/^\d+$/.test(token));
+  const numericMatch = numeric.every((token) => titleTokens.has(token));
+  const textualMatches = textual.filter((token) => titleTokens.has(token)).length;
+  const textualRequired = Math.min(textual.length, textual.length <= 2 ? textual.length : 2);
+  return numericMatch && textualMatches >= textualRequired;
+}
+
+function isUsedListing(value: string) {
+  return /\b(seminovo|semi\s*novo|usado|recondicionado|refurbished|restaurado|grade\s*[a-z])\b/i.test(normalize(value));
+}
+
+function parsePrice(result: any) {
+  const extracted = Number(result?.extracted_price);
+  if (Number.isFinite(extracted) && extracted > 0) return extracted;
+  const raw = String(result?.price || "").replace(/[^0-9,.-]/g, "");
+  const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 async function authUser(req: Request) {
@@ -67,31 +83,37 @@ async function canAccess(tenantId: string, userId: string) {
 }
 
 async function searchMarket(name: string): Promise<MarketSource[]> {
+  const apiKey = Deno.env.get("SERPAPI_KEY");
+  if (!apiKey) throw new Error("SERPAPI_KEY não configurada.");
+
   const searchName = cleanResearchName(name);
-  const url = new URL("https://api.mercadolibre.com/sites/MLB/search");
-  url.searchParams.set("q", searchName);
-  url.searchParams.set("limit", "20");
-  const condition = requestedCondition(searchName);
-  url.searchParams.set("condition", condition);
-  url.searchParams.set("sort", "relevance");
+  const url = new URL("https://serpapi.com/search.json");
+  url.searchParams.set("engine", "google_shopping");
+  url.searchParams.set("q", `${searchName} novo lacrado`);
+  url.searchParams.set("api_key", apiKey);
+  url.searchParams.set("gl", "br");
+  url.searchParams.set("hl", "pt-BR");
+  url.searchParams.set("google_domain", "google.com.br");
+  url.searchParams.set("device", "desktop");
+
   const response = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!response.ok) {
-    console.error("market_source_unavailable", response.status, name);
-    throw new Error(`Fonte de mercado indisponível (HTTP ${response.status}).`);
-  }
+  if (!response.ok) throw new Error(`SerpAPI indisponível (HTTP ${response.status}).`);
   const data = await response.json();
+  if (data?.error) throw new Error(`SerpAPI: ${String(data.error)}`);
+
   const collectedAt = new Date().toISOString();
   const unique = new Set<string>();
   const sources: MarketSource[] = [];
-  for (const result of Array.isArray(data?.results) ? data.results : []) {
-    const price = Number(result?.price);
-    const permalink = String(result?.permalink || "").trim();
+  for (const result of Array.isArray(data?.shopping_results) ? data.shopping_results : []) {
     const title = String(result?.title || "").trim();
-    if (!title || !permalink || !Number.isFinite(price) || price <= 0 || (result?.condition_id && result.condition_id !== "new") || !equivalent(searchName, title)) continue;
-    const key = `${normalize(title)}:${price.toFixed(2)}`;
+    const price = parsePrice(result);
+    const link = String(result?.product_link || result?.link || "").trim();
+    if (!title || !link || price == null || isUsedListing(title) || !equivalent(searchName, title)) continue;
+    const sourceName = String(result?.source || "Google Shopping").trim();
+    const key = `${normalize(title)}:${price.toFixed(2)}:${sourceName}`;
     if (unique.has(key)) continue;
     unique.add(key);
-    sources.push({ source: "mercadolivre", title, price, url: permalink, condition: "new", collected_at: collectedAt });
+    sources.push({ source: "serpapi", title: `${title} — ${sourceName}`, price, url: link, condition: "new", collected_at: collectedAt });
   }
   return sources.slice(0, 10);
 }
@@ -131,23 +153,17 @@ Deno.serve(async (req) => {
 
     const items = await inBatches(inputItems, async (item) => {
       const name = String(item?.name || "").trim();
-      if (!name) return { name, sources: [], ...stats([]), evidence_count: 0, demand_note: "Demanda estimada; a busca de anúncios não prova volume de vendas." };
+      if (!name) return { name, sources: [], ...stats([]), evidence_count: 0, demand_note: "Demanda estimada; a busca não prova volume de vendas." };
       try {
         const sources = await searchMarket(name);
         const market = stats(sources.map((source) => source.price));
-        return {
-          name,
-          sources,
-          ...market,
-          evidence_count: sources.length,
-          demand_note: "Demanda estimada; a busca de anúncios não prova volume de vendas.",
-        };
+        return { name, sources, ...market, evidence_count: sources.length, demand_note: "Demanda estimada; a busca de anúncios não prova volume de vendas." };
       } catch (error) {
-        console.error("market_search_failed", name, error);
-        return { name, sources: [], ...stats([]), evidence_count: 0, demand_note: "Pesquisa inconclusiva; a fonte não respondeu." };
+        console.error("serpapi_market_search_failed", name, error);
+        return { name, sources: [], ...stats([]), evidence_count: 0, demand_note: error instanceof Error ? error.message : "Pesquisa inconclusiva; a SerpAPI não respondeu." };
       }
     });
-    return json({ source: "mercadolivre", items, researched_at: new Date().toISOString() });
+    return json({ source: "serpapi_google_shopping", items, researched_at: new Date().toISOString() });
   } catch (error) {
     console.error("market_price_research_error", error);
     return json({ error: "research_failed" }, 500);
