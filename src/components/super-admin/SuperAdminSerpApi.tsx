@@ -25,7 +25,7 @@ const SuperAdminSerpApi = () => {
 
   const addKey = useMutation({
     mutationFn: async (apiKey: string) => {
-      const { error } = await supabase.from('api_keys').insert({ provider: PROVIDER, api_key: apiKey });
+      const { error } = await supabase.from('api_keys').insert({ provider: PROVIDER, api_key: apiKey, is_exhausted: false });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -40,7 +40,7 @@ const SuperAdminSerpApi = () => {
     mutationFn: async (newKeys: string[]) => {
       const { error: deleteError } = await supabase.from('api_keys').delete().eq('provider', PROVIDER);
       if (deleteError) throw deleteError;
-      const { error: insertError } = await supabase.from('api_keys').insert(newKeys.map(api_key => ({ provider: PROVIDER, api_key })));
+      const { error: insertError } = await supabase.from('api_keys').insert(newKeys.map(api_key => ({ provider: PROVIDER, api_key, is_exhausted: false })));
       if (insertError) throw insertError;
     },
     onSuccess: () => {
