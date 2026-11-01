@@ -13,7 +13,7 @@ function listing(title: string, price: number, extras: Record<string, unknown> =
 }
 
 describe('market research evidence quality', () => {
-  it('requires five comparable new/sealed offers before approving a reference', () => {
+  it('approves a reference once three comparable new/sealed offers are available', () => {
     const result = evaluateShoppingResults('iPhone 14 256GB', [
       listing('Apple iPhone 14 256GB novo', 2600),
       listing('Apple iPhone 14 256GB lacrado', 2700),
@@ -23,8 +23,8 @@ describe('market research evidence quality', () => {
 
     expect(result.found_count).toBe(4);
     expect(result.evidence_count).toBe(4);
-    expect(result.quality_status).toBe('insufficient_evidence');
-    expect(result.quality_note).toContain('4/5');
+    expect(result.quality_status).toBe('approved');
+    expect(result.quality_note).toContain('4 anúncios comparáveis');
   });
 
   it('rejects a Pro model when the supplier list requests the standard iPhone', () => {
@@ -50,7 +50,7 @@ describe('market research evidence quality', () => {
     expect(wrongRequestedNetwork.sources[0].rejection_reason).toContain('5g');
   });
 
-  it('separates used or Grade A listings from listings without explicit new-condition evidence', () => {
+  it('accepts seminovo as an indicative reference but separates used and Grade A listings', () => {
     const result = evaluateShoppingResults('iPhone 14 256GB', [
       listing('Apple iPhone 14 256GB seminovo', 2400),
       listing('Apple iPhone 14 256GB Grade A', 2500),
@@ -58,7 +58,8 @@ describe('market research evidence quality', () => {
     ]);
 
     expect(result.evidence_count).toBe(0);
-    expect(result.sources.map(source => source.status)).toEqual(['rejected', 'rejected', 'indicative']);
+    expect(result.sources.map(source => source.status)).toEqual(['indicative', 'rejected', 'indicative']);
+    expect(result.sources[0].condition).toBe('semi_new');
     expect(result.sources[2].rejection_reason).toContain('não está comprovada');
   });
 
@@ -143,7 +144,7 @@ describe('market research evidence quality', () => {
     expect(result.sources[1].rejection_reason).toContain('capacidade');
   });
 
-  it('excludes an extreme price with an audit reason and refuses approval if fewer than five remain', () => {
+  it('excludes an extreme price with an audit reason and still approves three stable offers', () => {
     const result = evaluateShoppingResults('iPhone 14 256GB', [
       listing('Apple iPhone 14 256GB novo', 2600),
       listing('Apple iPhone 14 256GB novo', 2700),
@@ -156,7 +157,7 @@ describe('market research evidence quality', () => {
     expect(result.evidence_count).toBe(4);
     expect(result.rejected_count).toBe(1);
     expect(result.sources.find(source => source.price === 4292.10)?.rejection_reason).toContain('Preço atípico');
-    expect(result.quality_status).toBe('insufficient_evidence');
+    expect(result.quality_status).toBe('approved');
   });
 
   it('marks a wide but internally valid market spread as suspect', () => {
@@ -173,7 +174,7 @@ describe('market research evidence quality', () => {
     expect(result.quality_note).toContain('dispersão central');
   });
 
-  it('approves a stable reference from five exact, new listings', () => {
+  it('approves a stable reference from three exact, new listings', () => {
     const result = evaluateShoppingResults('iPhone 14 256GB', [
       listing('Apple iPhone 14 256GB novo', 2600),
       listing('Apple iPhone 14 256GB novo', 2700),

@@ -1,4 +1,5 @@
-export const MINIMUM_COMPARABLE_EVIDENCE = 5;
+export const MINIMUM_COMPARABLE_EVIDENCE = 3;
+export const MINIMUM_INDICATIVE_EVIDENCE = 3;
 
 export type EvidenceStatus = "comparable" | "indicative" | "rejected";
 export type MarketQualityStatus = "approved" | "insufficient_evidence" | "suspect";
@@ -7,7 +8,7 @@ export type MarketEvidence = {
   title: string;
   price: number | null;
   url: string | null;
-  condition: "new" | "unverified";
+  condition: "new" | "semi_new" | "unverified";
   collected_at: string;
   status: EvidenceStatus;
   acceptance_reason: string | null;
@@ -24,6 +25,8 @@ export type MarketResearchSummary = {
   rejected_count: number;
   quality_status: MarketQualityStatus;
   quality_note: string;
+  market_condition: "new" | "semi_new" | "indicative" | "none";
+  semi_new_count: number;
 };
 
 type ShoppingResult = Record<string, unknown>;
@@ -33,7 +36,8 @@ const BRAND_ALIASES = [new Set(["xiaomi", "redmi"]), new Set(["motorola", "moto"
 const COLOR_GROUPS: Array<{ id: string; aliases: string[] }> = [
   { id: "black", aliases: ["preto", "preta", "negro", "negra", "black"] }, { id: "white", aliases: ["branco", "branca", "white"] }, { id: "gray", aliases: ["cinza", "cinzento", "cinzenta", "gray", "grey"] }, { id: "blue", aliases: ["azul", "blue"] }, { id: "green", aliases: ["verde", "green"] }, { id: "red", aliases: ["vermelho", "vermelha", "red"] }, { id: "gold", aliases: ["dourado", "dourada", "gold"] }, { id: "silver", aliases: ["prata", "prateado", "prateada", "silver"] }, { id: "purple", aliases: ["roxo", "roxa", "lilas", "lilac", "purple", "violet"] }, { id: "pink", aliases: ["rosa", "pink"] }, { id: "yellow", aliases: ["amarelo", "amarela", "yellow"] }, { id: "orange", aliases: ["laranja", "orange"] },
 ];
-const USED_PATTERN = /\b(?:semi\s*novo|seminovo|usado|usada|used|pre\s*owned|preowned|not\s+new|nao\s+novo|recondicionado|recondicionada|refurbished|renewed|restaurado|restaurada|open\s*box|vitrine|mostruario|grade\s*[a-z]|bom|regular|marcas?\s+de\s+uso|caixa\s+aberta)\b/i;
+const SEMI_NEW_PATTERN = /\b(?:semi\s*novo|seminovo|recondicionado|recondicionada|refurbished|renewed|usad[oa]?\s+com\s+garantia)\b/i;
+const USED_PATTERN = /\b(?:usad[oa]?(?!\s+com\s+garantia)|used|pre\s*owned|preowned|not\s+new|nao\s+novo|open\s*box|vitrine|mostruario|grade\s*[a-z]|bom|regular|marcas?\s+de\s+uso|caixa\s+aberta|sem\s+(?:face\s*id|touch|nota|garantia)|defeito|avariado)\b/i;
 const NEW_PATTERN = /\b(?:novo|novos|lacrado|lacrados|selado|selados|sealed|brand\s*new)\b/i;
 const TRUSTED_RETAILER_PATTERN = /\b(?:amazon(?:\.com\.br)?|magalu|magazine\s*luiza|carrefour|kabum|fast\s*shop|iplace|apple|vivo|claro|tim|casas\s*bahia|ponto|extra|mercado\s*livre|mercadolivre|br\s*celulares|bne\s*store|line\s*express|foneup|mimilon|simpletek|policell|shop\s*gv|le\s*biscuit)\b/i;
 const INCONSISTENT_IQR_RATIO = 0.25;
@@ -79,10 +83,10 @@ function stats(values: number[]) { if (!values.length) return { min: null, media
 function moneyBRL(value: number): string { return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value); }
 
 export function evaluateShoppingResults(productName: string, rawResults: unknown[], collectedAt = new Date().toISOString()): MarketResearchSummary {
-  const query = cleanResearchName(productName); const sources: MarketEvidence[] = []; const seen = new Set<string>();
+  const query = cleanResearchName(productName); const requiresNew = NEW_PATTERN.test(normalizeResearchText(productName)); const sources: MarketEvidence[] = []; const seen = new Set<string>();
   for (const value of rawResults) {
     const result = (value && typeof value === "object" ? value : {}) as ShoppingResult; const title = String(result.title || "").trim() || "Resultado sem título"; const price = parsePrice(result); const rawUrl = String(result.product_link || result.link || "").trim(); let url: string | null = null; try { const parsed = new URL(rawUrl); if (parsed.protocol === "https:" || parsed.protocol === "http:") url = parsed.toString(); } catch { /* URL inválida */ }
-    const seller = String(result.source || "Google Shopping").trim(); const text = listingText(result, title); const usedListing = USED_PATTERN.test(normalizeResearchText(text)); let reason: string | null = null; let status: EvidenceStatus = "rejected";
+    const seller = String(result.source || "Google Shopping").trim(); const text = listingText(result, title); const semiNewListing = SEMI_NEW_PATTERN.test(normalizeResearchText(text)); const usedListing = USED_PATTERN.test(normalizeResearchText(text)); let reason: string | null = null; let status: EvidenceStatus = "rejected";
     const stableOfferId = String(result.product_id || result.catalog_id || result.headlineOfferDocid || "").trim();
     const dedupeKey = stableOfferId || `${normalizeResearchText(title)}:${price ?? "sem-preco"}:${normalizeResearchText(seller)}`;
     if (seen.has(dedupeKey)) continue;
@@ -90,17 +94,28 @@ export function evaluateShoppingResults(productName: string, rawResults: unknown
     if (title === "Resultado sem título") reason = "Título ausente no resultado.";
     else if (price == null) reason = "Preço ausente ou inválido.";
     else if (!url) reason = "Link do anúncio ausente ou inválido.";
-    else if (usedListing) reason = "O anúncio indica usado, seminovo, recondicionado, vitrine ou Grade A.";
+    else if (usedListing) reason = "O anúncio indica usado, vitrine, defeito ou aparelho incompleto.";
+    else if (requiresNew && semiNewListing) reason = "O produto foi solicitado como novo, mas o anúncio é seminovo/recondicionado.";
     else reason = productMismatchReason(query, text);
-    const explicitNew = hasNewCondition(result, text, seller);
-    if (!reason && !explicitNew) { reason = "Condição novo/lacrado não está comprovada no título, condição ou atributos do anúncio."; status = "indicative"; }
+    const explicitNew = !semiNewListing && hasNewCondition(result, text, seller);
+    if (!reason && semiNewListing) { status = "indicative"; }
+    else if (!reason && !explicitNew) { reason = "Condição novo/lacrado não está comprovada no título, condição ou atributos do anúncio."; status = "indicative"; }
     else if (reason && indicativeReason(reason) && !usedListing) status = "indicative";
     else if (!reason) status = "comparable";
-    sources.push({ source: "serpapi", title: seller ? `${title} — ${seller}` : title, price, url, condition: explicitNew && !usedListing ? "new" : "unverified", collected_at: collectedAt, status, acceptance_reason: status === "comparable" ? "Modelo, variante, capacidade e condição nova/lacrada confirmados no anúncio." : null, rejection_reason: status === "comparable" ? null : reason });
+    sources.push({ source: "serpapi", title: seller ? `${title} — ${seller}` : title, price, url, condition: semiNewListing ? "semi_new" : explicitNew && !usedListing ? "new" : "unverified", collected_at: collectedAt, status, acceptance_reason: status === "comparable" ? "Modelo, variante, capacidade e condição nova/lacrada confirmados no anúncio." : status === "indicative" && semiNewListing ? "Modelo e capacidade compatíveis; anúncio seminovo/recondicionado usado como referência indicativa." : null, rejection_reason: status === "comparable" || (status === "indicative" && semiNewListing) ? null : reason });
   }
   const preliminary = sources.filter(source => source.status === "comparable" && source.price != null); const preliminaryPrices = preliminary.map(source => source.price as number); const outliers = outlierIndexes(preliminaryPrices); preliminary.forEach((source, index) => { if (!outliers.has(index)) return; const center = median(preliminaryPrices); const distance = center > 0 ? Math.abs((source.price as number) - center) / center * 100 : 0; source.status = "rejected"; source.acceptance_reason = null; source.rejection_reason = `Preço atípico: ${moneyBRL(source.price as number)}, ${distance.toFixed(1).replace(".", ",")}% distante da mediana inicial (${moneyBRL(center)}).`; });
-  const comparable = sources.filter(source => source.status === "comparable" && source.price != null); const indicative = sources.filter(source => source.status === "indicative"); const prices = comparable.map(source => source.price as number); const market = stats(prices); const rejectedCount = sources.filter(source => source.status === "rejected").length; let qualityStatus: MarketQualityStatus = "insufficient_evidence"; let qualityNote: string;
-  if (prices.length < MINIMUM_COMPARABLE_EVIDENCE) qualityNote = prices.length === 0 ? `Nenhum anúncio aprovado. Há ${indicative.length} evidência(s) indicativa(s); são necessários pelo menos ${MINIMUM_COMPARABLE_EVIDENCE} anúncios comparáveis.` : `Referência inconclusiva: ${prices.length}/${MINIMUM_COMPARABLE_EVIDENCE} anúncios aprovados e ${indicative.length} indicativos. A mediana é apenas indicativa e não aprova preço de mercado.`;
+  const comparable = sources.filter(source => source.status === "comparable" && source.price != null); const indicative = sources.filter(source => source.status === "indicative" && source.price != null); const semiNew = indicative.filter(source => source.condition === "semi_new"); const prices = comparable.map(source => source.price as number); const indicativePrices = indicative.map(source => source.price as number); const semiNewPrices = semiNew.map(source => source.price as number); const rejectedCount = sources.filter(source => source.status === "rejected").length; let qualityStatus: MarketQualityStatus = "insufficient_evidence"; let qualityNote: string; let market = stats(prices); let marketCondition: MarketResearchSummary["market_condition"] = "none";
+  if (prices.length < MINIMUM_COMPARABLE_EVIDENCE) {
+    const fallbackPrices = indicativePrices.length >= MINIMUM_INDICATIVE_EVIDENCE ? indicativePrices : [];
+    if (fallbackPrices.length >= MINIMUM_INDICATIVE_EVIDENCE) {
+      market = stats(fallbackPrices); marketCondition = semiNewPrices.length >= MINIMUM_INDICATIVE_EVIDENCE && prices.length === 0 ? "semi_new" : "indicative";
+      qualityNote = marketCondition === "semi_new" ? `Mercado novo não encontrado; ${semiNewPrices.length} anúncios seminovos/recondicionados compatíveis formam um preço indicativo.` : `Preço indicativo formado por ${fallbackPrices.length} evidências; ainda não há ${MINIMUM_COMPARABLE_EVIDENCE} anúncios novos comparáveis para aprovar o mercado.`;
+    } else {
+      qualityNote = prices.length === 0 ? `Nenhum anúncio novo aprovado. Há ${indicative.length} evidência(s) indicativa(s); são necessários pelo menos ${MINIMUM_COMPARABLE_EVIDENCE} anúncios comparáveis.` : `Referência inconclusiva: ${prices.length}/${MINIMUM_COMPARABLE_EVIDENCE} anúncios aprovados e ${indicative.length} indicativos.`;
+    }
+  }
   else { const spreadRatio = market.median ? (quantile(prices, 0.75) - quantile(prices, 0.25)) / market.median : 0; if (spreadRatio > INCONSISTENT_IQR_RATIO) { qualityStatus = "suspect"; qualityNote = `Referência suspeita: a dispersão central dos anúncios é ${(spreadRatio * 100).toFixed(1).replace(".", ",")}% da mediana. Revise as evidências antes de usar o preço.`; } else { qualityStatus = "approved"; qualityNote = `Referência aprovada com ${prices.length} anúncios comparáveis, novos/lacrados e sem dispersão suspeita.`; } }
-  return { sources, ...market, evidence_count: comparable.length, indicative_count: indicative.length, found_count: sources.length, rejected_count: rejectedCount, quality_status: qualityStatus, quality_note: qualityNote };
+  if (qualityStatus === "approved") marketCondition = "new";
+  return { sources, ...market, evidence_count: comparable.length, indicative_count: indicative.length, found_count: sources.length, rejected_count: rejectedCount, quality_status: qualityStatus, quality_note: qualityNote, market_condition: marketCondition, semi_new_count: semiNew.length };
 }

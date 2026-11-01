@@ -24,7 +24,7 @@ interface Props { tenantId: string }
 type CatalogProduct = { id: string; name: string; original_price: number | null };
 type MarketQualityStatus = 'approved' | 'insufficient_evidence' | 'suspect';
 type MarketEvidence = { source: string; title: string; price: number | null; url: string | null; condition: string; collected_at: string; status: 'comparable' | 'indicative' | 'rejected'; acceptance_reason: string | null; rejection_reason: string | null };
-type MarketResearchItem = { name: string; min: number | null; median: number | null; max: number | null; evidence_count: number; indicative_count?: number; found_count?: number; rejected_count?: number; quality_status?: MarketQualityStatus; quality_note?: string; demand_note?: string; search_rounds?: number; sources?: MarketEvidence[] };
+type MarketResearchItem = { name: string; min: number | null; median: number | null; max: number | null; evidence_count: number; indicative_count?: number; semi_new_count?: number; market_condition?: 'new' | 'semi_new' | 'indicative' | 'none'; found_count?: number; rejected_count?: number; quality_status?: MarketQualityStatus; quality_note?: string; demand_note?: string; search_rounds?: number; sources?: MarketEvidence[] };
 type StoredPricerExpense = PricerExpense & { id: string; created_at: string; amount_type: 'percentage' | 'fixed'; product_id: string | null };
 type PricedItem = ParsedSupplierItem & {
   productId: string | null;
@@ -33,6 +33,8 @@ type PricedItem = ParsedSupplierItem & {
   marketMax: number | null;
   evidenceCount: number;
   indicativeCount: number;
+  semiNewCount: number;
+  marketCondition: 'new' | 'semi_new' | 'indicative' | 'none';
   foundCount: number;
   rejectedCount: number;
   qualityStatus: MarketQualityStatus;
@@ -57,13 +59,14 @@ const decisionClass: Record<PricerDecision, string> = {
   'margem-segura': 'border-amber-500/30 bg-amber-500/10 text-amber-500',
   inconclusivo: 'border-destructive/30 bg-destructive/10 text-destructive',
 };
-const qualityLabel: Record<MarketQualityStatus, string> = { approved: 'Referência aprovada', insufficient_evidence: 'Evidência insuficiente', suspect: 'Referência suspeita' };
+const qualityLabel: Record<MarketQualityStatus, string> = { approved: 'Preço aprovado', insufficient_evidence: 'Preço indicativo', suspect: 'Referência suspeita' };
 const qualityClass: Record<MarketQualityStatus, string> = {
   approved: 'border-green-500/30 bg-green-500/10 text-green-500',
   insufficient_evidence: 'border-destructive/30 bg-destructive/10 text-destructive',
   suspect: 'border-amber-500/30 bg-amber-500/10 text-amber-500',
 };
 const sourceStatusLabel = (status: MarketEvidence['status']) => status === 'comparable' ? 'APROVADO' : status === 'indicative' ? 'INDICATIVO' : 'REJEITADO';
+const marketConditionLabel = (condition: PricedItem['marketCondition']) => condition === 'new' ? 'Preço aprovado' : condition === 'semi_new' ? 'Mercado semi-novo encontrado' : condition === 'indicative' ? 'Preço indicativo' : 'Sem mercado confirmado';
 
 function fileToText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -218,14 +221,17 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         const validQualityStatuses: MarketQualityStatus[] = ['approved', 'insufficient_evidence', 'suspect'];
         const qualityStatus: MarketQualityStatus = validQualityStatuses.includes(market.quality_status) ? market.quality_status : 'insufficient_evidence';
         const evidenceCount = Number(market.evidence_count) || 0;
-        const pricing = calculatePricing(Number(item.supplierCost), itemExpenses, Number(market.median), minProfit, item.productId, evidenceCount, qualityStatus);
+        const indicativeCount = Number(market.indicative_count) || 0;
+        const pricing = calculatePricing(Number(item.supplierCost), itemExpenses, Number(market.median), minProfit, item.productId, evidenceCount, qualityStatus, indicativeCount);
         return {
           ...item,
           marketMin: Number.isFinite(Number(market.min)) && Number(market.min) > 0 ? Number(market.min) : null,
           marketMedian: Number.isFinite(Number(market.median)) && Number(market.median) > 0 ? Number(market.median) : null,
           marketMax: Number.isFinite(Number(market.max)) && Number(market.max) > 0 ? Number(market.max) : null,
           evidenceCount,
-          indicativeCount: Number(market.indicative_count) || 0,
+          indicativeCount,
+          semiNewCount: Number(market.semi_new_count) || 0,
+          marketCondition: market.market_condition || 'none',
           foundCount: Number(market.found_count) || 0,
           rejectedCount: Number(market.rejected_count) || 0,
           qualityStatus,
@@ -261,6 +267,8 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         market_max: item.marketMax,
         evidence_count: item.evidenceCount,
         evidence_indicative_count: item.indicativeCount,
+        semi_new_count: item.semiNewCount,
+        market_condition: item.marketCondition,
         evidence_found_count: item.foundCount,
         evidence_rejected_count: item.rejectedCount,
         quality_status: item.qualityStatus,
@@ -276,7 +284,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         market_net_profit: item.pricing?.marketNetProfit || null,
         market_margin_percent: item.pricing?.marketMarginPercent || null,
         decision: item.pricing?.decision || 'inconclusivo',
-        evidence_status: item.qualityStatus === 'approved' ? 'suficiente' : item.indicativeCount > 0 ? 'indicativo' : 'inconclusivo',
+        evidence_status: item.qualityStatus === 'approved' ? 'suficiente' : item.indicativeCount >= MINIMUM_COMPARABLE_EVIDENCE ? 'indicativo' : 'inconclusivo',
       }));
       const itemInsert = await supabase.from('market_pricer_items' as any).insert(rows).select('id,product_name');
       if (itemInsert.error) throw itemInsert.error;
@@ -309,6 +317,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
       'Mercado mediano': money(item.marketMedian),
       'Preco minimo viavel': money(item.pricing?.minimumPrice),
       'Preco recomendado de mercado': money(item.pricing?.marketRecommendedPrice),
+      'Tipo de mercado': marketConditionLabel(item.marketCondition),
       'Lucro no minimo viavel': money(item.pricing?.netProfit),
       'Margem no minimo viavel': `${item.pricing?.marginPercent || 0}%`,
       'Lucro no mercado aprovado': approvedMoney(item.pricing?.marketNetProfit),
@@ -339,11 +348,11 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         `Produto: ${item.name}`,
         `Ocorrências: ${item.occurrences}`,
         `Custo fornecedor: ${money(item.supplierCost)}`,
-        `Mercado: ${item.marketMedian ? `${money(item.marketMin)} a ${money(item.marketMax)} (mediana ${money(item.marketMedian)})` : 'Sem evidência'}`,
+        `Mercado: ${marketConditionLabel(item.marketCondition)} — ${item.marketMedian ? `${money(item.marketMin)} a ${money(item.marketMax)} (mediana ${money(item.marketMedian)})` : 'Sem evidência'}`,
         `Preço mínimo viável: ${money(item.pricing?.minimumPrice)} | Preço recomendado de mercado: ${money(item.pricing?.marketRecommendedPrice)}`,
         `Lucro no mínimo viável: ${money(item.pricing?.netProfit)} | Margem: ${(item.pricing?.marginPercent || 0).toFixed(2)}%`,
         `Lucro no mercado aprovado: ${approvedMoney(item.pricing?.marketNetProfit)} | Margem: ${approvedPercent(item.pricing?.marketMarginPercent)}`,
-        `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Anúncios: ${item.foundCount} encontrados, ${item.evidenceCount} aprovados, ${item.indicativeCount} indicativos, ${item.rejectedCount} rejeitados`,
+        `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | ${marketConditionLabel(item.marketCondition)} | Anúncios: ${item.foundCount} encontrados, ${item.evidenceCount} aprovados, ${item.indicativeCount} indicativos, ${item.rejectedCount} rejeitados`,
         `Qualidade: ${item.qualityStatus} — ${item.qualityNote}`,
         ...(item.sources.length ? item.sources.map(source => `${sourceStatusLabel(source.status)}: ${source.title} | ${source.price == null ? 'sem preço' : money(source.price)} | ${source.url || 'sem link'}${source.rejection_reason ? ` | Motivo: ${source.rejection_reason}` : source.acceptance_reason ? ` | Motivo: ${source.acceptance_reason}` : ''}`) : ['Fonte: Pesquisa inconclusiva']),
         '',
@@ -359,7 +368,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
       item.name,
       `Custo: ${money(item.supplierCost)} | Mínimo viável: ${money(item.pricing?.minimumPrice)} | Mercado aprovado: ${approvedMoney(item.pricing?.marketRecommendedPrice)} | Lucro mínimo: ${money(item.pricing?.netProfit)} (${(item.pricing?.marginPercent || 0).toFixed(2)}%) | Lucro no mercado: ${approvedMoney(item.pricing?.marketNetProfit)} (${approvedPercent(item.pricing?.marketMarginPercent)})`,
       `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Anúncios: ${item.foundCount} encontrados, ${item.evidenceCount} aprovados, ${item.indicativeCount} indicativos, ${item.rejectedCount} rejeitados`,
-      `Qualidade: ${item.qualityStatus} — ${item.qualityNote}`,
+      `Mercado: ${marketConditionLabel(item.marketCondition)} | Qualidade: ${item.qualityStatus} — ${item.qualityNote}`,
       ...item.sources.map(source => `${sourceStatusLabel(source.status)}: ${source.title} | ${source.price == null ? 'sem preço' : money(source.price)} | ${source.url || 'sem link'} | ${source.rejection_reason || source.acceptance_reason || 'sem justificativa'}`),
     ].join('\n')).join('\n\n');
     try {
@@ -488,7 +497,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
           <div className="flex flex-wrap gap-2"><Button onClick={analyze} disabled={researching || !selectedItems.length}>{researching ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Pesquisando fontes...</> : <><Search className="mr-2 h-4 w-4" /> Pesquisar mercado e calcular</>}</Button>{results.length > 0 && <><Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar CSV</Button><Button variant="outline" onClick={exportText}><FileText className="mr-2 h-4 w-4" /> Exportar TXT</Button><Button variant="outline" onClick={exportPdf}><FileDown className="mr-2 h-4 w-4" /> Exportar PDF</Button><Button variant="outline" onClick={() => void copyText()}><Clipboard className="mr-2 h-4 w-4" /> Copiar resultado</Button></>}</div>
 
           {results.length > 0 && <>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-9"><Metric title="Produtos" value={String(totals.count)} /><Metric title="Custo do lote" value={money(totals.cost)} /><Metric title="Mínimo viável" value={money(totals.revenue)} /><Metric title="Mercado aprovado" value={money(totals.recommendedRevenue)} /><Metric title="Lucro mínimo" value={money(totals.profit)} tone="text-green-500" /><Metric title="Lucro no mercado" value={money(totals.marketProfit)} tone="text-green-500" /><Metric title="Carro-chefe" value={String(totals.stars)} tone="text-primary" /><Metric title="Margem segura" value={String(totals.safe)} tone="text-amber-500" /><Metric title="Inconclusivos" value={String(totals.inconclusive)} tone="text-destructive" /></div>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-9"><Metric title="Produtos" value={String(totals.count)} /><Metric title="Custo do lote" value={money(totals.cost)} /><Metric title="Mínimo viável" value={money(totals.revenue)} /><Metric title="Mercado / indicativo" value={money(totals.recommendedRevenue)} /><Metric title="Lucro mínimo" value={money(totals.profit)} tone="text-green-500" /><Metric title="Lucro no mercado" value={money(totals.marketProfit)} tone="text-green-500" /><Metric title="Carro-chefe" value={String(totals.stars)} tone="text-primary" /><Metric title="Margem segura" value={String(totals.safe)} tone="text-amber-500" /><Metric title="Inconclusivos" value={String(totals.inconclusive)} tone="text-destructive" /></div>
             <Card>
               <CardHeader className="pb-3"><CardTitle className="text-base">Resultado auditável por produto</CardTitle></CardHeader>
               <CardContent className="p-0">
@@ -500,9 +509,9 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
                       const indicativeSources = item.sources.filter(source => source.status === 'indicative');
                       const rejectedSources = item.sources.filter(source => source.status === 'rejected');
                       return <tr key={item.key} className="border-t align-top">
-                        <td className="p-3"><div className="font-medium text-foreground">{item.name}</div><div className="text-muted-foreground">{item.occurrences} ocorrência(s) · {item.foundCount} encontrados · {item.evidenceCount}/{MINIMUM_COMPARABLE_EVIDENCE} aprovados · {item.indicativeCount} indicativos · {item.rejectedCount} rejeitados</div><div className="mt-1 max-w-[240px] text-[10px] text-muted-foreground">{item.qualityNote}</div></td>
+                        <td className="p-3"><div className="font-medium text-foreground">{item.name}</div><div className="text-muted-foreground">{item.occurrences} ocorrência(s) · {item.foundCount} encontrados · {item.evidenceCount}/{MINIMUM_COMPARABLE_EVIDENCE} aprovados · {item.indicativeCount} indicativos · {item.rejectedCount} rejeitados</div><div className="mt-1 max-w-[240px] text-[10px] font-medium text-amber-600">{marketConditionLabel(item.marketCondition)}</div><div className="mt-1 max-w-[240px] text-[10px] text-muted-foreground">{item.qualityNote}</div></td>
                         <td className="p-3 text-right font-medium">{money(item.supplierCost)}</td>
-                        <td className="p-3 text-right">{item.marketMedian != null ? <><div>{money(item.marketMedian)}</div><div className="text-[10px] text-muted-foreground">{money(item.marketMin)} – {money(item.marketMax)}</div>{item.qualityStatus !== 'approved' && <div className="text-[10px] font-medium text-amber-500">Mediana indicativa</div>}</> : <span className="text-destructive">Sem evidência</span>}</td>
+                        <td className="p-3 text-right">{item.marketMedian != null ? <><div>{money(item.marketMedian)}</div><div className="text-[10px] text-muted-foreground">{money(item.marketMin)} – {money(item.marketMax)}</div><div className="text-[10px] font-medium text-amber-500">{marketConditionLabel(item.marketCondition)}</div></> : <span className="text-destructive">Sem evidência</span>}</td>
                         <td className="p-3 text-right font-semibold">{money(item.pricing?.minimumPrice)}</td>
                         <td className="p-3 text-right font-semibold">{item.pricing?.marketRecommendedPrice != null ? money(item.pricing.marketRecommendedPrice) : <span className="text-destructive">Não aprovado</span>}</td>
                         <td className="p-3 text-right text-red-400">{money((item.pricing?.fixedExpenses || 0) + ((item.pricing?.minimumPrice || 0) * (item.pricing?.percentageExpenses || 0) / 100))}</td>
@@ -510,7 +519,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
                         <td className="p-3 text-right font-semibold">{(item.pricing?.marginPercent || 0).toFixed(2)}%</td>
                         <td className="p-3 text-right font-semibold text-green-500">{approvedMoney(item.pricing?.marketNetProfit)}</td>
                         <td className="p-3 text-right font-semibold">{approvedPercent(item.pricing?.marketMarginPercent)}</td>
-                        <td className="p-3"><div className="space-y-1"><span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-medium ${decisionClass[item.pricing?.decision || 'inconclusivo']}`}>{decisionLabel[item.pricing?.decision || 'inconclusivo']}</span><br /><span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-medium ${qualityClass[item.qualityStatus]}`}>{qualityLabel[item.qualityStatus]}</span></div></td>
+                        <td className="p-3"><div className="space-y-1"><span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-medium ${decisionClass[item.pricing?.decision || 'inconclusivo']}`}>{decisionLabel[item.pricing?.decision || 'inconclusivo']}</span><br /><span className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-medium ${qualityClass[item.qualityStatus]}`}>{marketConditionLabel(item.marketCondition)}</span></div></td>
                         <td className="p-3"><div className="max-w-[280px] space-y-2">
                           {comparableSources.slice(0, 5).map(source => <a key={`${source.url}-${source.price}`} href={source.url || '#'} target="_blank" rel="noreferrer" title={source.acceptance_reason || ''} className="flex items-start gap-1 text-primary hover:underline"><ExternalLink className="mt-0.5 h-3 w-3 shrink-0" /><span>{source.price == null ? 'Sem preço' : money(source.price)} · {source.title}</span></a>)}
                           {comparableSources.length > 5 && <details className="rounded border border-border p-2"><summary className="cursor-pointer text-[11px] font-medium text-muted-foreground">Ver mais {comparableSources.length - 5} fontes comparáveis</summary><div className="mt-2 space-y-2">{comparableSources.slice(5).map(source => <a key={`${source.url}-${source.price}`} href={source.url || '#'} target="_blank" rel="noreferrer" title={source.acceptance_reason || ''} className="flex items-start gap-1 border-t pt-2 text-primary hover:underline"><ExternalLink className="mt-0.5 h-3 w-3 shrink-0" /><span>{source.price == null ? 'Sem preço' : money(source.price)} · {source.title}</span></a>)}</div></details>}

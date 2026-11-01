@@ -104,6 +104,12 @@ describe('market pricer', () => {
     expect(suspect.decision).toBe('inconclusivo');
   });
 
+  it('usa três fontes indicativas para margem segura, mas nunca para carro-chefe', () => {
+    const result = calculatePricing(1400, [], 1800, 100, undefined, 0, 'insufficient_evidence', 3);
+    expect(result.marketRecommendedPrice).toBe(1800);
+    expect(result.decision).toBe('margem-segura');
+  });
+
   it('aplica gasto específico somente ao produto correspondente', () => {
     const result = calculatePricing(1000, [
       { label: 'Embalagem do iPhone', amountType: 'fixed', amount: 50, enabled: true, productId: 'iphone-1' },
