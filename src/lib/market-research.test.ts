@@ -74,6 +74,15 @@ describe('market research evidence quality', () => {
     expect(result.sources[0].condition).toBe('new');
   });
 
+  it('rejects explicit used-condition wording even for a trusted retailer', () => {
+    const result = evaluateShoppingResults('iPhone 13 128GB', [
+      listing('iPhone 13 128GB - Bom - Verde', 2519.99, { source: 'Policell', condition: undefined }),
+      listing('iPhone 13 128GB com marcas de uso', 2200, { source: 'Amazon', condition: undefined }),
+    ]);
+
+    expect(result.sources.map(source => source.status)).toEqual(['rejected', 'rejected']);
+  });
+
   it('does not treat a charger wattage as an extra product variant', () => {
     const result = evaluateShoppingResults('iPhone 16 128GB', [
       listing('Smartphone Apple iPhone 16 128GB Preto - 5G + Carregador Apple USB-C 20W Original', 4958.99, {
