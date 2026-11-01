@@ -45,6 +45,12 @@ describe('market pricer', () => {
     expect(parseBrazilianNumber('5,29')).toBe(5.29);
   });
 
+  it('interpreta milhares sem ponto antes da vírgula no custo importado', () => {
+    const rows = parseSupplierText('iPhone 15 128GB Novo — R$ 3000,00');
+    expect(rows[0].supplierCost).toBe(3000);
+    expect(rows[0].costWarning).toBeNull();
+  });
+
   it('sinaliza custo suspeito abaixo de dez reais', () => {
     const rows = parseSupplierText('iPhone 14 128GB — 2,00');
     expect(rows[0].supplierCost).toBe(2);

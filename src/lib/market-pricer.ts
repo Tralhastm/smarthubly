@@ -34,7 +34,7 @@ export type PricingMath = {
   marketMarginPercent: number | null;
 };
 
-const moneyValue = '[0-9]{1,3}(?:[.][0-9]{3})*(?:,[0-9]{1,2})?|[0-9]+(?:[.,][0-9]{1,2})?';
+const moneyValue = '[0-9]+(?:[.][0-9]{3})*(?:,[0-9]{1,2})?|[0-9]+(?:[.,][0-9]{1,2})?';
 const ignoreLine = /^(?:data|lista|fornecedor|produto|pre[cç]o|valor|cat[aá]logo|dia|total|obs|observa)/i;
 
 export function normalizeProductName(value: string): string {

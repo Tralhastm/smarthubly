@@ -53,6 +53,7 @@ const COLOR_GROUPS: Array<{ id: string; aliases: string[] }> = [
 ];
 const USED_PATTERN = /\b(?:semi\s*novo|seminovo|usado|usada|used|pre\s*owned|preowned|not\s+new|nao\s+novo|recondicionado|recondicionada|refurbished|renewed|restaurado|restaurada|open\s*box|vitrine|mostruario|grade\s*[a-z])\b/i;
 const NEW_PATTERN = /\b(?:novo|novos|lacrado|lacrados|selado|selados|sealed|brand\s*new)\b/i;
+const TRUSTED_RETAILER_PATTERN = /\b(?:amazon(?:\.com\.br)?|magalu|magazine\s*luiza|carrefour|kabum|fast\s*shop|iplace|apple|vivo|claro|tim|casas\s*bahia|ponto|extra|mercado\s*livre|mercadolivre|br\s*celulares|bne\s*store|line\s*express)\b/i;
 const INCONSISTENT_IQR_RATIO = 0.25;
 const ZERO_MAD_OUTLIER_RATIO = 0.35;
 
@@ -95,6 +96,7 @@ function colorGroupsIn(value: string): Set<string> {
 function modelCodes(value: string): Set<string> {
   return new Set(tokens(value).filter(token => {
     if (token === "4g" || token === "5g") return false;
+    if (/^\d{1,3}w$/.test(token) || /^20\d{2}$/.test(token)) return false;
     if (/(?:gb|tb)$/.test(token)) return false;
     return /^(?:[a-z]{1,4}\d+[a-z]?|\d+[a-z]{1,3})$/.test(token) && /\d/.test(token);
   }));
@@ -179,9 +181,11 @@ function listingText(result: ShoppingResult, title: string): string {
   return [title, result.condition, result.snippet, result.description, extensions].filter(Boolean).map(String).join(" ");
 }
 
-function hasExplicitNewCondition(result: ShoppingResult, text: string): boolean {
+function hasExplicitNewCondition(result: ShoppingResult, text: string, seller: string): boolean {
   const condition = normalizeResearchText(String(result.condition || ""));
-  return /\b(?:new|novo|novos|lacrado|lacrados|selado|selados|sealed)\b/.test(condition) || NEW_PATTERN.test(normalizeResearchText(text));
+  return /\b(?:new|novo|novos|lacrado|lacrados|selado|selados|sealed)\b/.test(condition)
+    || NEW_PATTERN.test(normalizeResearchText(text))
+    || TRUSTED_RETAILER_PATTERN.test(normalizeResearchText(seller));
 }
 
 function median(values: number[]): number {
@@ -253,7 +257,7 @@ export function evaluateShoppingResults(
     else if (!url) rejectionReason = "Link do anúncio ausente ou inválido.";
     else if (usedListing) rejectionReason = "O anúncio indica usado, seminovo, recondicionado, vitrine ou Grade A.";
     else rejectionReason = productMismatchReason(query, title);
-    const explicitNew = hasExplicitNewCondition(result, text);
+    const explicitNew = hasExplicitNewCondition(result, text, seller);
     if (!rejectionReason && !explicitNew) rejectionReason = "Condição novo/lacrado não está comprovada no título, condição ou atributos do anúncio.";
 
     const key = `${normalizeResearchText(title)}:${price ?? "sem-preco"}:${normalizeResearchText(seller)}:${url || "sem-link"}`;

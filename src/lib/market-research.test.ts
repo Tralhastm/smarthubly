@@ -62,6 +62,29 @@ describe('market research evidence quality', () => {
     expect(result.sources[2].rejection_reason).toContain('não está comprovada');
   });
 
+  it('accepts an exact retail listing when Google Shopping omits condition', () => {
+    const result = evaluateShoppingResults('iPhone 15 128GB', [
+      listing('Smartphone Apple iPhone 15 128GB Preto - 5G + Carregador USB-C', 4157.99, {
+        source: 'Magalu',
+        condition: undefined,
+      }),
+    ]);
+
+    expect(result.sources[0].status).toBe('comparable');
+    expect(result.sources[0].condition).toBe('new');
+  });
+
+  it('does not treat a charger wattage as an extra product variant', () => {
+    const result = evaluateShoppingResults('iPhone 16 128GB', [
+      listing('Smartphone Apple iPhone 16 128GB Preto - 5G + Carregador Apple USB-C 20W Original', 4958.99, {
+        source: 'Magalu',
+        condition: undefined,
+      }),
+    ]);
+
+    expect(result.sources[0].status).toBe('comparable');
+  });
+
   it('requires the supplier color and rejects a different listed color', () => {
     const result = evaluateShoppingResults('iPhone 14 256GB Azul', [
       listing('Apple iPhone 14 256GB Blue novo', 2700),
