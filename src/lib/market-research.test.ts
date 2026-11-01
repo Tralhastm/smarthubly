@@ -83,6 +83,16 @@ describe('market research evidence quality', () => {
     expect(result.sources.map(source => source.status)).toEqual(['rejected', 'rejected']);
   });
 
+  it('deduplicates the same Shopping offer returned by complementary queries', () => {
+    const result = evaluateShoppingResults('iPhone 12 Pro 128GB', [
+      listing('Apple iPhone 12 Pro 128GB Desbloqueado', 3880.05, { product_id: 'offer-1' }),
+      listing('Apple iPhone 12 Pro 128GB Desbloqueado', 3880.05, { product_id: 'offer-1', product_link: 'https://www.google.com.br/search?q=outra-consulta' }),
+    ]);
+
+    expect(result.found_count).toBe(1);
+    expect(result.evidence_count).toBe(1);
+  });
+
   it('does not treat a charger wattage as an extra product variant', () => {
     const result = evaluateShoppingResults('iPhone 16 128GB', [
       listing('Smartphone Apple iPhone 16 128GB Preto - 5G + Carregador Apple USB-C 20W Original', 4958.99, {
