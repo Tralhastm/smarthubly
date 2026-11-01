@@ -100,6 +100,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
   const expenses = useMemo(() => (expensesQuery.data || []).map(expense => ({
     ...expense,
     amountType: (expense as any).amount_type as 'percentage' | 'fixed',
+    productId: (expense as any).product_id || null,
   })) as PricerExpense[], [expensesQuery.data]);
   const parsedItems = useMemo(() => parseSupplierText(inputText), [inputText]);
   const candidateItems = useMemo(() => {
@@ -215,7 +216,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         minimum_profit: minProfit,
         expenses_snapshot: expenses,
         totals: { count: calculated.length, cost: calculated.reduce((sum, item) => sum + Number(item.supplierCost || 0), 0), minimum_viable_revenue: calculated.reduce((sum, item) => sum + Number(item.pricing?.minimumPrice || 0), 0), recommended_market_revenue: calculated.reduce((sum, item) => sum + Number(item.pricing?.marketRecommendedPrice || 0), 0), profit: calculated.reduce((sum, item) => sum + Number(item.pricing?.netProfit || 0), 0) },
-        status: calculated.some(item => item.evidenceCount === 0) ? 'partial' : 'completed',
+        status: calculated.every(item => item.evidenceCount >= 2 && item.pricing?.marketRecommendedPrice != null) ? 'completed' : 'partial',
       }).select('id').single();
       if (analysisInsert.error) throw analysisInsert.error;
       const analysisId = analysisInsert.data.id;

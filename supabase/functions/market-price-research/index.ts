@@ -29,16 +29,20 @@ function normalize(value: string) {
 }
 
 function tokens(value: string) {
-  return normalize(value).split(/\s+/).filter((token) => token.length >= 2 && !["com", "para", "novo", "original", "lacrado", "gb", "tb"].includes(token));
+  return normalize(value).split(/\s+/).filter((token) => token.length >= 2 && !["com", "para", "original", "lacrado", "gb", "tb"].includes(token));
+}
+
+function requestedCondition(query: string): "new" | "used" {
+  const value = normalize(query);
+  return /\b(seminovo|semi novo|usado|grade a|recondicionado)\b/.test(value) ? "used" : "new";
 }
 
 function equivalent(query: string, title: string) {
   const titleText = normalize(title);
   const required = tokens(query);
   if (!required.length) return false;
-  const critical = required.filter((token) => /\d/.test(token) || token.length >= 3);
-  const hits = critical.filter((token) => titleText.includes(token)).length;
-  return hits >= Math.max(1, Math.ceil(critical.length * 0.7));
+  const critical = required.filter((token) => !["novo", "new", "seminovo", "semi", "usado", "grade", "recondicionado"].includes(token));
+  return critical.length > 0 && critical.every((token) => titleText.includes(token));
 }
 
 async function authUser(req: Request) {
@@ -61,7 +65,8 @@ async function searchMarket(name: string): Promise<MarketSource[]> {
   const url = new URL("https://api.mercadolibre.com/sites/MLB/search");
   url.searchParams.set("q", name);
   url.searchParams.set("limit", "20");
-  url.searchParams.set("condition", "new");
+  const condition = requestedCondition(name);
+  url.searchParams.set("condition", condition);
   url.searchParams.set("sort", "relevance");
   const response = await fetch(url, { headers: { Accept: "application/json" } });
   if (!response.ok) {
@@ -80,7 +85,7 @@ async function searchMarket(name: string): Promise<MarketSource[]> {
     const key = `${normalize(title)}:${price.toFixed(2)}`;
     if (unique.has(key)) continue;
     unique.add(key);
-    sources.push({ source: "mercadolivre", title, price, url: permalink, condition: "new", collected_at: collectedAt });
+    sources.push({ source: "mercadolivre", title, price, url: permalink, condition, collected_at: collectedAt });
   }
   return sources.slice(0, 10);
 }

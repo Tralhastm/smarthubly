@@ -108,7 +108,8 @@ export function calculatePricing(
   const minimumPrice = roundMoney((supplierCost + fixedExpenses + Math.max(0, minimumProfit)) / divisor);
   const hasMarket = Number.isFinite(marketMedian) && (marketMedian || 0) > 0 && (evidenceCount === undefined || evidenceCount >= 2);
   const marketCompatible = hasMarket && minimumPrice <= (marketMedian as number);
-  const decision: PricerDecision = marketCompatible ? 'carro-chefe' : 'inconclusivo';
+  const marketRoomPercent = marketCompatible ? (((marketMedian as number) - minimumPrice) / minimumPrice) * 100 : 0;
+  const decision: PricerDecision = !marketCompatible ? 'inconclusivo' : marketRoomPercent >= 20 ? 'carro-chefe' : 'margem-segura';
   const marketRecommendedPrice = marketCompatible ? roundMoney(marketMedian as number) : null;
   const suggestedPrice = minimumPrice;
   const percentageCost = suggestedPrice * percentageExpenses / 100;

@@ -35,7 +35,7 @@ describe('market pricer', () => {
     expect(rows[0].costWarning).toContain('Custo suspeito');
   });
 
-  it('calcula preço mínimo com taxa e motoboy e identifica carro-chefe', () => {
+  it('calcula preço mínimo com taxa e motoboy e identifica margem segura', () => {
     const result = calculatePricing(1400, [
       { label: 'Taxa', amountType: 'percentage', amount: 4.99, enabled: true },
       { label: 'Motoboy', amountType: 'fixed', amount: 50, enabled: true },
@@ -43,7 +43,7 @@ describe('market pricer', () => {
     expect(result.minimumPrice).toBeCloseTo(1631.41, 2);
     expect(result.marketRecommendedPrice).toBe(1800);
     expect(result.netProfit).toBeCloseTo(100, 2);
-    expect(result.decision).toBe('carro-chefe');
+    expect(result.decision).toBe('margem-segura');
   });
 
   it('não recomenda sem evidência de mercado', () => {
@@ -61,9 +61,18 @@ describe('market pricer', () => {
   });
 
   it('separa preço mínimo viável de preço recomendado compatível', () => {
-    const result = calculatePricing(1800, [], 2500, 300, undefined, 3);
+    const result = calculatePricing(1800, [], 2600, 300, undefined, 3);
     expect(result.minimumPrice).toBe(2100);
-    expect(result.marketRecommendedPrice).toBe(2500);
+    expect(result.marketRecommendedPrice).toBe(2600);
     expect(result.decision).toBe('carro-chefe');
+  });
+
+  it('aplica gasto específico somente ao produto correspondente', () => {
+    const result = calculatePricing(1000, [
+      { label: 'Embalagem do iPhone', amountType: 'fixed', amount: 50, enabled: true, productId: 'iphone-1' },
+      { label: 'Taxa geral', amountType: 'percentage', amount: 10, enabled: true, productId: null },
+    ], null, 100, 'iphone-1');
+    expect(result.fixedExpenses).toBe(50);
+    expect(result.minimumPrice).toBeCloseTo(1277.78, 2);
   });
 });
