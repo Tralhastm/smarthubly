@@ -1,3 +1,7 @@
+import { MINIMUM_COMPARABLE_EVIDENCE, type MarketQualityStatus } from '../../supabase/functions/market-price-research/market-research';
+
+export { MINIMUM_COMPARABLE_EVIDENCE };
+
 export type ParsedSupplierItem = {
   key: string;
   name: string;
@@ -101,17 +105,18 @@ export function calculatePricing(
   marketMedian: number | null,
   minimumProfit: number,
   productId?: string | null,
-  evidenceCount?: number,
+  evidenceCount = 0,
+  marketQuality: MarketQualityStatus = 'approved',
 ): PricingMath & { decision: PricerDecision } {
   const applicable = expenses.filter(expense => expense.enabled && (!expense.productId || expense.productId === 'general' || expense.productId === productId));
   const fixedExpenses = applicable.filter(expense => expense.amountType === 'fixed').reduce((sum, expense) => sum + Math.max(0, Number(expense.amount) || 0), 0);
   const percentageExpenses = applicable.filter(expense => expense.amountType === 'percentage').reduce((sum, expense) => sum + Math.max(0, Number(expense.amount) || 0), 0);
   const divisor = Math.max(0.0001, 1 - percentageExpenses / 100);
   const minimumPrice = roundMoney((supplierCost + fixedExpenses + Math.max(0, minimumProfit)) / divisor);
-  const hasMarket = Number.isFinite(marketMedian) && (marketMedian || 0) > 0 && (evidenceCount === undefined || evidenceCount >= 2);
+  const hasMarket = Number.isFinite(marketMedian) && (marketMedian || 0) > 0 && evidenceCount >= MINIMUM_COMPARABLE_EVIDENCE && marketQuality === 'approved';
   const marketCompatible = hasMarket && minimumPrice <= (marketMedian as number);
   const marketRoomPercent = marketCompatible ? (((marketMedian as number) - minimumPrice) / minimumPrice) * 100 : 0;
-  const decision: PricerDecision = !marketCompatible ? 'inconclusivo' : marketRoomPercent >= 20 ? 'carro-chefe' : 'margem-segura';
+  const decision: PricerDecision = !hasMarket ? 'inconclusivo' : marketCompatible && marketRoomPercent >= 20 ? 'carro-chefe' : 'margem-segura';
   const marketRecommendedPrice = marketCompatible ? roundMoney(marketMedian as number) : null;
   const suggestedPrice = minimumPrice;
   const profitAt = (price: number) => {

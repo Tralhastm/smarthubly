@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculatePricing, normalizeProductName, parseBrazilianNumber, parseSupplierText } from './market-pricer';
+import { calculatePricing, MINIMUM_COMPARABLE_EVIDENCE, normalizeProductName, parseBrazilianNumber, parseSupplierText } from './market-pricer';
 
 describe('market pricer', () => {
   it('consolida produtos repetidos e preserva o custo', () => {
@@ -19,6 +19,16 @@ describe('market pricer', () => {
     const rows = parseSupplierText('iPhone 13 256GB Grade A — R$ 1.950,00');
     expect(rows[0].name).toBe('iPhone 13 256GB');
     expect(normalizeProductName('iPhone 13 256GB Grade A')).toBe('iphone 13 256gb');
+  });
+
+  it('mantém custos separados quando o mesmo modelo tem cores diferentes', () => {
+    const rows = parseSupplierText([
+      'iPhone 15 128GB Azul — R$ 2.950,00',
+      'iPhone 15 128GB Preto — R$ 3.020,00',
+    ].join('\n'));
+    expect(rows).toHaveLength(2);
+    expect(rows.find(row => row.name.includes('Azul'))?.supplierCost).toBe(2950);
+    expect(rows.find(row => row.name.includes('Preto'))?.supplierCost).toBe(3020);
   });
 
   it('não transforma memória em custo quando a linha não tem preço', () => {
@@ -45,7 +55,7 @@ describe('market pricer', () => {
     const result = calculatePricing(1400, [
       { label: 'Taxa', amountType: 'percentage', amount: 4.99, enabled: true },
       { label: 'Motoboy', amountType: 'fixed', amount: 50, enabled: true },
-    ], 1800, 100, undefined, 3);
+    ], 1800, 100, undefined, MINIMUM_COMPARABLE_EVIDENCE);
     expect(result.minimumPrice).toBeCloseTo(1631.41, 2);
     expect(result.marketRecommendedPrice).toBe(1800);
     expect(result.netProfit).toBeCloseTo(100, 2);
@@ -64,19 +74,28 @@ describe('market pricer', () => {
   });
 
   it('não aprova preço de mercado abaixo do mínimo viável', () => {
-    const result = calculatePricing(1800, [], 1900, 300, undefined, 3);
+    const result = calculatePricing(1800, [], 1900, 300, undefined, MINIMUM_COMPARABLE_EVIDENCE);
     expect(result.minimumPrice).toBe(2100);
     expect(result.marketRecommendedPrice).toBeNull();
-    expect(result.decision).toBe('inconclusivo');
+    expect(result.decision).toBe('margem-segura');
   });
 
   it('separa preço mínimo viável de preço recomendado compatível', () => {
-    const result = calculatePricing(1800, [], 2600, 300, undefined, 3);
+    const result = calculatePricing(1800, [], 2600, 300, undefined, MINIMUM_COMPARABLE_EVIDENCE);
     expect(result.minimumPrice).toBe(2100);
     expect(result.marketRecommendedPrice).toBe(2600);
     expect(result.marketNetProfit).toBe(800);
     expect(result.marketMarginPercent).toBeCloseTo(30.77, 2);
     expect(result.decision).toBe('carro-chefe');
+  });
+
+  it('não aprova preço de mercado com menos de cinco anúncios ou qualidade suspeita', () => {
+    const tooFew = calculatePricing(1800, [], 2600, 300, undefined, MINIMUM_COMPARABLE_EVIDENCE - 1);
+    const suspect = calculatePricing(1800, [], 2600, 300, undefined, MINIMUM_COMPARABLE_EVIDENCE, 'suspect');
+    expect(tooFew.marketRecommendedPrice).toBeNull();
+    expect(tooFew.decision).toBe('inconclusivo');
+    expect(suspect.marketRecommendedPrice).toBeNull();
+    expect(suspect.decision).toBe('inconclusivo');
   });
 
   it('aplica gasto específico somente ao produto correspondente', () => {
