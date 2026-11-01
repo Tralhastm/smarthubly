@@ -23,8 +23,8 @@ import {
 interface Props { tenantId: string }
 type CatalogProduct = { id: string; name: string; original_price: number | null };
 type MarketQualityStatus = 'approved' | 'insufficient_evidence' | 'suspect';
-type MarketEvidence = { source: string; title: string; price: number | null; url: string | null; condition: string; collected_at: string; status: 'comparable' | 'rejected'; acceptance_reason: string | null; rejection_reason: string | null };
-type MarketResearchItem = { name: string; min: number | null; median: number | null; max: number | null; evidence_count: number; found_count?: number; rejected_count?: number; quality_status?: MarketQualityStatus; quality_note?: string; demand_note?: string; sources?: MarketEvidence[] };
+type MarketEvidence = { source: string; title: string; price: number | null; url: string | null; condition: string; collected_at: string; status: 'comparable' | 'indicative' | 'rejected'; acceptance_reason: string | null; rejection_reason: string | null };
+type MarketResearchItem = { name: string; min: number | null; median: number | null; max: number | null; evidence_count: number; indicative_count?: number; found_count?: number; rejected_count?: number; quality_status?: MarketQualityStatus; quality_note?: string; demand_note?: string; search_rounds?: number; sources?: MarketEvidence[] };
 type StoredPricerExpense = PricerExpense & { id: string; created_at: string; amount_type: 'percentage' | 'fixed'; product_id: string | null };
 type PricedItem = ParsedSupplierItem & {
   productId: string | null;
@@ -32,6 +32,7 @@ type PricedItem = ParsedSupplierItem & {
   marketMedian: number | null;
   marketMax: number | null;
   evidenceCount: number;
+  indicativeCount: number;
   foundCount: number;
   rejectedCount: number;
   qualityStatus: MarketQualityStatus;
@@ -62,6 +63,7 @@ const qualityClass: Record<MarketQualityStatus, string> = {
   insufficient_evidence: 'border-destructive/30 bg-destructive/10 text-destructive',
   suspect: 'border-amber-500/30 bg-amber-500/10 text-amber-500',
 };
+const sourceStatusLabel = (status: MarketEvidence['status']) => status === 'comparable' ? 'APROVADO' : status === 'indicative' ? 'INDICATIVO' : 'REJEITADO';
 
 function fileToText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -223,6 +225,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
           marketMedian: Number.isFinite(Number(market.median)) && Number(market.median) > 0 ? Number(market.median) : null,
           marketMax: Number.isFinite(Number(market.max)) && Number(market.max) > 0 ? Number(market.max) : null,
           evidenceCount,
+          indicativeCount: Number(market.indicative_count) || 0,
           foundCount: Number(market.found_count) || 0,
           rejectedCount: Number(market.rejected_count) || 0,
           qualityStatus,
@@ -239,7 +242,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         selected_limit: selectedItems.length,
         minimum_profit: minProfit,
         expenses_snapshot: expenses,
-        totals: { count: calculated.length, cost: calculated.reduce((sum, item) => sum + Number(item.supplierCost || 0), 0), minimum_viable_revenue: calculated.reduce((sum, item) => sum + Number(item.pricing?.minimumPrice || 0), 0), recommended_market_revenue: calculated.reduce((sum, item) => sum + Number(item.pricing?.marketRecommendedPrice || 0), 0), minimum_profit: calculated.reduce((sum, item) => sum + Number(item.pricing?.netProfit || 0), 0), market_profit: calculated.reduce((sum, item) => sum + Number(item.pricing?.marketNetProfit || 0), 0), evidence_found: calculated.reduce((sum, item) => sum + item.foundCount, 0), evidence_comparable: calculated.reduce((sum, item) => sum + item.evidenceCount, 0), evidence_rejected: calculated.reduce((sum, item) => sum + item.rejectedCount, 0) },
+        totals: { count: calculated.length, cost: calculated.reduce((sum, item) => sum + Number(item.supplierCost || 0), 0), minimum_viable_revenue: calculated.reduce((sum, item) => sum + Number(item.pricing?.minimumPrice || 0), 0), recommended_market_revenue: calculated.reduce((sum, item) => sum + Number(item.pricing?.marketRecommendedPrice || 0), 0), minimum_profit: calculated.reduce((sum, item) => sum + Number(item.pricing?.netProfit || 0), 0), market_profit: calculated.reduce((sum, item) => sum + Number(item.pricing?.marketNetProfit || 0), 0), evidence_found: calculated.reduce((sum, item) => sum + item.foundCount, 0), evidence_comparable: calculated.reduce((sum, item) => sum + item.evidenceCount, 0), evidence_indicative: calculated.reduce((sum, item) => sum + item.indicativeCount, 0), evidence_rejected: calculated.reduce((sum, item) => sum + item.rejectedCount, 0) },
         status: calculated.every(item => item.qualityStatus === 'approved') ? 'completed' : 'partial',
       }).select('id').single();
       if (analysisInsert.error) throw analysisInsert.error;
@@ -257,6 +260,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         market_median: item.marketMedian,
         market_max: item.marketMax,
         evidence_count: item.evidenceCount,
+        evidence_indicative_count: item.indicativeCount,
         evidence_found_count: item.foundCount,
         evidence_rejected_count: item.rejectedCount,
         quality_status: item.qualityStatus,
@@ -272,7 +276,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         market_net_profit: item.pricing?.marketNetProfit || null,
         market_margin_percent: item.pricing?.marketMarginPercent || null,
         decision: item.pricing?.decision || 'inconclusivo',
-        evidence_status: item.qualityStatus === 'approved' ? 'suficiente' : 'inconclusivo',
+        evidence_status: item.qualityStatus === 'approved' ? 'suficiente' : item.indicativeCount > 0 ? 'indicativo' : 'inconclusivo',
       }));
       const itemInsert = await supabase.from('market_pricer_items' as any).insert(rows).select('id,product_name');
       if (itemInsert.error) throw itemInsert.error;
@@ -312,10 +316,11 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
       Decisao: item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo',
       Anuncios_encontrados: item.foundCount,
       Anuncios_comparaveis: item.evidenceCount,
+      Anuncios_indicativos: item.indicativeCount,
       Anuncios_rejeitados: item.rejectedCount,
       Qualidade_da_referencia: item.qualityStatus,
       Justificativa_da_qualidade: item.qualityNote,
-      Evidencias_detalhadas: item.sources.map(source => `${source.status === 'comparable' ? 'ACEITO' : 'REJEITADO'}: ${source.title} | ${source.price == null ? 'sem preço' : money(source.price)} | ${source.url || 'sem link'} | ${source.rejection_reason || source.acceptance_reason || 'sem justificativa'}`).join(' || '),
+      Evidencias_detalhadas: item.sources.map(source => `${sourceStatusLabel(source.status)}: ${source.title} | ${source.price == null ? 'sem preço' : money(source.price)} | ${source.url || 'sem link'} | ${source.rejection_reason || source.acceptance_reason || 'sem justificativa'}`).join(' || '),
     }));
     const csv = toCsv(rows);
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
@@ -338,9 +343,9 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         `Preço mínimo viável: ${money(item.pricing?.minimumPrice)} | Preço recomendado de mercado: ${money(item.pricing?.marketRecommendedPrice)}`,
         `Lucro no mínimo viável: ${money(item.pricing?.netProfit)} | Margem: ${(item.pricing?.marginPercent || 0).toFixed(2)}%`,
         `Lucro no mercado aprovado: ${approvedMoney(item.pricing?.marketNetProfit)} | Margem: ${approvedPercent(item.pricing?.marketMarginPercent)}`,
-        `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Anúncios: ${item.foundCount} encontrados, ${item.evidenceCount} comparáveis, ${item.rejectedCount} rejeitados`,
+        `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Anúncios: ${item.foundCount} encontrados, ${item.evidenceCount} aprovados, ${item.indicativeCount} indicativos, ${item.rejectedCount} rejeitados`,
         `Qualidade: ${item.qualityStatus} — ${item.qualityNote}`,
-        ...(item.sources.length ? item.sources.map(source => `${source.status === 'comparable' ? 'ACEITO' : 'REJEITADO'}: ${source.title} | ${source.price == null ? 'sem preço' : money(source.price)} | ${source.url || 'sem link'}${source.rejection_reason ? ` | Motivo: ${source.rejection_reason}` : source.acceptance_reason ? ` | Motivo: ${source.acceptance_reason}` : ''}`) : ['Fonte: Pesquisa inconclusiva']),
+        ...(item.sources.length ? item.sources.map(source => `${sourceStatusLabel(source.status)}: ${source.title} | ${source.price == null ? 'sem preço' : money(source.price)} | ${source.url || 'sem link'}${source.rejection_reason ? ` | Motivo: ${source.rejection_reason}` : source.acceptance_reason ? ` | Motivo: ${source.acceptance_reason}` : ''}`) : ['Fonte: Pesquisa inconclusiva']),
         '',
       ]),
     ];
@@ -353,9 +358,9 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
     const lines = results.map(item => [
       item.name,
       `Custo: ${money(item.supplierCost)} | Mínimo viável: ${money(item.pricing?.minimumPrice)} | Mercado aprovado: ${approvedMoney(item.pricing?.marketRecommendedPrice)} | Lucro mínimo: ${money(item.pricing?.netProfit)} (${(item.pricing?.marginPercent || 0).toFixed(2)}%) | Lucro no mercado: ${approvedMoney(item.pricing?.marketNetProfit)} (${approvedPercent(item.pricing?.marketMarginPercent)})`,
-      `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Anúncios: ${item.foundCount} encontrados, ${item.evidenceCount} comparáveis, ${item.rejectedCount} rejeitados`,
+      `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Anúncios: ${item.foundCount} encontrados, ${item.evidenceCount} aprovados, ${item.indicativeCount} indicativos, ${item.rejectedCount} rejeitados`,
       `Qualidade: ${item.qualityStatus} — ${item.qualityNote}`,
-      ...item.sources.map(source => `${source.status === 'comparable' ? 'ACEITO' : 'REJEITADO'}: ${source.title} | ${source.price == null ? 'sem preço' : money(source.price)} | ${source.url || 'sem link'} | ${source.rejection_reason || source.acceptance_reason || 'sem justificativa'}`),
+      ...item.sources.map(source => `${sourceStatusLabel(source.status)}: ${source.title} | ${source.price == null ? 'sem preço' : money(source.price)} | ${source.url || 'sem link'} | ${source.rejection_reason || source.acceptance_reason || 'sem justificativa'}`),
     ].join('\n')).join('\n\n');
     try {
       await navigator.clipboard.writeText(lines);
@@ -417,7 +422,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
     doc.setTextColor(90);
     doc.text('Fontes consultadas:', 40, cursorY);
     cursorY += 12;
-    const sources = results.flatMap(item => item.sources.map(source => `${source.status === 'comparable' ? 'ACEITO' : 'REJEITADO'} — ${item.name}: ${source.price == null ? 'sem preço' : money(source.price)} — ${source.url || 'sem link'} — ${source.rejection_reason || source.acceptance_reason || 'sem justificativa'}`));
+    const sources = results.flatMap(item => item.sources.map(source => `${sourceStatusLabel(source.status)} — ${item.name}: ${source.price == null ? 'sem preço' : money(source.price)} — ${source.url || 'sem link'} — ${source.rejection_reason || source.acceptance_reason || 'sem justificativa'}`));
     const sourceLines = sources.length ? sources : ['Nenhuma evidência pública retornada nesta análise.'];
     sourceLines.forEach(source => {
       const wrapped = doc.splitTextToSize(source, pageWidth - 80);
@@ -492,9 +497,10 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
                     <thead className="bg-muted/50"><tr><th className="p-3 text-left">Produto</th><th className="p-3 text-right">Custo</th><th className="p-3 text-right">Mercado</th><th className="p-3 text-right">Mínimo viável</th><th className="p-3 text-right">Mercado aprovado</th><th className="p-3 text-right">Gastos</th><th className="p-3 text-right">Lucro mín.</th><th className="p-3 text-right">Marg. mín.</th><th className="p-3 text-right">Lucro mercado</th><th className="p-3 text-right">Marg. mercado</th><th className="p-3 text-left">Decisão</th><th className="p-3 text-left">Evidências e justificativas</th></tr></thead>
                     <tbody>{results.map(item => {
                       const comparableSources = item.sources.filter(source => source.status === 'comparable');
+                      const indicativeSources = item.sources.filter(source => source.status === 'indicative');
                       const rejectedSources = item.sources.filter(source => source.status === 'rejected');
                       return <tr key={item.key} className="border-t align-top">
-                        <td className="p-3"><div className="font-medium text-foreground">{item.name}</div><div className="text-muted-foreground">{item.occurrences} ocorrência(s) · {item.foundCount} encontrados · {item.evidenceCount}/{MINIMUM_COMPARABLE_EVIDENCE} comparáveis · {item.rejectedCount} rejeitados</div><div className="mt-1 max-w-[240px] text-[10px] text-muted-foreground">{item.qualityNote}</div></td>
+                        <td className="p-3"><div className="font-medium text-foreground">{item.name}</div><div className="text-muted-foreground">{item.occurrences} ocorrência(s) · {item.foundCount} encontrados · {item.evidenceCount}/{MINIMUM_COMPARABLE_EVIDENCE} aprovados · {item.indicativeCount} indicativos · {item.rejectedCount} rejeitados</div><div className="mt-1 max-w-[240px] text-[10px] text-muted-foreground">{item.qualityNote}</div></td>
                         <td className="p-3 text-right font-medium">{money(item.supplierCost)}</td>
                         <td className="p-3 text-right">{item.marketMedian != null ? <><div>{money(item.marketMedian)}</div><div className="text-[10px] text-muted-foreground">{money(item.marketMin)} – {money(item.marketMax)}</div>{item.qualityStatus !== 'approved' && <div className="text-[10px] font-medium text-amber-500">Mediana indicativa</div>}</> : <span className="text-destructive">Sem evidência</span>}</td>
                         <td className="p-3 text-right font-semibold">{money(item.pricing?.minimumPrice)}</td>
@@ -508,6 +514,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
                         <td className="p-3"><div className="max-w-[280px] space-y-2">
                           {comparableSources.slice(0, 5).map(source => <a key={`${source.url}-${source.price}`} href={source.url || '#'} target="_blank" rel="noreferrer" title={source.acceptance_reason || ''} className="flex items-start gap-1 text-primary hover:underline"><ExternalLink className="mt-0.5 h-3 w-3 shrink-0" /><span>{source.price == null ? 'Sem preço' : money(source.price)} · {source.title}</span></a>)}
                           {comparableSources.length > 5 && <details className="rounded border border-border p-2"><summary className="cursor-pointer text-[11px] font-medium text-muted-foreground">Ver mais {comparableSources.length - 5} fontes comparáveis</summary><div className="mt-2 space-y-2">{comparableSources.slice(5).map(source => <a key={`${source.url}-${source.price}`} href={source.url || '#'} target="_blank" rel="noreferrer" title={source.acceptance_reason || ''} className="flex items-start gap-1 border-t pt-2 text-primary hover:underline"><ExternalLink className="mt-0.5 h-3 w-3 shrink-0" /><span>{source.price == null ? 'Sem preço' : money(source.price)} · {source.title}</span></a>)}</div></details>}
+                          {indicativeSources.length > 0 && <details className="rounded border border-amber-500/30 bg-amber-500/5 p-2"><summary className="cursor-pointer text-[11px] font-medium text-amber-600">Ver {indicativeSources.length} evidências indicativas</summary><div className="mt-2 space-y-2">{indicativeSources.map((source, index) => <div key={`${source.url}-${source.price}-${index}`} className="border-t pt-2"><div className="font-medium text-foreground">{source.title}</div><div>{source.price == null ? 'Sem preço válido' : money(source.price)}{source.url && <> · <a href={source.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">abrir anúncio</a></>}</div><div className="text-[10px] text-amber-600">Motivo: {source.rejection_reason || 'Falta confirmar um atributo.'}</div></div>)}</div></details>}
                           {rejectedSources.length > 0 && <details className="rounded border border-border p-2"><summary className="cursor-pointer text-[11px] font-medium text-muted-foreground">Ver {rejectedSources.length} anúncios rejeitados</summary><div className="mt-2 space-y-2">{rejectedSources.map((source, index) => <div key={`${source.url}-${source.price}-${index}`} className="border-t pt-2"><div className="font-medium text-foreground">{source.title}</div><div>{source.price == null ? 'Sem preço válido' : money(source.price)}{source.url && <> · <a href={source.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">abrir anúncio</a></>}</div><div className="text-[10px] text-destructive">Motivo: {source.rejection_reason || 'Não passou na validação.'}</div></div>)}</div></details>}
                           {item.sources.length === 0 && <span className="text-destructive">Nenhum anúncio retornado</span>}
                         </div></td>
@@ -517,7 +524,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
                 </div>
               </CardContent>
             </Card>
-            <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />O preço de mercado só é aprovado com pelo menos {MINIMUM_COMPARABLE_EVIDENCE} anúncios comparáveis que confirmem novo/lacrado, modelo, memória e cor informada. Usados, Grade A, variantes incompatíveis e preços atípicos são rejeitados com motivo. A mediana de referências insuficientes ou suspeitas aparece apenas como indicativa; o preço mínimo lucrativo continua visível e nunca é substituído por um mercado não aprovado.</div>
+            <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />O sistema faz até três rodadas de busca quando a primeira fonte não alcança {MINIMUM_COMPARABLE_EVIDENCE} evidências aprovadas. Evidências indicativas (loja encontrada, mas memória ou condição não confirmada no título) ficam visíveis e não aprovam o preço sozinhas. Usados, Grade A, variantes incompatíveis e preços atípicos continuam rejeitados.</div>
           </>}
         </TabsContent>
 

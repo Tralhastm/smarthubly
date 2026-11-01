@@ -50,7 +50,7 @@ describe('market research evidence quality', () => {
     expect(wrongRequestedNetwork.sources[0].rejection_reason).toContain('5g');
   });
 
-  it('rejects used or Grade A listings and listings without explicit new-condition evidence', () => {
+  it('separates used or Grade A listings from listings without explicit new-condition evidence', () => {
     const result = evaluateShoppingResults('iPhone 14 256GB', [
       listing('Apple iPhone 14 256GB seminovo', 2400),
       listing('Apple iPhone 14 256GB Grade A', 2500),
@@ -58,7 +58,7 @@ describe('market research evidence quality', () => {
     ]);
 
     expect(result.evidence_count).toBe(0);
-    expect(result.sources.map(source => source.status)).toEqual(['rejected', 'rejected', 'rejected']);
+    expect(result.sources.map(source => source.status)).toEqual(['rejected', 'rejected', 'indicative']);
     expect(result.sources[2].rejection_reason).toContain('não está comprovada');
   });
 
@@ -80,6 +80,14 @@ describe('market research evidence quality', () => {
         source: 'Magalu',
         condition: undefined,
       }),
+    ]);
+
+    expect(result.sources[0].status).toBe('comparable');
+  });
+
+  it('treats Pro+, Pro Plus and Proplus as the same variant', () => {
+    const result = evaluateShoppingResults('Redmi Note 14 Pro+ 512/12', [
+      listing('Smartphone Xiaomi Redmi Note 14 Pro Plus 5G 12 GB de RAM 512 GB de ROM', 3411),
     ]);
 
     expect(result.sources[0].status).toBe('comparable');
