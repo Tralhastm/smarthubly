@@ -5,9 +5,10 @@ import SuperAdminDashboard from '@/components/super-admin/SuperAdminDashboard';
 import SuperAdminTenants from '@/components/super-admin/SuperAdminTenants';
 import SuperAdminMetrics from '@/components/super-admin/SuperAdminMetrics';
 import SuperAdminFeeRequests from '@/components/super-admin/SuperAdminFeeRequests';
-import { LayoutDashboard, Store, BarChart3, LogOut, Percent, Key, Bot, Users, Activity, DollarSign, Receipt, MapPin, Sun, Moon, Sparkles, Gauge, LifeBuoy, Code2, Zap } from 'lucide-react';
+import { LayoutDashboard, Store, BarChart3, LogOut, Percent, Key, Search, Bot, Users, Activity, DollarSign, Receipt, MapPin, Sun, Moon, Sparkles, Gauge, LifeBuoy, Code2, Zap } from 'lucide-react';
 import adminLogo from '@/assets/admin-logo.png';
 import SuperAdminApiKeys from '@/components/super-admin/SuperAdminApiKeys';
+import SuperAdminSerpApi from '@/components/super-admin/SuperAdminSerpApi';
 import SuperAdminWorkers from '@/components/super-admin/SuperAdminWorkers';
 import SuperAdminUsers from '@/components/super-admin/SuperAdminUsers';
 import SuperAdminStoreHealth from '@/components/super-admin/SuperAdminStoreHealth';
@@ -25,7 +26,7 @@ import SuperAdminWhatsAppBots from '@/components/super-admin/SuperAdminWhatsAppB
 import SuperAdminSofiaKnowledge from '@/components/super-admin/SuperAdminSofiaKnowledge';
 import { useAuthReady } from '@/hooks/useAuthReady';
 
-type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'workers' | 'users' | 'health' | 'financial' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test' | 'whatsapp_bots' | 'sofia_knowledge';
+type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'serpapi' | 'workers' | 'users' | 'health' | 'financial' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test' | 'whatsapp_bots' | 'sofia_knowledge';
 
 const ROLE_CHECK_TIMEOUT_MS = 8000;
 
@@ -110,6 +111,7 @@ const SuperAdmin = () => {
     { id: 'fee_requests' as Tab, label: 'Taxas', icon: <Percent className="h-4 w-4" /> },
     { id: 'metrics' as Tab, label: 'Métricas', icon: <BarChart3 className="h-4 w-4" /> },
     { id: 'api_keys' as Tab, label: 'API Keys', icon: <Key className="h-4 w-4" /> },
+    { id: 'serpapi' as Tab, label: 'SerpAPI', icon: <Search className="h-4 w-4" /> },
     { id: 'workers' as Tab, label: 'Workers IA', icon: <Bot className="h-4 w-4" /> },
     { id: 'users' as Tab, label: 'Usuários', icon: <Users className="h-4 w-4" /> },
     { id: 'prospecting' as Tab, label: 'Prospecção', icon: <MapPin className="h-4 w-4" /> },
@@ -168,6 +170,7 @@ const SuperAdmin = () => {
           {tab === 'fee_requests' && <SuperAdminFeeRequests />}
           {tab === 'metrics' && <SuperAdminMetrics />}
           {tab === 'api_keys' && <SuperAdminApiKeys />}
+          {tab === 'serpapi' && <SuperAdminSerpApi />}
           {tab === 'workers' && <SuperAdminWorkers />}
           {tab === 'users' && <SuperAdminUsers />}
           {tab === 'prospecting' && <SuperAdminProspectingHub />}
