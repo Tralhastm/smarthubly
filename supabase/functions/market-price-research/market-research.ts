@@ -55,15 +55,21 @@ function productMismatchReason(query: string, title: string): string | null {
   for (const color of queryColors) if (!titleColors.has(color)) return "A cor do anúncio não corresponde à cor informada pelo fornecedor.";
   for (const token of titleTokens) if (VARIANT_WORDS.has(token) && !queryTokens.has(token)) return `O anúncio indica a variante “${token.toUpperCase()}”, diferente da lista do fornecedor.`;
   const queryMemory = memorySignature(query); const titleMemory = memorySignature(title);
-  if (queryMemory && !titleMemory) return "A capacidade de armazenamento/RAM do anúncio não pôde ser confirmada.";
+  if (queryMemory && !titleMemory) {
+    const queryStorage = queryMemory.storage;
+    const titleStorage = memorySignature(title)?.storage;
+    if (queryStorage != null && titleStorage === queryStorage) return null;
+    return "A capacidade de armazenamento/RAM do anúncio não pôde ser confirmada.";
+  }
   if (!queryMemory && titleMemory) return "A lista do fornecedor não informa a capacidade; não é possível confirmar equivalência exata.";
-  if (queryMemory && titleMemory && (queryMemory.storage !== titleMemory.storage || (queryMemory.ram != null && queryMemory.ram !== titleMemory.ram))) return "A capacidade de armazenamento ou RAM do anúncio é diferente da lista do fornecedor.";
-  for (const token of queryTokens) { if (STOP_WORDS.has(token) || COLOR_GROUPS.some(group => group.aliases.includes(token))) continue; if (titleTokens.has(token) || hasBrandAlias(token, titleTokens)) continue; if ([...queryModelCodes].some(code => code === token && titleCompact.includes(code))) continue; return `O título não confirma o atributo “${token}” do produto pesquisado.`; }
+  if (queryMemory && titleMemory && (queryMemory.storage !== titleMemory.storage || (queryMemory.ram != null && titleMemory.ram != null && queryMemory.ram !== titleMemory.ram))) return "A capacidade de armazenamento ou RAM do anúncio é diferente da lista do fornecedor.";
+  for (const token of queryTokens) { if (STOP_WORDS.has(token) || COLOR_GROUPS.some(group => group.aliases.includes(token))) continue; if (queryMemory && /^\d+$/.test(token) && [queryMemory.storage, queryMemory.ram].includes(Number(token))) continue; if (titleTokens.has(token) || hasBrandAlias(token, titleTokens)) continue; if ([...queryModelCodes].some(code => code === token && titleCompact.includes(code))) continue; return `O título não confirma o atributo “${token}” do produto pesquisado.`; }
   for (const code of queryModelCodes) if (!titleCompact.includes(code)) return `O código exato do modelo “${code.toUpperCase()}” não aparece no anúncio.`;
   return null;
 }
 function parsePrice(result: ShoppingResult): number | null { const extracted = Number(result.extracted_price); if (Number.isFinite(extracted) && extracted > 0) return extracted; const raw = String(result.price || "").replace(/[^0-9,.-]/g, ""); const normalized = raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw; const parsed = Number(normalized); return Number.isFinite(parsed) && parsed > 0 ? parsed : null; }
-function listingText(result: ShoppingResult, title: string): string { const extensions = Array.isArray(result.extensions) ? result.extensions.map(String).join(" ") : String(result.extensions || ""); return [title, result.condition, result.snippet, result.description, extensions].filter(Boolean).map(String).join(" "); }
+function flattenStructured(value: unknown): string { if (value == null) return ""; if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value); if (Array.isArray(value)) return value.map(flattenStructured).join(" "); if (typeof value === "object") return Object.entries(value as Record<string, unknown>).map(([key, item]) => `${key} ${flattenStructured(item)}`).join(" "); return ""; }
+function listingText(result: ShoppingResult, title: string): string { const extensions = Array.isArray(result.extensions) ? result.extensions.map(String).join(" ") : String(result.extensions || ""); return [title, result.condition, result.snippet, result.description, extensions, result.product_details, result.attributes, result.rich_snippet].filter(Boolean).map(flattenStructured).join(" "); }
 function hasNewCondition(result: ShoppingResult, text: string, seller: string): boolean { const condition = normalizeResearchText(String(result.condition || "")); return /\b(?:new|novo|novos|lacrado|lacrados|selado|selados|sealed)\b/.test(condition) || NEW_PATTERN.test(normalizeResearchText(text)) || TRUSTED_RETAILER_PATTERN.test(normalizeResearchText(seller)); }
 function indicativeReason(reason: string): boolean { return reason.includes("não pôde ser confirmada") || reason.includes("não está comprovada") || reason.includes("não é possível confirmar equivalência"); }
 function median(values: number[]): number { const ordered = [...values].sort((a, b) => a - b); const middle = Math.floor(ordered.length / 2); return ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2; }
@@ -85,7 +91,7 @@ export function evaluateShoppingResults(productName: string, rawResults: unknown
     else if (price == null) reason = "Preço ausente ou inválido.";
     else if (!url) reason = "Link do anúncio ausente ou inválido.";
     else if (usedListing) reason = "O anúncio indica usado, seminovo, recondicionado, vitrine ou Grade A.";
-    else reason = productMismatchReason(query, title);
+    else reason = productMismatchReason(query, text);
     const explicitNew = hasNewCondition(result, text, seller);
     if (!reason && !explicitNew) { reason = "Condição novo/lacrado não está comprovada no título, condição ou atributos do anúncio."; status = "indicative"; }
     else if (reason && indicativeReason(reason) && !usedListing) status = "indicative";

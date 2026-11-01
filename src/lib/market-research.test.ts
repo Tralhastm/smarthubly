@@ -93,6 +93,15 @@ describe('market research evidence quality', () => {
     expect(result.evidence_count).toBe(1);
   });
 
+  it('accepts a trusted retailer when storage matches but RAM is omitted', () => {
+    const result = evaluateShoppingResults('Moto G56 5G 256/8', [
+      listing('Motorola Moto G56 5G 256GB', 1400, { source: 'Amazon.com.br' }),
+    ]);
+
+    expect(result.evidence_count).toBe(1);
+    expect(result.sources[0].status).toBe('comparable');
+  });
+
   it('does not treat a charger wattage as an extra product variant', () => {
     const result = evaluateShoppingResults('iPhone 16 128GB', [
       listing('Smartphone Apple iPhone 16 128GB Preto - 5G + Carregador Apple USB-C 20W Original', 4958.99, {
