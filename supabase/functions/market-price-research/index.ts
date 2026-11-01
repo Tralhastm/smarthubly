@@ -64,7 +64,10 @@ async function searchMarket(name: string): Promise<MarketSource[]> {
   url.searchParams.set("condition", "new");
   url.searchParams.set("sort", "relevance");
   const response = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!response.ok) return [];
+  if (!response.ok) {
+    console.error("market_source_unavailable", response.status, name);
+    throw new Error(`Fonte de mercado indisponível (HTTP ${response.status}).`);
+  }
   const data = await response.json();
   const collectedAt = new Date().toISOString();
   const unique = new Set<string>();

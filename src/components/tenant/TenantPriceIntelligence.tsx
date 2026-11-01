@@ -106,7 +106,13 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
     const catalog = catalogQuery.data || [];
     return parsedItems.map(item => {
       const catalogMatch = catalog.find(product => normalizeProductName(product.name) === item.key);
-      return { ...item, productId: catalogMatch?.id || null, supplierCost: item.supplierCost ?? (catalogMatch?.original_price ? Number(catalogMatch.original_price) : null) };
+      const supplierCost = item.supplierCost ?? (catalogMatch?.original_price ? Number(catalogMatch.original_price) : null);
+      return {
+        ...item,
+        productId: catalogMatch?.id || null,
+        supplierCost,
+        costWarning: item.costWarning || (supplierCost != null && supplierCost > 0 && supplierCost < 10 ? 'Custo suspeito: confirme o separador de milhar.' : null),
+      };
     });
   }, [catalogQuery.data, parsedItems]);
   const selectedItems = useMemo(() => candidateItems.filter(item => selectedKeys.includes(item.key)).slice(0, 40), [candidateItems, selectedKeys]);
@@ -135,7 +141,8 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
   const totals = useMemo(() => ({
     count: results.length,
     cost: roundMoney(results.reduce((sum, item) => sum + (item.supplierCost || 0), 0)),
-    revenue: roundMoney(results.reduce((sum, item) => sum + (item.pricing?.suggestedPrice || 0), 0)),
+    revenue: roundMoney(results.reduce((sum, item) => sum + (item.pricing?.minimumPrice || 0), 0)),
+    recommendedRevenue: roundMoney(results.reduce((sum, item) => sum + (item.pricing?.marketRecommendedPrice || 0), 0)),
     profit: roundMoney(results.reduce((sum, item) => sum + (item.pricing?.netProfit || 0), 0)),
     stars: results.filter(item => item.pricing?.decision === 'carro-chefe').length,
     safe: results.filter(item => item.pricing?.decision === 'margem-segura').length,
@@ -177,6 +184,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
   const analyze = async () => {
     if (!selectedItems.length) return toast.error('Cole uma lista e selecione pelo menos um produto.');
     if (selectedItems.some(item => !item.supplierCost || item.supplierCost <= 0)) return toast.error('Há produto sem custo. Corrija a lista ou cadastre o custo no catálogo antes da pesquisa.');
+    if (selectedItems.some(item => item.costWarning)) return toast.error('Há custo suspeito abaixo de R$ 10. Confirme os separadores de milhar antes de pesquisar.');
     setResearching(true);
     setResults([]);
     try {
@@ -206,7 +214,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         selected_limit: selectedItems.length,
         minimum_profit: minProfit,
         expenses_snapshot: expenses,
-        totals: { count: calculated.length, cost: calculated.reduce((sum, item) => sum + Number(item.supplierCost || 0), 0), revenue: calculated.reduce((sum, item) => sum + Number(item.pricing?.suggestedPrice || 0), 0), profit: calculated.reduce((sum, item) => sum + Number(item.pricing?.netProfit || 0), 0) },
+        totals: { count: calculated.length, cost: calculated.reduce((sum, item) => sum + Number(item.supplierCost || 0), 0), minimum_viable_revenue: calculated.reduce((sum, item) => sum + Number(item.pricing?.minimumPrice || 0), 0), recommended_market_revenue: calculated.reduce((sum, item) => sum + Number(item.pricing?.marketRecommendedPrice || 0), 0), profit: calculated.reduce((sum, item) => sum + Number(item.pricing?.netProfit || 0), 0) },
         status: calculated.some(item => item.evidenceCount === 0) ? 'partial' : 'completed',
       }).select('id').single();
       if (analysisInsert.error) throw analysisInsert.error;
@@ -217,13 +225,16 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         product_name: item.name,
         normalized_name: item.key,
         supplier_cost: item.supplierCost,
+        cost_warning: item.costWarning,
         occurrences: item.occurrences,
         market_min: item.marketMin,
         market_median: item.marketMedian,
         market_max: item.marketMax,
         evidence_count: item.evidenceCount,
         demand_note: item.demandNote,
-        suggested_price: item.pricing?.suggestedPrice || null,
+        minimum_price: item.pricing?.minimumPrice || null,
+        recommended_market_price: item.pricing?.marketRecommendedPrice || null,
+        suggested_price: item.pricing?.marketRecommendedPrice || item.pricing?.minimumPrice || null,
         fixed_expenses: item.pricing?.fixedExpenses || 0,
         percentage_expenses: item.pricing?.percentageExpenses || 0,
         net_profit: item.pricing?.netProfit || null,
@@ -259,7 +270,8 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
       'Taxas percentuais': `${item.pricing?.percentageExpenses || 0}%`,
       'Mercado minimo': money(item.marketMin),
       'Mercado mediano': money(item.marketMedian),
-      'Preco sugerido': money(item.pricing?.suggestedPrice),
+      'Preco minimo viavel': money(item.pricing?.minimumPrice),
+      'Preco recomendado de mercado': money(item.pricing?.marketRecommendedPrice),
       'Lucro liquido': money(item.pricing?.netProfit),
       'Margem liquida': `${item.pricing?.marginPercent || 0}%`,
       Decisao: item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo',
@@ -276,14 +288,15 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
       'PRECIFICADOR DE MERCADO',
       `Análise: ${inputName.trim() || 'Lista de fornecedores'}`,
       `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
-      `Produtos: ${totals.count} | Custo: ${money(totals.cost)} | Venda sugerida: ${money(totals.revenue)} | Lucro: ${money(totals.profit)}`,
+      `Produtos: ${totals.count} | Custo: ${money(totals.cost)} | Mínimo viável: ${money(totals.revenue)} | Mercado aprovado: ${money(totals.recommendedRevenue)} | Lucro: ${money(totals.profit)}`,
       '',
       ...results.flatMap(item => [
         `Produto: ${item.name}`,
         `Ocorrências: ${item.occurrences}`,
         `Custo fornecedor: ${money(item.supplierCost)}`,
         `Mercado: ${item.marketMedian ? `${money(item.marketMin)} a ${money(item.marketMax)} (mediana ${money(item.marketMedian)})` : 'Sem evidência'}`,
-        `Preço sugerido: ${money(item.pricing?.suggestedPrice)} | Lucro: ${money(item.pricing?.netProfit)} | Margem: ${(item.pricing?.marginPercent || 0).toFixed(2)}%`,
+        `Preço mínimo viável: ${money(item.pricing?.minimumPrice)} | Preço recomendado de mercado: ${money(item.pricing?.marketRecommendedPrice)}`,
+        `Lucro no mínimo viável: ${money(item.pricing?.netProfit)} | Margem: ${(item.pricing?.marginPercent || 0).toFixed(2)}%`,
         `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Evidências: ${item.evidenceCount}`,
         ...(item.sources.length ? item.sources.map(source => `Fonte: ${source.title} | ${money(source.price)} | ${source.url}`) : ['Fonte: Pesquisa inconclusiva']),
         '',
@@ -297,7 +310,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
     if (!results.length) return toast.info('Faça uma análise antes de copiar.');
     const lines = results.map(item => [
       item.name,
-      `Custo: ${money(item.supplierCost)} | Preço sugerido: ${money(item.pricing?.suggestedPrice)} | Lucro: ${money(item.pricing?.netProfit)} | Margem: ${(item.pricing?.marginPercent || 0).toFixed(2)}%`,
+      `Custo: ${money(item.supplierCost)} | Mínimo viável: ${money(item.pricing?.minimumPrice)} | Mercado aprovado: ${money(item.pricing?.marketRecommendedPrice)} | Lucro: ${money(item.pricing?.netProfit)} | Margem: ${(item.pricing?.marginPercent || 0).toFixed(2)}%`,
       `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Evidências: ${item.evidenceCount}`,
     ].join('\n')).join('\n\n');
     try {
@@ -326,7 +339,8 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
       body: [
         ['Produtos', String(totals.count)],
         ['Custo do lote', money(totals.cost)],
-        ['Venda sugerida', money(totals.revenue)],
+        ['Mínimo viável', money(totals.revenue)],
+        ['Mercado aprovado', money(totals.recommendedRevenue)],
         ['Lucro total', money(totals.profit)],
         ['Inconclusivos', String(totals.inconclusive)],
       ],
@@ -335,12 +349,13 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
     });
     autoTable(doc, {
       startY: (doc as any).lastAutoTable.finalY + 16,
-      head: [['Produto', 'Custo', 'Mercado', 'Preço sugerido', 'Lucro', 'Margem', 'Decisão', 'Evid.']],
+      head: [['Produto', 'Custo', 'Mercado', 'Mínimo viável', 'Mercado aprovado', 'Lucro', 'Margem', 'Decisão', 'Evid.']],
       body: results.map(item => [
         item.name,
         money(item.supplierCost),
         item.marketMedian ? money(item.marketMedian) : 'Sem evidência',
-        money(item.pricing?.suggestedPrice),
+        money(item.pricing?.minimumPrice),
+        item.pricing?.marketRecommendedPrice ? money(item.pricing.marketRecommendedPrice) : 'Não aprovado',
         money(item.pricing?.netProfit),
         `${(item.pricing?.marginPercent || 0).toFixed(2)}%`,
         item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo',
@@ -348,7 +363,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
       ]),
       styles: { fontSize: 7, cellPadding: 4 },
       headStyles: { fillColor: [79, 70, 229] },
-      columnStyles: { 0: { cellWidth: 125 }, 6: { cellWidth: 65 } },
+      columnStyles: { 0: { cellWidth: 105 }, 7: { cellWidth: 65 } },
     });
     let cursorY = (doc as any).lastAutoTable.finalY + 16;
     doc.setFontSize(8);
@@ -412,7 +427,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
                 return <label key={item.key} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 ${selected ? 'border-primary/50 bg-primary/5' : 'border-border'}`}>
                   <input type="checkbox" checked={selected} disabled={!selected && selectedItems.length >= 40} onChange={() => setSelectedKeys(previous => selected ? previous.filter(key => key !== item.key) : [...previous, item.key].slice(0, 40))} />
                   <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-foreground">{item.name}</span><span className="text-[11px] text-muted-foreground">{item.occurrences} ocorrência(s) · custo {item.supplierCost ? money(item.supplierCost) : 'não encontrado'}</span></span>
-                  {item.supplierCost ? <Badge variant="secondary">Pronto</Badge> : <Badge variant="destructive">Sem custo</Badge>}
+                  {item.costWarning ? <Badge variant="destructive">Revisar custo</Badge> : item.supplierCost ? <Badge variant="secondary">Pronto</Badge> : <Badge variant="destructive">Sem custo</Badge>}
                 </label>;
               })}</div>
             </CardContent>
@@ -421,9 +436,9 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
           <div className="flex flex-wrap gap-2"><Button onClick={analyze} disabled={researching || !selectedItems.length}>{researching ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Pesquisando fontes...</> : <><Search className="mr-2 h-4 w-4" /> Pesquisar mercado e calcular</>}</Button>{results.length > 0 && <><Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar CSV</Button><Button variant="outline" onClick={exportText}><FileText className="mr-2 h-4 w-4" /> Exportar TXT</Button><Button variant="outline" onClick={exportPdf}><FileDown className="mr-2 h-4 w-4" /> Exportar PDF</Button><Button variant="outline" onClick={() => void copyText()}><Clipboard className="mr-2 h-4 w-4" /> Copiar resultado</Button></>}</div>
 
           {results.length > 0 && <>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-6"><Metric title="Produtos" value={String(totals.count)} /><Metric title="Custo do lote" value={money(totals.cost)} /><Metric title="Venda sugerida" value={money(totals.revenue)} /><Metric title="Lucro total" value={money(totals.profit)} tone="text-green-500" /><Metric title="Carro-chefe" value={String(totals.stars)} tone="text-primary" /><Metric title="Inconclusivos" value={String(totals.inconclusive)} tone="text-destructive" /></div>
-            <Card><CardHeader className="pb-3"><CardTitle className="text-base">Resultado fundamentado por produto</CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[1100px] text-xs"><thead className="bg-muted/50"><tr><th className="p-3 text-left">Produto</th><th className="p-3 text-right">Custo</th><th className="p-3 text-right">Mercado</th><th className="p-3 text-right">Preço sugerido</th><th className="p-3 text-right">Gastos</th><th className="p-3 text-right">Lucro</th><th className="p-3 text-right">Margem</th><th className="p-3 text-left">Decisão</th><th className="p-3 text-left">Fontes</th></tr></thead><tbody>{results.map(item => <tr key={item.key} className="border-t align-top"><td className="p-3"><div className="font-medium text-foreground">{item.name}</div><div className="text-muted-foreground">{item.occurrences} ocorrência(s) · {item.demandNote}</div></td><td className="p-3 text-right font-medium">{money(item.supplierCost)}</td><td className="p-3 text-right">{item.marketMedian ? <><div>{money(item.marketMedian)}</div><div className="text-[10px] text-muted-foreground">{money(item.marketMin)} – {money(item.marketMax)}</div></> : <span className="text-destructive">Sem evidência</span>}</td><td className="p-3 text-right font-semibold">{money(item.pricing?.suggestedPrice)}</td><td className="p-3 text-right text-red-400">{money((item.pricing?.fixedExpenses || 0) + ((item.pricing?.suggestedPrice || 0) * (item.pricing?.percentageExpenses || 0) / 100))}</td><td className="p-3 text-right font-semibold text-green-500">{money(item.pricing?.netProfit)}</td><td className="p-3 text-right font-semibold">{(item.pricing?.marginPercent || 0).toFixed(2)}%</td><td className="p-3"><span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-medium ${decisionClass[item.pricing?.decision || 'inconclusivo']}`}>{decisionLabel[item.pricing?.decision || 'inconclusivo']}</span></td><td className="p-3"><div className="space-y-1">{item.sources.slice(0, 3).map(source => <a key={`${source.url}-${source.price}`} href={source.url} target="_blank" rel="noreferrer" className="flex max-w-[220px] items-center gap-1 truncate text-primary hover:underline"><ExternalLink className="h-3 w-3 shrink-0" />{money(source.price)} · {source.title}</a>)}{item.sources.length === 0 && <span className="text-destructive">Pesquisa inconclusiva</span>}</div></td></tr>)}</tbody></table></div></CardContent></Card>
-            <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />A recorrência nas listas indica oferta do fornecedor, não prova popularidade. O sistema informa demanda estimada porque anúncios públicos não confirmam volume de vendas.</div>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-7"><Metric title="Produtos" value={String(totals.count)} /><Metric title="Custo do lote" value={money(totals.cost)} /><Metric title="Mínimo viável" value={money(totals.revenue)} /><Metric title="Mercado aprovado" value={money(totals.recommendedRevenue)} /><Metric title="Lucro total" value={money(totals.profit)} tone="text-green-500" /><Metric title="Carro-chefe" value={String(totals.stars)} tone="text-primary" /><Metric title="Inconclusivos" value={String(totals.inconclusive)} tone="text-destructive" /></div>
+            <Card><CardHeader className="pb-3"><CardTitle className="text-base">Resultado fundamentado por produto</CardTitle></CardHeader><CardContent className="p-0"><div className="overflow-x-auto"><table className="w-full min-w-[1250px] text-xs"><thead className="bg-muted/50"><tr><th className="p-3 text-left">Produto</th><th className="p-3 text-right">Custo</th><th className="p-3 text-right">Mercado</th><th className="p-3 text-right">Mínimo viável</th><th className="p-3 text-right">Mercado aprovado</th><th className="p-3 text-right">Gastos</th><th className="p-3 text-right">Lucro</th><th className="p-3 text-right">Margem</th><th className="p-3 text-left">Decisão</th><th className="p-3 text-left">Fontes</th></tr></thead><tbody>{results.map(item => <tr key={item.key} className="border-t align-top"><td className="p-3"><div className="font-medium text-foreground">{item.name}</div><div className="text-muted-foreground">{item.occurrences} ocorrência(s) · {item.demandNote}</div></td><td className="p-3 text-right font-medium">{money(item.supplierCost)}</td><td className="p-3 text-right">{item.marketMedian ? <><div>{money(item.marketMedian)}</div><div className="text-[10px] text-muted-foreground">{money(item.marketMin)} – {money(item.marketMax)}</div></> : <span className="text-destructive">Sem evidência</span>}</td><td className="p-3 text-right font-semibold">{money(item.pricing?.minimumPrice)}</td><td className="p-3 text-right font-semibold">{item.pricing?.marketRecommendedPrice ? money(item.pricing.marketRecommendedPrice) : <span className="text-destructive">Não aprovado</span>}</td><td className="p-3 text-right text-red-400">{money((item.pricing?.fixedExpenses || 0) + ((item.pricing?.minimumPrice || 0) * (item.pricing?.percentageExpenses || 0) / 100))}</td><td className="p-3 text-right font-semibold text-green-500">{money(item.pricing?.netProfit)}</td><td className="p-3 text-right font-semibold">{(item.pricing?.marginPercent || 0).toFixed(2)}%</td><td className="p-3"><span className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-medium ${decisionClass[item.pricing?.decision || 'inconclusivo']}`}>{decisionLabel[item.pricing?.decision || 'inconclusivo']}</span></td><td className="p-3"><div className="space-y-1">{item.sources.slice(0, 3).map(source => <a key={`${source.url}-${source.price}`} href={source.url} target="_blank" rel="noreferrer" className="flex max-w-[220px] items-center gap-1 truncate text-primary hover:underline"><ExternalLink className="h-3 w-3 shrink-0" />{money(source.price)} · {source.title}</a>)}{item.sources.length === 0 && <span className="text-destructive">Pesquisa inconclusiva</span>}</div></td></tr>)}</tbody></table></div></CardContent></Card>
+            <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />O mínimo viável paga custos e lucro alvo. O preço recomendado de mercado só aparece quando há pelo menos duas evidências comparáveis e a mediana cobre o mínimo viável. Sem isso, o item permanece inconclusivo.</div>
           </>}
         </TabsContent>
 

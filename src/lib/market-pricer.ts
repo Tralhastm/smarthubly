@@ -2,6 +2,7 @@ export type ParsedSupplierItem = {
   key: string;
   name: string;
   supplierCost: number | null;
+  costWarning: string | null;
   occurrences: number;
   sourceLines: string[];
 };
@@ -21,6 +22,7 @@ export type PricingMath = {
   fixedExpenses: number;
   percentageExpenses: number;
   minimumPrice: number;
+  marketRecommendedPrice: number | null;
   suggestedPrice: number;
   netProfit: number;
   marginPercent: number;
@@ -33,19 +35,30 @@ export function normalizeProductName(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').replace(/[|;]+$/g, '').trim();
 }
 
-function parseNumber(value: string): number {
-  const normalized = value.includes(',') ? value.replace(/\./g, '').replace(',', '.') : value.replace(/,(?=\d{1,2}$)/, '.');
+export function parseBrazilianNumber(value: string): number {
+  const trimmed = value.trim().replace(/\s/g, '');
+  const normalized = trimmed.includes(',')
+    ? trimmed.replace(/\./g, '').replace(',', '.')
+    : /^\d{1,3}(?:\.\d{3})+$/.test(trimmed)
+      ? trimmed.replace(/\./g, '')
+      : trimmed.replace(/,(?=\d{1,2}$)/, '.');
   const number = Number(normalized);
   return Number.isFinite(number) ? number : 0;
 }
 
 function extractCost(line: string): { value: number; start: number } | null {
   const currency = line.match(new RegExp(`R\\$\\s*(${moneyValue})`, 'i'));
-  if (currency && currency.index != null) return { value: parseNumber(currency[1]), start: currency.index };
+  if (currency && currency.index != null) return { value: parseBrazilianNumber(currency[1]), start: currency.index };
   const parts = [...line.matchAll(new RegExp(`(?:^|[\\t;|]|\\s[-–—]\\s)(${moneyValue})\\s*$`, 'ig'))];
   const last = parts.at(-1);
   if (!last || last.index == null) return null;
-  return { value: parseNumber(last[1]), start: last.index + last[0].lastIndexOf(last[1]) };
+  return { value: parseBrazilianNumber(last[1]), start: last.index + last[0].lastIndexOf(last[1]) };
+}
+
+function costWarning(value: number | null): string | null {
+  return value != null && value > 0 && value < 10
+    ? 'Custo suspeito: valor abaixo de R$ 10. Confirme se o separador de milhar foi lido corretamente.'
+    : null;
 }
 
 function cleanName(raw: string, cost: { value: number; start: number } | null): string {
@@ -66,10 +79,13 @@ export function parseSupplierText(text: string): ParsedSupplierItem[] {
     const previous = grouped.get(key);
     if (previous) {
       previous.occurrences += 1;
-      if (previous.supplierCost == null && cost) previous.supplierCost = cost.value;
+      if (previous.supplierCost == null && cost) {
+        previous.supplierCost = cost.value;
+        previous.costWarning = costWarning(cost.value);
+      }
       previous.sourceLines.push(line);
     } else {
-      grouped.set(key, { key, name, supplierCost: cost?.value ?? null, occurrences: 1, sourceLines: [line] });
+      grouped.set(key, { key, name, supplierCost: cost?.value ?? null, costWarning: costWarning(cost?.value ?? null), occurrences: 1, sourceLines: [line] });
     }
   }
   return [...grouped.values()].sort((a, b) => b.occurrences - a.occurrences || a.name.localeCompare(b.name));
@@ -91,11 +107,13 @@ export function calculatePricing(
   const divisor = Math.max(0.0001, 1 - percentageExpenses / 100);
   const minimumPrice = roundMoney((supplierCost + fixedExpenses + Math.max(0, minimumProfit)) / divisor);
   const hasMarket = Number.isFinite(marketMedian) && (marketMedian || 0) > 0 && (evidenceCount === undefined || evidenceCount >= 2);
-  const decision: PricerDecision = !hasMarket ? 'inconclusivo' : (minimumPrice <= (marketMedian as number) ? 'carro-chefe' : 'margem-segura');
+  const marketCompatible = hasMarket && minimumPrice <= (marketMedian as number);
+  const decision: PricerDecision = marketCompatible ? 'carro-chefe' : 'inconclusivo';
+  const marketRecommendedPrice = marketCompatible ? roundMoney(marketMedian as number) : null;
   const suggestedPrice = minimumPrice;
   const percentageCost = suggestedPrice * percentageExpenses / 100;
   const netProfit = roundMoney(suggestedPrice - supplierCost - fixedExpenses - percentageCost);
-  return { fixedExpenses: roundMoney(fixedExpenses), percentageExpenses: roundMoney(percentageExpenses), minimumPrice, suggestedPrice, netProfit, marginPercent: suggestedPrice > 0 ? roundMoney((netProfit / suggestedPrice) * 100) : 0, decision };
+  return { fixedExpenses: roundMoney(fixedExpenses), percentageExpenses: roundMoney(percentageExpenses), minimumPrice, marketRecommendedPrice, suggestedPrice, netProfit, marginPercent: suggestedPrice > 0 ? roundMoney((netProfit / suggestedPrice) * 100) : 0, decision };
 }
 
 export function toCsv(rows: Array<Record<string, unknown>>): string {
