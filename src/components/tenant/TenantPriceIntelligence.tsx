@@ -9,9 +9,11 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import {
-  AlertCircle, Calculator, CheckCircle2, Download, ExternalLink, FileText, History,
-  Loader2, Plus, Radar, Search, Settings2, Trash2, Upload,
+  AlertCircle, Calculator, CheckCircle2, Clipboard, Download, ExternalLink, FileDown,
+  FileText, History, Loader2, Plus, Radar, Search, Settings2, Trash2, Upload,
 } from 'lucide-react';
 import {
   calculatePricing, normalizeProductName, parseSupplierText, roundMoney, toCsv,
@@ -249,7 +251,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
 
   const exportCsv = () => {
     if (!results.length) return toast.info('Faça uma análise antes de exportar.');
-    const csv = toCsv(results.map(item => ({
+    const rows = results.map(item => ({
       Produto: item.name,
       Ocorrencias: item.occurrences,
       'Custo fornecedor': money(item.supplierCost),
@@ -262,9 +264,106 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
       'Margem liquida': `${item.pricing?.marginPercent || 0}%`,
       Decisao: item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo',
       Evidencias: item.evidenceCount,
-    })));
+    }));
+    const csv = toCsv(rows);
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'precificador-mercado.csv'; anchor.click(); URL.revokeObjectURL(url);
+  };
+
+  const exportText = () => {
+    if (!results.length) return toast.info('Faça uma análise antes de exportar.');
+    const lines = [
+      'PRECIFICADOR DE MERCADO',
+      `Análise: ${inputName.trim() || 'Lista de fornecedores'}`,
+      `Gerado em: ${new Date().toLocaleString('pt-BR')}`,
+      `Produtos: ${totals.count} | Custo: ${money(totals.cost)} | Venda sugerida: ${money(totals.revenue)} | Lucro: ${money(totals.profit)}`,
+      '',
+      ...results.flatMap(item => [
+        `Produto: ${item.name}`,
+        `Ocorrências: ${item.occurrences}`,
+        `Custo fornecedor: ${money(item.supplierCost)}`,
+        `Mercado: ${item.marketMedian ? `${money(item.marketMin)} a ${money(item.marketMax)} (mediana ${money(item.marketMedian)})` : 'Sem evidência'}`,
+        `Preço sugerido: ${money(item.pricing?.suggestedPrice)} | Lucro: ${money(item.pricing?.netProfit)} | Margem: ${(item.pricing?.marginPercent || 0).toFixed(2)}%`,
+        `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Evidências: ${item.evidenceCount}`,
+        ...(item.sources.length ? item.sources.map(source => `Fonte: ${source.title} | ${money(source.price)} | ${source.url}`) : ['Fonte: Pesquisa inconclusiva']),
+        '',
+      ]),
+    ];
+    const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' }));
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'precificador-mercado.txt'; anchor.click(); URL.revokeObjectURL(url);
+  };
+
+  const copyText = async () => {
+    if (!results.length) return toast.info('Faça uma análise antes de copiar.');
+    const lines = results.map(item => [
+      item.name,
+      `Custo: ${money(item.supplierCost)} | Preço sugerido: ${money(item.pricing?.suggestedPrice)} | Lucro: ${money(item.pricing?.netProfit)} | Margem: ${(item.pricing?.marginPercent || 0).toFixed(2)}%`,
+      `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Evidências: ${item.evidenceCount}`,
+    ].join('\n')).join('\n\n');
+    try {
+      await navigator.clipboard.writeText(lines);
+      toast.success('Resultado copiado para o clipboard.');
+    } catch {
+      toast.error('Não foi possível acessar o clipboard neste navegador.');
+    }
+  };
+
+  const exportPdf = () => {
+    if (!results.length) return toast.info('Faça uma análise antes de exportar.');
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('Precificador de Mercado', pageWidth / 2, 42, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(90);
+    doc.text(`Análise: ${inputName.trim() || 'Lista de fornecedores'} • ${new Date().toLocaleString('pt-BR')}`, pageWidth / 2, 59, { align: 'center' });
+    doc.setTextColor(0);
+    autoTable(doc, {
+      startY: 78,
+      head: [['Resumo', 'Valor']],
+      body: [
+        ['Produtos', String(totals.count)],
+        ['Custo do lote', money(totals.cost)],
+        ['Venda sugerida', money(totals.revenue)],
+        ['Lucro total', money(totals.profit)],
+        ['Inconclusivos', String(totals.inconclusive)],
+      ],
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [79, 70, 229] },
+    });
+    autoTable(doc, {
+      startY: (doc as any).lastAutoTable.finalY + 16,
+      head: [['Produto', 'Custo', 'Mercado', 'Preço sugerido', 'Lucro', 'Margem', 'Decisão', 'Evid.']],
+      body: results.map(item => [
+        item.name,
+        money(item.supplierCost),
+        item.marketMedian ? money(item.marketMedian) : 'Sem evidência',
+        money(item.pricing?.suggestedPrice),
+        money(item.pricing?.netProfit),
+        `${(item.pricing?.marginPercent || 0).toFixed(2)}%`,
+        item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo',
+        String(item.evidenceCount),
+      ]),
+      styles: { fontSize: 7, cellPadding: 4 },
+      headStyles: { fillColor: [79, 70, 229] },
+      columnStyles: { 0: { cellWidth: 125 }, 6: { cellWidth: 65 } },
+    });
+    let cursorY = (doc as any).lastAutoTable.finalY + 16;
+    doc.setFontSize(8);
+    doc.setTextColor(90);
+    doc.text('Fontes consultadas:', 40, cursorY);
+    cursorY += 12;
+    const sources = results.flatMap(item => item.sources.slice(0, 3).map(source => `${item.name}: ${money(source.price)} — ${source.url}`));
+    const sourceLines = sources.length ? sources : ['Nenhuma evidência pública retornada nesta análise.'];
+    sourceLines.forEach(source => {
+      const wrapped = doc.splitTextToSize(source, pageWidth - 80);
+      if (cursorY + wrapped.length * 10 > doc.internal.pageSize.getHeight() - 35) { doc.addPage(); cursorY = 42; }
+      doc.text(wrapped, 40, cursorY);
+      cursorY += wrapped.length * 10 + 3;
+    });
+    doc.save('precificador-mercado.pdf');
   };
 
   return (
@@ -319,7 +418,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
             </CardContent>
           </Card>}
 
-          <div className="flex flex-wrap gap-2"><Button onClick={analyze} disabled={researching || !selectedItems.length}>{researching ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Pesquisando fontes...</> : <><Search className="mr-2 h-4 w-4" /> Pesquisar mercado e calcular</>}</Button>{results.length > 0 && <Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar CSV</Button>}</div>
+          <div className="flex flex-wrap gap-2"><Button onClick={analyze} disabled={researching || !selectedItems.length}>{researching ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Pesquisando fontes...</> : <><Search className="mr-2 h-4 w-4" /> Pesquisar mercado e calcular</>}</Button>{results.length > 0 && <><Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar CSV</Button><Button variant="outline" onClick={exportText}><FileText className="mr-2 h-4 w-4" /> Exportar TXT</Button><Button variant="outline" onClick={exportPdf}><FileDown className="mr-2 h-4 w-4" /> Exportar PDF</Button><Button variant="outline" onClick={() => void copyText()}><Clipboard className="mr-2 h-4 w-4" /> Copiar resultado</Button></>}</div>
 
           {results.length > 0 && <>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-6"><Metric title="Produtos" value={String(totals.count)} /><Metric title="Custo do lote" value={money(totals.cost)} /><Metric title="Venda sugerida" value={money(totals.revenue)} /><Metric title="Lucro total" value={money(totals.profit)} tone="text-green-500" /><Metric title="Carro-chefe" value={String(totals.stars)} tone="text-primary" /><Metric title="Inconclusivos" value={String(totals.inconclusive)} tone="text-destructive" /></div>
