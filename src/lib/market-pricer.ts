@@ -26,13 +26,15 @@ export type PricingMath = {
   suggestedPrice: number;
   netProfit: number;
   marginPercent: number;
+  marketNetProfit: number | null;
+  marketMarginPercent: number | null;
 };
 
 const moneyValue = '[0-9]{1,3}(?:[.][0-9]{3})*(?:,[0-9]{1,2})?|[0-9]+(?:[.,][0-9]{1,2})?';
 const ignoreLine = /^(?:data|lista|fornecedor|produto|pre[cç]o|valor|cat[aá]logo|dia|total|obs|observa)/i;
 
 export function normalizeProductName(value: string): string {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').replace(/[|;]+$/g, '').trim();
+  return value.replace(/\bgrade\s*[a-z]\b/gi, ' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').replace(/[|;]+$/g, '').trim();
 }
 
 export function parseBrazilianNumber(value: string): number {
@@ -63,7 +65,7 @@ function costWarning(value: number | null): string | null {
 
 function cleanName(raw: string, cost: { value: number; start: number } | null): string {
   const beforeCost = cost && cost.start >= 0 ? raw.slice(0, cost.start) : raw;
-  return beforeCost.replace(/^\s*(?:[-*•]+|\d+[.)-])\s*/, '').replace(/[|;,:–—-]+\s*$/, '').replace(/\s{2,}/g, ' ').trim();
+  return beforeCost.replace(/\bgrade\s*[a-z]\b/gi, ' ').replace(/^\s*(?:[-*•]+|\d+[.)-])\s*/, '').replace(/[|;,:–—-]+\s*$/, '').replace(/\s{2,}/g, ' ').trim();
 }
 
 export function parseSupplierText(text: string): ParsedSupplierItem[] {
@@ -112,9 +114,25 @@ export function calculatePricing(
   const decision: PricerDecision = !marketCompatible ? 'inconclusivo' : marketRoomPercent >= 20 ? 'carro-chefe' : 'margem-segura';
   const marketRecommendedPrice = marketCompatible ? roundMoney(marketMedian as number) : null;
   const suggestedPrice = minimumPrice;
-  const percentageCost = suggestedPrice * percentageExpenses / 100;
-  const netProfit = roundMoney(suggestedPrice - supplierCost - fixedExpenses - percentageCost);
-  return { fixedExpenses: roundMoney(fixedExpenses), percentageExpenses: roundMoney(percentageExpenses), minimumPrice, marketRecommendedPrice, suggestedPrice, netProfit, marginPercent: suggestedPrice > 0 ? roundMoney((netProfit / suggestedPrice) * 100) : 0, decision };
+  const profitAt = (price: number) => {
+    const percentageCost = price * percentageExpenses / 100;
+    const netProfit = roundMoney(price - supplierCost - fixedExpenses - percentageCost);
+    return { netProfit, marginPercent: price > 0 ? roundMoney((netProfit / price) * 100) : 0 };
+  };
+  const minimumMetrics = profitAt(suggestedPrice);
+  const marketMetrics = marketRecommendedPrice == null ? null : profitAt(marketRecommendedPrice);
+  return {
+    fixedExpenses: roundMoney(fixedExpenses),
+    percentageExpenses: roundMoney(percentageExpenses),
+    minimumPrice,
+    marketRecommendedPrice,
+    suggestedPrice,
+    netProfit: minimumMetrics.netProfit,
+    marginPercent: minimumMetrics.marginPercent,
+    marketNetProfit: marketMetrics?.netProfit ?? null,
+    marketMarginPercent: marketMetrics?.marginPercent ?? null,
+    decision,
+  };
 }
 
 export function toCsv(rows: Array<Record<string, unknown>>): string {

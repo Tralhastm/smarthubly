@@ -7,7 +7,7 @@ type MarketSource = {
   title: string;
   price: number;
   url: string;
-  condition: string;
+  condition: "new";
   collected_at: string;
 };
 
@@ -32,9 +32,14 @@ function tokens(value: string) {
   return normalize(value).split(/\s+/).filter((token) => token.length >= 2 && !["com", "para", "original", "lacrado", "gb", "tb"].includes(token));
 }
 
-function requestedCondition(query: string): "new" | "used" {
-  const value = normalize(query);
-  return /\b(seminovo|semi novo|usado|grade a|recondicionado)\b/.test(value) ? "used" : "new";
+function requestedCondition(_query: string): "new" {
+  // “Grade A” é uma classificação interna da lista de fornecedor. Todos os
+  // produtos da Mobiletec são pesquisados como novos, lacrados e na caixa.
+  return "new";
+}
+
+function cleanResearchName(value: string) {
+  return value.replace(/\bgrade\s*[a-z]\b/gi, " ").replace(/\s+/g, " ").trim();
 }
 
 function equivalent(query: string, title: string) {
@@ -62,10 +67,11 @@ async function canAccess(tenantId: string, userId: string) {
 }
 
 async function searchMarket(name: string): Promise<MarketSource[]> {
+  const searchName = cleanResearchName(name);
   const url = new URL("https://api.mercadolibre.com/sites/MLB/search");
-  url.searchParams.set("q", name);
+  url.searchParams.set("q", searchName);
   url.searchParams.set("limit", "20");
-  const condition = requestedCondition(name);
+  const condition = requestedCondition(searchName);
   url.searchParams.set("condition", condition);
   url.searchParams.set("sort", "relevance");
   const response = await fetch(url, { headers: { Accept: "application/json" } });
@@ -81,11 +87,11 @@ async function searchMarket(name: string): Promise<MarketSource[]> {
     const price = Number(result?.price);
     const permalink = String(result?.permalink || "").trim();
     const title = String(result?.title || "").trim();
-    if (!title || !permalink || !Number.isFinite(price) || price <= 0 || !equivalent(name, title)) continue;
+    if (!title || !permalink || !Number.isFinite(price) || price <= 0 || (result?.condition_id && result.condition_id !== "new") || !equivalent(searchName, title)) continue;
     const key = `${normalize(title)}:${price.toFixed(2)}`;
     if (unique.has(key)) continue;
     unique.add(key);
-    sources.push({ source: "mercadolivre", title, price, url: permalink, condition, collected_at: collectedAt });
+    sources.push({ source: "mercadolivre", title, price, url: permalink, condition: "new", collected_at: collectedAt });
   }
   return sources.slice(0, 10);
 }

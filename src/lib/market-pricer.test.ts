@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculatePricing, parseBrazilianNumber, parseSupplierText } from './market-pricer';
+import { calculatePricing, normalizeProductName, parseBrazilianNumber, parseSupplierText } from './market-pricer';
 
 describe('market pricer', () => {
   it('consolida produtos repetidos e preserva o custo', () => {
@@ -13,6 +13,12 @@ describe('market pricer', () => {
     expect(rows[0].occurrences).toBe(3);
     expect(rows[0].supplierCost).toBe(2950);
     expect(rows[1].occurrences).toBe(1);
+  });
+
+  it('ignora a classificação interna Grade A no nome do produto', () => {
+    const rows = parseSupplierText('iPhone 13 256GB Grade A — R$ 1.950,00');
+    expect(rows[0].name).toBe('iPhone 13 256GB');
+    expect(normalizeProductName('iPhone 13 256GB Grade A')).toBe('iphone 13 256gb');
   });
 
   it('não transforma memória em custo quando a linha não tem preço', () => {
@@ -43,6 +49,8 @@ describe('market pricer', () => {
     expect(result.minimumPrice).toBeCloseTo(1631.41, 2);
     expect(result.marketRecommendedPrice).toBe(1800);
     expect(result.netProfit).toBeCloseTo(100, 2);
+    expect(result.marketNetProfit).toBeCloseTo(260.18, 2);
+    expect(result.marketMarginPercent).toBeCloseTo(14.45, 2);
     expect(result.decision).toBe('margem-segura');
   });
 
@@ -51,6 +59,8 @@ describe('market pricer', () => {
     expect(result.decision).toBe('inconclusivo');
     expect(result.netProfit).toBe(100);
     expect(result.marketRecommendedPrice).toBeNull();
+    expect(result.marketNetProfit).toBeNull();
+    expect(result.marketMarginPercent).toBeNull();
   });
 
   it('não aprova preço de mercado abaixo do mínimo viável', () => {
@@ -64,6 +74,8 @@ describe('market pricer', () => {
     const result = calculatePricing(1800, [], 2600, 300, undefined, 3);
     expect(result.minimumPrice).toBe(2100);
     expect(result.marketRecommendedPrice).toBe(2600);
+    expect(result.marketNetProfit).toBe(800);
+    expect(result.marketMarginPercent).toBeCloseTo(30.77, 2);
     expect(result.decision).toBe('carro-chefe');
   });
 
