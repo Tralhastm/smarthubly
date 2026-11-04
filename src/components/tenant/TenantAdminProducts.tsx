@@ -345,7 +345,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       lines.push(`Em estoque: ${product.in_stock ? 'Sim' : 'Não'}`);
       if (variants.length) {
         lines.push('Preços por cor/variação:');
-        variants.forEach(variant => lines.push(`- ${variant.name}: venda ${variant.needsPriceReview ? 'Pendente de definição manual' : money(variant.price)}${includeCost ? ` | custo ${money(variant.cost)}` : ''}${includeCommission ? ` | comissão vendedor ${money(variant.commission)}` : ''} | estoque ${variant.inStock ? 'Sim' : 'Não'}`));
+        variants.forEach(variant => lines.push(`- ${variant.name}: venda ${variant.pending ? 'Pendente de definição manual' : money(variant.sale)}${includeCost ? ` | custo ${money(variant.cost)}` : ''}${includeCommission ? ` | comissão vendedor ${money(variant.commission)}` : ''} | estoque ${variant.inStock ? 'Sim' : 'Não'}`));
       }
       if (p.stock_quantity != null) lines.push(`Quantidade: ${p.stock_quantity}`);
       if (p.unidade) lines.push(`Unidade: ${p.unidade}`);
