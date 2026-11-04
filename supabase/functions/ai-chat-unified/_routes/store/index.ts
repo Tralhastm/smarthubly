@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { formatPublicStoreCatalog } from "../../_shared/store_catalog_context.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version"
@@ -33,38 +34,27 @@ async function getProductsForTenant(supabase, tenantId) {
     text: "",
     products: []
   };
-  const { data } = await supabase.from("products").select("id, name, price, original_price, category, subcategory, description, in_stock, item_type, duration_minutes, stock_quantity").eq("tenant_id", tenantId).eq("in_stock", true).limit(100);
-  if (!data || data.length === 0) return {
-    text: "",
-    products: []
-  };
-  const productIds = data.map((p) => p.id);
-  const { data: variants } = await supabase.from("product_variants").select("product_id, name, in_stock, price_delta").in("product_id", productIds);
-  const variantsByProduct = new Map();
-  (variants || []).forEach((v) => {
-    const list = variantsByProduct.get(v.product_id) || [];
-    list.push(v);
-    variantsByProduct.set(v.product_id, list);
-  });
-  const text = "\n\nPRODUTOS DISPONÍVEIS NA LOJA (use NOME e PREÇO EXATOS):\n" + data.map((p)=>{
-    const priceTag = `R$${Number(p.price).toFixed(2)}`;
-    const promo = p.original_price > p.price ? ` (de R$${Number(p.original_price).toFixed(2)} POR ${priceTag} 🔥)` : ` ${priceTag}`;
-    const cat = [
-      p.category,
-      p.subcategory
-    ].filter(Boolean).join(' › ');
-    const tipo = p.item_type === 'service' ? ` | SERVIÇO (~${p.duration_minutes || 30} min)` : '';
-    const stock = p.stock_quantity != null && p.stock_quantity <= 5 && p.stock_quantity > 0 ? ` | ⚠️ últimas ${p.stock_quantity} un` : '';
-    const desc = p.description ? ` | ${String(p.description).slice(0, 120)}` : '';
-    const productVariants = variantsByProduct.get(p.id) || [];
-    const availableVariants = productVariants.filter((v) => v?.in_stock !== false).map((v) => v.name).filter(Boolean);
-    const colors = availableVariants.length ? ` | variantes/cores disponíveis: ${availableVariants.join(', ')}` : '';
-    return `- ${p.name}${promo}${cat ? ` | ${cat}` : ''}${tipo}${stock}${colors}${desc}`;
-  }).join("\n");
-  return {
-    text,
-    products: data
-  };
+  const { data, error } = await supabase.from("products")
+    .select("id, name, price, category, subcategory, description, in_stock, store_visible, item_type, duration_minutes, stock_quantity")
+    .eq("tenant_id", tenantId)
+    .eq("in_stock", true)
+    .order("name", { ascending: true })
+    .limit(100);
+  if (error) {
+    console.warn("[store-chat] product lookup failed", error);
+    return { text: "\n\nCATÁLOGO NÃO CONSULTADO: produtos e preços não puderam ser confirmados. Não afirme que a loja está vazia e não invente preços.", products: [], lookupFailed: true };
+  }
+  if (!data?.length) return { text: "\n\nCATÁLOGO SEM PRODUTOS VISÍVEIS E DISPONÍVEIS NO MOMENTO.", products: [], lookupFailed: false };
+  const productIds = data.map((product) => product.id);
+  const { data: variants, error: variantsError } = await supabase.from("product_variants")
+    .select("product_id, name, in_stock, price_delta")
+    .eq("tenant_id", tenantId)
+    .in("product_id", productIds);
+  if (variantsError) {
+    console.warn("[store-chat] variant lookup failed", variantsError);
+    return { text: "\n\nCATÁLOGO NÃO CONSULTADO: preços e disponibilidade de variantes não puderam ser confirmados. Não invente preços nem recomende variantes.", products: [], lookupFailed: true };
+  }
+  return { ...formatPublicStoreCatalog(data, variants || []), lookupFailed: false };
 }
 // Contexto rico da loja: promo ativa, cupons válidos, frete, pagamento, agendamento
 async function buildStoreContext(supabase, tenantId, products) {
@@ -446,7 +436,7 @@ export async function store(req, body) {
     }
     const supabase = getSupabaseAdmin();
     // Buscar produtos do tenant para incluir no contexto da IA
-    const { text: productsContext, products } = await getProductsForTenant(supabase, tenantId);
+    const { text: productsContext, products, lookupFailed } = await getProductsForTenant(supabase, tenantId);
     const storeContext = await buildStoreContext(supabase, tenantId, products);
     const productsAvailable = products.length > 0;
     const systemPrompt = `Voce e vendedor(a) consultivo(a) da loja "${tenantName}" (${niche || 'produtos'}). Conhece TUDO da loja: catalogo, promocoes, cupons, frete, pagamento, agendamento. Sua missao e VENDER de forma natural e util.
@@ -478,7 +468,7 @@ PROIBIDO: inventar dados; prometer acoes; texto longo.
 REGRA #5 - VARIANTES E CARACTERISTICAS:
 As cores/variantes listadas no contexto são as únicas disponíveis. Se o cliente perguntar "quais cores", responda com os nomes exatos dessas variantes; se não houver variantes no contexto, diga que não há informação disponível. Nunca diga que um celular é resistente, tem câmera melhor, é imbatível, possui NFC, 5G, determinada bateria ou outro recurso técnico sem isso estar escrito na descrição/contexto do produto. Não use profissão ou perfil pessoal do cliente como motivo para inventar características.
 
-${productsAvailable ? '' : 'CATALOGO VAZIO - peca desculpa e oriente o WhatsApp.'}
+${lookupFailed ? 'CONSULTA DO CATÁLOGO FALHOU - não diga que a loja está vazia, não sugira produtos nem invente preço; explique que não conseguiu confirmar o catálogo e oriente o contato da loja.' : productsAvailable ? '' : 'CATÁLOGO SEM PRODUTOS VISÍVEIS E DISPONÍVEIS - peça desculpa e oriente o WhatsApp.'}
 ${productsContext}
 ${storeContext}`;
     const [keys, workers] = await Promise.all([
