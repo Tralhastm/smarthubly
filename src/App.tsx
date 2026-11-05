@@ -15,6 +15,7 @@ import TenantPaymentGateway from "./pages/TenantPaymentGateway";
 import TableSession from "./pages/TableSession";
 import NotFound from "./pages/NotFound";
 import Unsubscribe from "./pages/Unsubscribe";
+const SetAdminPassword = lazy(() => import("./pages/SetAdminPassword"));
 
 // Code-splitting: páginas administrativas/painéis só carregam quando a rota é acessada.
 // A loja pública (Index, TenantStore) continua no bundle inicial para abrir rápido.
@@ -71,6 +72,7 @@ const App = () => (
                 <Route path="/loja/:slug/vendedor/:token" element={<LazyPage><SellerPanel /></LazyPage>} />
                 <Route path="/vendedores" element={<LazyPage><SellerNetwork /></LazyPage>} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
+                <Route path="/ativar-admin" element={<LazyPage><SetAdminPassword /></LazyPage>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
               {/* Botão flutuante global — disponível em TODAS as telas */}

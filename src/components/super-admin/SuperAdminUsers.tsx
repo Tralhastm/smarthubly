@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, XCircle, Clock, Shield, Store, Mail } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Shield, Store, Mail, Send } from 'lucide-react';
+import { toast } from 'sonner';
 
 type UserRoleRow = {
   id: string;
@@ -18,7 +19,7 @@ type RoleRequestRow = {
   email: string;
   tenant_id: string;
   status: string;
-  created_at: string;
+  created_at: string | null;
   tenant_name?: string;
   tenant_slug?: string;
 };
@@ -30,8 +31,8 @@ const SuperAdminUsers = () => {
     queryKey: ['super-admin-user-roles'],
     queryFn: async () => {
       const [rolesResult, requestsResult] = await Promise.all([
-        supabase.from('user_roles').select('*, tenants(name, slug)').order('approved', { ascending: true }).order('created_at', { ascending: false }),
-        (supabase.from('role_requests' as any) as any)
+        supabase.from('user_roles').select('*').order('approved', { ascending: true }).order('created_at', { ascending: false }),
+        supabase.from('role_requests')
           .select('id,email,tenant_id,status,created_at')
           .order('created_at', { ascending: false })
           .limit(500),
@@ -40,20 +41,21 @@ const SuperAdminUsers = () => {
       if (requestsResult.error) throw requestsResult.error;
 
       const requests = (requestsResult.data || []) as RoleRequestRow[];
-      const tenantIds = [...new Set(requests.map(request => request.tenant_id).filter(Boolean))];
+      const roles = (rolesResult.data || []) as unknown as UserRoleRow[];
+      const tenantIds = [...new Set([...requests.map(request => request.tenant_id), ...roles.map(role => role.tenant_id)].filter(Boolean))];
       const tenantNames = new Map<string, { name: string; slug: string }>();
       if (tenantIds.length) {
         const { data: tenants, error: tenantsError } = await supabase.from('tenants').select('id,name,slug').in('id', tenantIds);
         if (tenantsError) throw tenantsError;
-        (tenants || []).forEach((tenant: any) => tenantNames.set(tenant.id, { name: tenant.name, slug: tenant.slug }));
+        (tenants || []).forEach(tenant => tenantNames.set(tenant.id, { name: tenant.name, slug: tenant.slug }));
       }
 
       return {
-        roles: (rolesResult.data || []).map((role: any) => ({
+        roles: roles.map(role => ({
           ...role,
-          tenant_name: role.tenants?.name || '—',
-          tenant_slug: role.tenants?.slug || '',
-        })) as UserRoleRow[],
+          tenant_name: tenantNames.get(role.tenant_id)?.name || '—',
+          tenant_slug: tenantNames.get(role.tenant_id)?.slug || '',
+        })),
         requests: requests.map(request => ({
           ...request,
           tenant_name: tenantNames.get(request.tenant_id)?.name || '—',
@@ -81,10 +83,24 @@ const SuperAdminUsers = () => {
 
   const updateRequest = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: 'approved' | 'rejected' }) => {
-      const { error } = await (supabase.from('role_requests' as any) as any).update({ status }).eq('id', id);
+      const { error } = await supabase.from('role_requests').update({ status }).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['super-admin-user-roles'] }),
+  });
+
+  const sendInvite = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { data, error } = await supabase.functions.invoke('invite-admin-request', { body: { requestId } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.detail || data.error);
+      return data as { email: string };
+    },
+    onSuccess: (result) => {
+      toast.success(`Convite enviado para ${result.email}`);
+      qc.invalidateQueries({ queryKey: ['super-admin-user-roles'] });
+    },
+    onError: (error: Error) => toast.error(error.message || 'Não foi possível enviar o convite.'),
   });
 
   if (isLoading) return <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
@@ -94,6 +110,8 @@ const SuperAdminUsers = () => {
   const requests = data?.requests || [];
   const pendingRequests = requests.filter(request => request.status === 'pending');
   const approvedRequests = requests.filter(request => request.status === 'approved');
+  const invitedRequests = requests.filter(request => request.status === 'invited');
+  const invitingRequests = requests.filter(request => request.status === 'inviting');
   const pending = roles.filter(role => !role.approved);
   const approved = roles.filter(role => role.approved);
 
@@ -109,7 +127,7 @@ const SuperAdminUsers = () => {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">{request.email}</p>
               <p className="flex items-center gap-1 text-xs text-muted-foreground"><Store className="h-3 w-3" /> {request.tenant_name} <span className="text-muted-foreground/60">/{request.tenant_slug}</span></p>
-              <p className="text-[11px] text-muted-foreground">Recebido em {new Date(request.created_at).toLocaleString('pt-BR')} · a aprovação registra o pedido, mas não cria a conta de login.</p>
+              <p className="text-[11px] text-muted-foreground">Recebido em {request.created_at ? new Date(request.created_at).toLocaleString('pt-BR') : 'data não informada'} · a aprovação registra o pedido, mas não cria a conta de login.</p>
             </div>
             <div className="flex shrink-0 gap-2">
               <button onClick={() => updateRequest.mutate({ id: request.id, status: 'approved' })} disabled={updateRequest.isPending} className="flex items-center gap-1 rounded-lg bg-green-600/20 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-600/30 disabled:opacity-50"><CheckCircle className="h-3.5 w-3.5" /> Aprovar</button>
@@ -117,7 +135,17 @@ const SuperAdminUsers = () => {
             </div>
           </div>
         ))}
-        {approvedRequests.length > 0 && <p className="text-xs text-muted-foreground">Pedidos já aprovados: {approvedRequests.length}</p>}
+        {(approvedRequests.length > 0 || invitedRequests.length > 0 || invitingRequests.length > 0) && (
+          <div className="mt-3 rounded-lg border border-border bg-card p-4">
+            <h4 className="mb-2 text-sm font-medium text-foreground">Aprovados e convites ({approvedRequests.length + invitedRequests.length + invitingRequests.length})</h4>
+            {[...approvedRequests, ...invitingRequests, ...invitedRequests].map(request => (
+              <div key={request.id} className="flex items-center justify-between gap-3 border-t border-border py-2 first:border-0">
+                <div className="min-w-0"><p className="truncate text-sm text-foreground">{request.email} · {request.tenant_name}</p><p className="text-xs text-muted-foreground">{request.status === 'invited' ? 'Convite enviado' : request.status === 'inviting' ? 'Enviando convite…' : 'Aprovado · aguardando envio do convite'}</p></div>
+                {request.status === 'approved' && <button onClick={() => { if (window.confirm(`Enviar convite administrativo para ${request.email} na loja ${request.tenant_slug}?`)) sendInvite.mutate(request.id); }} disabled={sendInvite.isPending} className="flex shrink-0 items-center gap-1 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/25 disabled:opacity-50"><Send className="h-3.5 w-3.5" /> Enviar convite</button>}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>
