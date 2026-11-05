@@ -1,0 +1,66 @@
+name: Temporary Configure Supabase Auth SMTP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  configure-auth-smtp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SMARTHUBLY_DEPLOY }}
+      BREVO_SMTP_PASS: ${{ secrets.BREVO_SMTP_PASS }}
+    steps:
+      - name: Patch only the approved SMTP fields
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          token = os.environ.get("SUPABASE_ACCESS_TOKEN", "")
+          smtp_pass = os.environ.get("BREVO_SMTP_PASS", "")
+          if not token or not smtp_pass:
+              print("Required workflow secrets are missing.")
+              sys.exit(1)
+
+          payload = {
+              "external_email_enabled": True,
+              "smtp_admin_email": "smarthubly@gmail.com",
+              "smtp_host": "smtp-relay.brevo.com",
+              "smtp_port": "587",
+              "smtp_user": "c04ea5001@smtp-brevo.com",
+              "smtp_pass": smtp_pass,
+              "smtp_sender_name": "SmartHubly",
+          }
+          request = urllib.request.Request(
+              "https://api.supabase.com/v1/projects/qbcplbcdxoyqpmcehnvu/config/auth",
+              data=json.dumps(payload).encode("utf-8"),
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Content-Type": "application/json",
+              },
+              method="PATCH",
+          )
+          try:
+              with urllib.request.urlopen(request, timeout=25) as response:
+                  status = response.status
+          except urllib.error.HTTPError as error:
+              print(f"Supabase Management API rejected the update (HTTP {error.code}); response body suppressed.")
+              sys.exit(1)
+          except Exception as error:
+              print(f"SMTP update request failed ({type(error).__name__}); details suppressed.")
+              sys.exit(1)
+
+          if not 200 <= status < 300:
+              print(f"SMTP update did not succeed (HTTP {status}).")
+              sys.exit(1)
+          print(f"Auth SMTP fields updated successfully (HTTP {status}).")
+          PY
