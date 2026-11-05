@@ -3,9 +3,10 @@ import { useProductVariants, useProductAddons, type ProductVariant, type Product
 import { useCart, type CartAddon } from '@/contexts/CartContext';
 import type { Tables } from '@/integrations/supabase/types';
 import { X, Plus, Minus, Check } from 'lucide-react';
-import { hasPositiveFinalProfit, grossUpPaymentFee } from '@/lib/pricing';
+import { calculateConfiguredFinalProfit, grossUpPaymentFee } from '@/lib/pricing';
 import { formatBRL } from '@/lib/format-money';
 import { getVariantSalePrice, isVariantInStock } from '@/lib/variant-pricing';
+import { useTenantPricingConfig } from '@/hooks/useTenantPricingConfig';
 
 type Product = Tables<'products'>;
 
@@ -19,6 +20,8 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   const { data: variants = [], isLoading: variantsLoading, isError: variantsError } = useProductVariants(product.id);
   const { data: addons = [], isLoading: addonsLoading, isError: addonsError } = useProductAddons(product.id);
   const { addToCart } = useCart();
+  const pricingConfigQuery = useTenantPricingConfig((product as any).tenant_id);
+  const pricingConfig = pricingConfigQuery.data;
 
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
   const [addonQty, setAddonQty] = useState<Record<string, number>>({});
@@ -27,11 +30,12 @@ const ProductOptionsPicker = ({ product, showPixPrice = false, onClose }: Props)
   const displayPrice = (value: number) => showPixPrice ? grossUpPaymentFee(value, 0.99) : value;
   const availableVariants = useMemo(() => variants.filter(v =>
       isVariantInStock(v.in_stock) &&
-      ((v as any).allow_loss || (product as any).allow_loss || hasPositiveFinalProfit(
+      ((v as any).allow_loss || (product as any).allow_loss || !pricingConfig || calculateConfiguredFinalProfit(
         getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: v.suggested_price, priceDelta: v.price_delta, variantCost: v.cost_price }),
         v.cost_price ?? (product as any).original_price,
-      ))
-    ), [variants, product]);
+        pricingConfig,
+      ).finalProfit >= pricingConfig.minimumProfit)
+    ), [pricingConfig, variants, product]);
 
   // Se há uma única opção comprável, pré-selecione-a. Com várias opções,
   // aguarde a escolha do cliente e não mostre o preço-base como se fosse o da cor.

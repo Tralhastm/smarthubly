@@ -10,15 +10,17 @@ import MediaGalleryField, { type MediaItem } from '@/components/shared/MediaGall
 import AutoCategorizeButton from '@/components/shared/AutoCategorizeButton';
 import ProductExtrasEditor from './ProductExtrasEditor';
 import TenantProductClicksSummary from './TenantProductClicksSummary';
+import TenantProductPricingSettings from './TenantProductPricingSettings';
 import CategoryTreeSelect from './CategoryTreeSelect';
 import TenantCategoriesTree from './TenantCategoriesTree';
-import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Download, Sparkles, Loader2, ImageIcon, Link as LinkIcon, AlertTriangle, Search, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Download, Sparkles, Loader2, ImageIcon, Link as LinkIcon, AlertTriangle, Search, Eye, EyeOff, RefreshCw, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
-import { calculateFinalProfit, DEFAULT_SELLER_SHARE } from '@/lib/pricing';
+import { calculateConfiguredFinalProfit, calculateFinalProfit, DEFAULT_SELLER_SHARE, type ConfiguredPricingConfig } from '@/lib/pricing';
 import { getVariantSalePrice } from '@/lib/variant-pricing';
+import { useTenantPricingConfig } from '@/hooks/useTenantPricingConfig';
 
 const parseBrazilianMoney = (value: unknown) => {
   const raw = String(value ?? '')
@@ -146,7 +148,10 @@ const normalizeGeneratedDescription = (value: unknown, expectedName?: string) =>
 };
 
 const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenantId: string; isDropshipping?: boolean; isAffiliate?: boolean }) => {
+  const [productSection, setProductSection] = useState<'catalog' | 'pricing'>('catalog');
   const { data: products = [], isLoading, refetch } = useProducts(tenantId);
+  const pricingConfigQuery = useTenantPricingConfig(tenantId);
+  const pricingConfig = pricingConfigQuery.data;
   const { data: allVariants = [] } = useQuery({
     queryKey: ['tenant-product-variants', tenantId],
     queryFn: async () => {
@@ -1457,13 +1462,14 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     : orderedProducts;
   const productsWithGoogleImage = products.filter(p => p.image && p.image.includes('?src=google')).length;
   const lossProducts = products.flatMap(product => {
+    if (!pricingConfig) return [];
     const variants = allVariants.filter(variant => variant.product_id === product.id);
     const candidates = variants.length > 0 ? variants : [{ id: `${product.id}-base`, name: 'base', suggested_price: null, price_delta: 0, cost_price: (product as any).original_price } as any];
     return candidates.map(variant => {
       const referencePrice = getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price });
       const referenceCost = Number(variant.cost_price ?? (product as any).original_price) || 0;
-      return { product, variant, pricing: calculateFinalProfit(referencePrice, referenceCost) };
-    }).filter(item => item.pricing.isLoss);
+      return { product, variant, pricing: calculateConfiguredFinalProfit(referencePrice, referenceCost, pricingConfig) };
+    }).filter(item => item.pricing.belowMinimum);
   });
   // Uma variante marcada como indisponível e sem pendência de preço foi
   // retirada da última lista do fornecedor. O aviso fica no topo para não
@@ -1477,8 +1483,26 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     }))
     .sort((a, b) => `${a.productName} ${a.name}`.localeCompare(`${b.productName} ${b.name}`, 'pt-BR', { sensitivity: 'base' }));
 
+  const productSectionTabs = (
+    <div className="flex gap-1 border-b border-border" role="tablist" aria-label="Seções de produtos">
+      <button type="button" role="tab" aria-selected={productSection === 'catalog'} onClick={() => setProductSection('catalog')}
+        className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${productSection === 'catalog' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+        <Package className="h-4 w-4" /> Catálogo
+      </button>
+      <button type="button" role="tab" aria-selected={productSection === 'pricing'} onClick={() => setProductSection('pricing')}
+        className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${productSection === 'pricing' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+        <Settings2 className="h-4 w-4" /> Gastos e disponibilidade
+      </button>
+    </div>
+  );
+
+  if (productSection === 'pricing') {
+    return <div className="space-y-4">{productSectionTabs}<TenantProductPricingSettings tenantId={tenantId} /></div>;
+  }
+
   return (
     <div className="space-y-4">
+      {productSectionTabs}
       <TenantProductClicksSummary tenantId={tenantId} />
       {soldOutColorVariants.length > 0 && (
         <div role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-amber-700 dark:text-amber-400">
@@ -1508,13 +1532,13 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
             <div className="min-w-0">
-              <p className="font-semibold">Atenção: {lossProducts.length} produto(s) indisponível(is) por prejuízo</p>
-              <p className="mt-1 text-xs text-destructive/80">A vitrine bloqueia automaticamente a compra quando o lucro líquido final da variação fica negativo, considerando checkout de até 4,99%, motoboy de R$ 50, desconto de R$ 10 e 20% do vendedor sobre o lucro positivo.</p>
+              <p className="font-semibold">Atenção: {lossProducts.length} produto(s)/variação(ões) abaixo do lucro mínimo</p>
+              <p className="mt-1 text-xs text-destructive/80">A vitrine usa os gastos ativos na aba “Gastos e disponibilidade” e bloqueia automaticamente quando o lucro líquido final fica abaixo do mínimo definido para esta loja.</p>
               <div className="mt-2 space-y-1 text-xs">
                 {lossProducts.map(({ product, variant, pricing }) => (
                   <div key={product.id} className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
                     <span className="font-medium">{product.name}{variant?.name && variant.name !== 'base' ? ` · ${variant.name}` : ''}</span>
-                    <span>prejuízo final: R$ {Math.abs(pricing.finalProfit).toFixed(2)}</span>
+                    <span>lucro: R$ {pricing.finalProfit.toFixed(2)} · mínimo: R$ {pricing.minimumProfit.toFixed(2)}</span>
                   </div>
                 ))}
               </div>
@@ -2104,7 +2128,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       )}
 
       {visibleProducts.map(p => (
-        <EditableProduct key={p.id} product={p} variants={allVariants.filter(variant => variant.product_id === p.id)} isEditing={editing === p.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate}
+        <EditableProduct key={p.id} product={p} variants={allVariants.filter(variant => variant.product_id === p.id)} pricingConfig={pricingConfig} isEditing={editing === p.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate}
           suppliers={suppliers.filter(s => s.active)} tenantId={tenantId}
           soldOutVariantIds={allVariants.filter(variant => isVariantSoldOut(variant)).map(variant => variant.id)}
           feeRequests={feeRequests.filter(r => r.product_id === p.id)}
@@ -2128,6 +2152,17 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             if (!currentlyInStock && salePrice <= 0) {
               toast.error(`Defina o preço de revenda da cor ${variant.name} antes de liberar.`);
               return;
+            }
+            if (!currentlyInStock && pricingConfig && !(variant as any).allow_loss && !(p as any).allow_loss) {
+              const pricing = calculateConfiguredFinalProfit(
+                salePrice,
+                variant.cost_price ?? (p as any).original_price,
+                pricingConfig,
+              );
+              if (pricing.belowMinimum) {
+                toast.error(`A cor ${variant.name} ficará bloqueada: lucro de R$ ${pricing.finalProfit.toFixed(2)} abaixo do mínimo de R$ ${pricing.minimumProfit.toFixed(2)}.`);
+                return;
+              }
             }
             if (!currentlyInStock && !manualSupplierId) {
               toast.error(`Escolha o fornecedor responsável pela cor ${variant.name} antes de liberar.`);
@@ -2185,8 +2220,9 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     </div>
   );
 };
-const EditableProduct = ({ product, variants, isEditing, isDropshipping, isAffiliate, suppliers, tenantId, feeRequests, soldOutVariantIds, onRequestFee, onEdit, onSave, onCancel, onDelete, onToggleVisibility, onToggleVariantStock }: {
+const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropshipping, isAffiliate, suppliers, tenantId, feeRequests, soldOutVariantIds, onRequestFee, onEdit, onSave, onCancel, onDelete, onToggleVisibility, onToggleVariantStock }: {
   product: Product; variants: ProductVariant[]; isEditing: boolean; isDropshipping?: boolean; isAffiliate?: boolean;
+  pricingConfig?: ConfiguredPricingConfig;
   suppliers: { id: string; name: string }[];
   tenantId: string;
   feeRequests: { id: string; requested_percent: number; status: string }[];
@@ -2545,8 +2581,9 @@ const EditableProduct = ({ product, variants, isEditing, isDropshipping, isAffil
                   const price = referencePrice;
                   const cost = (product as any).original_price || 0;
                   const profit = price - cost;
-                  const net = calculateFinalProfit(price, cost);
-                  const belowMinimum = net.finalProfit < 80;
+                  const configuredNet = pricingConfig ? calculateConfiguredFinalProfit(price, cost, pricingConfig) : null;
+                  const net = configuredNet || calculateFinalProfit(price, cost);
+                  const belowMinimum = configuredNet?.belowMinimum ?? false;
                   const margin = price > 0 ? (profit / price) * 100 : 0;
                   const isLow = margin < 15;
                   return (

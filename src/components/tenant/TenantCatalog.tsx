@@ -11,9 +11,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { getItemCTA } from '@/lib/niche-labels';
 import { normalizeProductDescription } from '@/lib/product-description';
 import { ExpandableProductDescription } from './ExpandableProductDescription';
-import { calculateFinalProfit } from '@/lib/pricing';
+import { calculateConfiguredFinalProfit } from '@/lib/pricing';
 import { getLowestInStockVariantPrice, getVariantSalePrice, isVariantInStock } from '@/lib/variant-pricing';
 import { formatBRL } from '@/lib/format-money';
+import { useTenantPricingConfig } from '@/hooks/useTenantPricingConfig';
 
 export type CatalogLayout = 'grid' | 'list' | 'compact' | 'magazine';
 
@@ -209,8 +210,10 @@ const SkeletonCard = () => (
   </div>
 );
 
-const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid', splashEnabled = true, showPixPrice = false, disableSafeMargin = false }: { tenantId: string; isDropshipping?: boolean; niche?: string | null; layout?: CatalogLayout; splashEnabled?: boolean; showPixPrice?: boolean; disableSafeMargin?: boolean }) => {
+const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid', splashEnabled = true, showPixPrice = false }: { tenantId: string; isDropshipping?: boolean; niche?: string | null; layout?: CatalogLayout; splashEnabled?: boolean; showPixPrice?: boolean }) => {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteProducts(tenantId);
+  const pricingConfigQuery = useTenantPricingConfig(tenantId);
+  const pricingConfig = pricingConfigQuery.data;
   const { addToCart } = useCart();
   const [search, setSearch] = useState('');
   // Subcategorias ilimitadas: { id, name, parent_id, hidden } do tenant
@@ -247,11 +250,13 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
   const [variantMap, setVariantMap] = useState<Map<string, ProductVariant[]>>(new Map());
     const [detail, setDetail] = useState<Product | null>(null);
   const allProducts = useMemo(() => data?.pages.flatMap(p => p.data) ?? [], [data]);
-  // O bloqueio é calculado no cliente com a mesma regra do Financeiro:
-  // venda - checkout 4,99% - frete - desconto - custo - comissão do vendedor.
-  // Assim, uma alteração de preço/custo passa a refletir na vitrine sem depender
-  // de uma atualização manual de in_stock no banco.
+  // O bloqueio é calculado no cliente com a política persistida da loja.
+  // Assim, uma alteração de preço/custo ou de gastos passa a refletir na
+  // vitrine sem depender de uma atualização manual de in_stock no banco.
   const storefrontProducts = useMemo(() => allProducts.filter(product => (product as any).store_visible !== false).map(product => {
+    // Enquanto a política ainda carrega, preservamos o estado vindo do banco
+    // para não transformar uma falha transitória em indisponibilidade.
+    if (!pricingConfig) return product;
     const variants = variantMap.get(product.id) || [];
     const pricedVariants = variants.filter(variant => isVariantInStock(variant.in_stock)).map(variant => ({
       sale: getVariantSalePrice({ productPrice: Number(product.price), productCost: (product as any).original_price, suggestedPrice: variant.suggested_price, priceDelta: variant.price_delta, variantCost: variant.cost_price }),
@@ -267,15 +272,11 @@ const TenantCatalog = ({ tenantId, isDropshipping = false, niche, layout = 'grid
     // Produto com preço zero aguarda as variações carregarem; não deve ser
     // marcado como prejuízo durante esse intervalo.
     if (referencePrice <= 0) return product;
-    const pricing = calculateFinalProfit(referencePrice, referenceCost);
-    // A Juzzy desativa apenas o mínimo de margem segura: ainda bloqueia
-    // prejuízo real, mas não bloqueia uma venda que continua positiva.
-    const belowSafeMargin = pricing.finalProfit < 80;
-    const realLoss = pricing.finalProfit < 0;
-    if ((realLoss || (!disableSafeMargin && belowSafeMargin)) && !(product as any).allow_loss) return { ...product, in_stock: false, pricing_blocked: true };
+    const pricing = calculateConfiguredFinalProfit(referencePrice, referenceCost, pricingConfig);
+    if (pricing.belowMinimum && !(product as any).allow_loss) return { ...product, in_stock: false, pricing_blocked: true };
     if ((product as any).manual_blocked) return { ...product, in_stock: false };
     return product;
-  }), [allProducts, variantMap]);
+  }), [allProducts, pricingConfig, variantMap]);
   const getDisplayPriceInfo = (product: Product) => {
     const variants = variantMap.get(product.id) || [];
     const lowestAvailablePrice = getLowestInStockVariantPrice(variants.map(variant => ({

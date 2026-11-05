@@ -7,6 +7,59 @@ export const DEFAULT_SELLER_SHARE = 0.20;
 export const SAFE_MARGIN_THRESHOLD = 100;
 export const SAFE_MARGIN_TARGET = 100;
 
+export type ConfiguredPricingExpense = {
+  amountType: 'percentage' | 'fixed';
+  amount: number;
+  enabled?: boolean;
+};
+
+export type ConfiguredPricingConfig = {
+  minimumProfit: number;
+  sellerSharePercent: number;
+  expenses: ConfiguredPricingExpense[];
+};
+
+/**
+ * Calcula o lucro de disponibilidade usando somente a política persistida da
+ * loja. Não há frete, desconto ou taxa implícitos aqui: cada gasto precisa
+ * estar cadastrado na configuração do tenant.
+ */
+export function calculateConfiguredFinalProfit(
+  salePrice: unknown,
+  costPrice: unknown,
+  config: ConfiguredPricingConfig,
+) {
+  const sale = Math.max(0, Number(salePrice) || 0);
+  const cost = Math.max(0, Number(costPrice) || 0);
+  const expenses = Array.isArray(config?.expenses) ? config.expenses : [];
+  const fixedExpenses = expenses
+    .filter(expense => expense?.enabled !== false && expense?.amountType === 'fixed')
+    .reduce((sum, expense) => sum + Math.max(0, Number(expense.amount) || 0), 0);
+  const percentageExpenses = expenses
+    .filter(expense => expense?.enabled !== false && expense?.amountType === 'percentage')
+    .reduce((sum, expense) => sum + Math.max(0, Number(expense.amount) || 0), 0);
+  const percentageCost = sale * percentageExpenses / 100;
+  const operatingProfit = sale - cost - fixedExpenses - percentageCost;
+  const sellerSharePercent = Math.min(100, Math.max(0, Number(config?.sellerSharePercent) || 0));
+  const seller = Math.max(0, operatingProfit) * sellerSharePercent / 100;
+  const finalProfit = operatingProfit - seller;
+  const minimumProfit = Math.max(0, Number(config?.minimumProfit) || 0);
+  return {
+    sale,
+    cost,
+    fixedExpenses,
+    percentageExpenses,
+    percentageCost,
+    operatingProfit,
+    seller,
+    sellerSharePercent,
+    finalProfit,
+    minimumProfit,
+    isLoss: finalProfit < 0,
+    belowMinimum: finalProfit < minimumProfit,
+  };
+}
+
 export type CatalogPricingMode = 'margem_segura' | 'carro_chefe';
 
 /** Lucro operacional antes do repasse do vendedor. */
