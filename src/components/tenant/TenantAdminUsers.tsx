@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, XCircle, Clock, Shield, Mail } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Shield, Mail, Send } from 'lucide-react';
+import { toast } from 'sonner';
 
 type UserRole = { id: string; user_id: string; role: string; approved: boolean; email: string | null };
-type RoleRequest = { id: string; email: string; tenant_id: string; status: string; created_at: string };
+type RoleRequest = { id: string; email: string; tenant_id: string; status: string; created_at: string | null };
 
 const TenantAdminUsers = ({ tenantId }: { tenantId: string }) => {
   const qc = useQueryClient();
@@ -13,7 +14,7 @@ const TenantAdminUsers = ({ tenantId }: { tenantId: string }) => {
     queryFn: async () => {
       const [rolesResult, requestsResult] = await Promise.all([
         supabase.from('user_roles').select('*').eq('tenant_id', tenantId).order('approved', { ascending: true }),
-        (supabase.from('role_requests' as any) as any)
+        supabase.from('role_requests')
           .select('id,email,tenant_id,status,created_at')
           .eq('tenant_id', tenantId)
           .order('created_at', { ascending: false }),
@@ -45,11 +46,25 @@ const TenantAdminUsers = ({ tenantId }: { tenantId: string }) => {
 
   const updateRequest = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: 'approved' | 'rejected' }) => {
-      const { error } = await (supabase.from('role_requests' as any) as any)
+      const { error } = await supabase.from('role_requests')
         .update({ status }).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users', tenantId] }),
+  });
+
+  const sendInvite = useMutation({
+    mutationFn: async (requestId: string) => {
+      const { data, error } = await supabase.functions.invoke('invite-admin-request', { body: { requestId } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.detail || data.error);
+      return data as { email: string };
+    },
+    onSuccess: (result) => {
+      toast.success(`Convite enviado para ${result.email}`);
+      qc.invalidateQueries({ queryKey: ['admin-users', tenantId] });
+    },
+    onError: (error: Error) => toast.error(error.message || 'Não foi possível enviar o convite.'),
   });
 
   if (isLoading) return <div className="flex justify-center py-12"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
@@ -61,6 +76,8 @@ const TenantAdminUsers = ({ tenantId }: { tenantId: string }) => {
   const approvedRoles = roles.filter(r => r.approved);
   const pendingRequests = requests.filter(r => r.status === 'pending');
   const approvedRequests = requests.filter(r => r.status === 'approved');
+  const invitedRequests = requests.filter(r => r.status === 'invited');
+  const invitingRequests = requests.filter(r => r.status === 'inviting');
 
   return (
     <div className="space-y-6">
@@ -76,7 +93,7 @@ const TenantAdminUsers = ({ tenantId }: { tenantId: string }) => {
           <div key={request.id} className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-foreground">{request.email}</p>
-              <p className="text-xs text-muted-foreground">Pedido recebido em {new Date(request.created_at).toLocaleString('pt-BR')}</p>
+              <p className="text-xs text-muted-foreground">Pedido recebido em {request.created_at ? new Date(request.created_at).toLocaleString('pt-BR') : 'data não informada'}</p>
               <p className="mt-1 text-[11px] text-muted-foreground">A aprovação registra o pedido; o acesso exige uma conta vinculada ao mesmo e-mail.</p>
             </div>
             <div className="flex shrink-0 gap-2">
@@ -89,10 +106,15 @@ const TenantAdminUsers = ({ tenantId }: { tenantId: string }) => {
             </div>
           </div>
         ))}
-        {approvedRequests.length > 0 && (
+        {(approvedRequests.length > 0 || invitedRequests.length > 0 || invitingRequests.length > 0) && (
           <div className="rounded-lg border border-border bg-card p-4">
-            <h4 className="mb-2 text-sm font-medium text-foreground">Pedidos aprovados ({approvedRequests.length})</h4>
-            {approvedRequests.map(request => <p key={request.id} className="text-sm text-muted-foreground">{request.email}</p>)}
+            <h4 className="mb-2 text-sm font-medium text-foreground">Pedidos aprovados e convites ({approvedRequests.length + invitedRequests.length + invitingRequests.length})</h4>
+            {[...approvedRequests, ...invitingRequests, ...invitedRequests].map(request => (
+              <div key={request.id} className="flex items-center justify-between gap-3 border-t border-border py-2 first:border-0">
+                <div className="min-w-0"><p className="truncate text-sm text-foreground">{request.email}</p><p className="text-xs text-muted-foreground">{request.status === 'invited' ? 'Convite enviado' : request.status === 'inviting' ? 'Enviando convite…' : 'Aprovado · aguardando envio do convite'}</p></div>
+                {request.status === 'approved' && <button onClick={() => { if (window.confirm(`Enviar convite administrativo para ${request.email} na loja?`)) sendInvite.mutate(request.id); }} disabled={sendInvite.isPending} className="flex shrink-0 items-center gap-1 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/25 disabled:opacity-50"><Send className="h-3.5 w-3.5" /> Enviar convite</button>}
+              </div>
+            ))}
           </div>
         )}
       </section>
