@@ -43,7 +43,15 @@ type PricedItem = ParsedSupplierItem & {
   sources: MarketEvidence[];
   pricing: ReturnType<typeof calculatePricing> | null;
 };
-type HistoryRow = { id: string; input_name: string | null; status: string; minimum_profit: number; totals: any; created_at: string };
+type HistoryRow = { id: string; input_name: string | null; source_text?: string; status: string; minimum_profit: number; totals: any; created_at: string };
+type HistoryItemRow = {
+  id: string; product_name: string; normalized_name: string; supplier_cost: number | null; cost_warning: string | null;
+  occurrences: number; market_min: number | null; market_median: number | null; market_max: number | null;
+  evidence_count: number; evidence_indicative_count: number; semi_new_count: number; market_condition: PricedItem['marketCondition'];
+  evidence_found_count: number; evidence_rejected_count: number; quality_status: MarketQualityStatus; quality_note: string; demand_note: string;
+  minimum_price: number | null; recommended_market_price: number | null; suggested_price: number | null; fixed_expenses: number; percentage_expenses: number;
+  net_profit: number | null; margin_percent: number | null; market_net_profit: number | null; market_margin_percent: number | null; decision: PricerDecision;
+};
 
 const DEFAULT_EXPENSES: PricerExpense[] = [
   { label: 'Taxa sobre a venda', amountType: 'percentage', amount: 4.99, enabled: true },
@@ -84,6 +92,8 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [minimumProfit, setMinimumProfit] = useState('100');
   const [results, setResults] = useState<PricedItem[]>([]);
+  const [loadedHistory, setLoadedHistory] = useState<HistoryRow | null>(null);
+  const [loadingHistoryId, setLoadingHistoryId] = useState<string | null>(null);
   const [researching, setResearching] = useState(false);
   const [savingExpense, setSavingExpense] = useState(false);
   const [expenseForm, setExpenseForm] = useState({ label: '', amountType: 'percentage' as 'percentage' | 'fixed', amount: '', productId: '' });
@@ -111,11 +121,61 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
     queryKey: ['market-pricer-history', tenantId],
     enabled: !!tenantId,
     queryFn: async () => {
-      const { data, error } = await supabase.from('market_pricer_analyses' as any).select('id,input_name,status,minimum_profit,totals,created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(50);
+      const { data, error } = await supabase.from('market_pricer_analyses' as any).select('id,input_name,source_text,status,minimum_profit,totals,created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(50);
       if (error) throw error;
       return (data || []) as unknown as HistoryRow[];
     },
   });
+  const openHistory = async (history: HistoryRow) => {
+    setLoadingHistoryId(history.id);
+    try {
+      const [{ data: itemRows, error: itemError }, { data: sourceRows, error: sourceError }] = await Promise.all([
+        supabase.from('market_pricer_items' as any).select('*').eq('analysis_id', history.id).eq('tenant_id', tenantId).order('occurrences', { ascending: false }).order('product_name').limit(200),
+        supabase.from('market_pricer_sources' as any).select('*').eq('tenant_id', tenantId).limit(5000),
+      ]);
+      if (itemError) throw itemError;
+      if (sourceError) throw sourceError;
+      const sourcesByItem = new Map<string, MarketEvidence[]>();
+      ((sourceRows || []) as any[]).forEach(source => {
+        const current = sourcesByItem.get(source.analysis_item_id) || [];
+        current.push({
+          source: String(source.source || ''), title: String(source.title || ''), price: source.price == null ? null : Number(source.price),
+          url: source.url || null, condition: String(source.condition || ''), collected_at: String(source.collected_at || history.created_at),
+          status: source.status === 'rejected' ? 'rejected' : source.status === 'indicative' ? 'indicative' : 'comparable',
+          acceptance_reason: source.acceptance_reason || null, rejection_reason: source.rejection_reason || null,
+        });
+        sourcesByItem.set(source.analysis_item_id, current);
+      });
+      const historicalResults = ((itemRows || []) as unknown as HistoryItemRow[]).map(item => ({
+        key: item.normalized_name || normalizeProductName(item.product_name), name: item.product_name,
+        supplierCost: item.supplier_cost == null ? null : Number(item.supplier_cost), costWarning: item.cost_warning || null,
+        occurrences: Number(item.occurrences || 1), sourceLines: [], productId: null,
+        marketMin: item.market_min == null ? null : Number(item.market_min), marketMedian: item.market_median == null ? null : Number(item.market_median), marketMax: item.market_max == null ? null : Number(item.market_max),
+        evidenceCount: Number(item.evidence_count || 0), indicativeCount: Number(item.evidence_indicative_count || 0), semiNewCount: Number(item.semi_new_count || 0), marketCondition: item.market_condition || 'none',
+        foundCount: Number(item.evidence_found_count || 0), rejectedCount: Number(item.evidence_rejected_count || 0), qualityStatus: item.quality_status || 'insufficient_evidence',
+        qualityNote: item.quality_note || 'Análise histórica sem classificação detalhada de qualidade.', demandNote: item.demand_note || 'Demanda estimada; não há volume público confirmado.',
+        sources: sourcesByItem.get(item.id) || [],
+        pricing: item.supplier_cost == null ? null : {
+          fixedExpenses: Number(item.fixed_expenses || 0), percentageExpenses: Number(item.percentage_expenses || 0),
+          minimumPrice: Number(item.minimum_price ?? item.suggested_price ?? 0), marketRecommendedPrice: item.recommended_market_price == null ? null : Number(item.recommended_market_price),
+          suggestedPrice: Number(item.suggested_price ?? item.minimum_price ?? 0), netProfit: Number(item.net_profit || 0), marginPercent: Number(item.margin_percent || 0),
+          marketNetProfit: item.market_net_profit == null ? null : Number(item.market_net_profit), marketMarginPercent: item.market_margin_percent == null ? null : Number(item.market_margin_percent),
+          decision: item.decision || 'inconclusivo',
+        },
+      }));
+      setResults(historicalResults);
+      setLoadedHistory(history);
+      setInputName(history.input_name || 'Lista de fornecedores');
+      setInputText(history.source_text || '');
+      setMinimumProfit(String(history.minimum_profit ?? 0));
+      setSubTab('analysis');
+      toast.success(`${historicalResults.length} produtos recuperados do histórico.`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Não foi possível abrir esta análise histórica.');
+    } finally {
+      setLoadingHistoryId(null);
+    }
+  };
 
   const expenses = useMemo(() => (expensesQuery.data || []).map(expense => ({
     ...expense,
@@ -209,6 +269,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
     if (selectedItems.some(item => item.costWarning)) return toast.error('Há custo suspeito abaixo de R$ 10. Confirme os separadores de milhar antes de pesquisar.');
     setResearching(true);
     setResults([]);
+    setLoadedHistory(null);
     try {
       const { data, error } = await supabase.functions.invoke('market-price-research', { body: { tenantId, items: selectedItems.map(item => ({ name: item.name })) } });
       if (error || data?.error) throw new Error(data?.error || error?.message || 'A pesquisa de mercado falhou.');
@@ -464,6 +525,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
         </TabsList>
 
         <TabsContent value="analysis" className="mt-4 space-y-4">
+          {loadedHistory && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground"><span><strong className="text-foreground">Visualizando histórico:</strong> {loadedHistory.input_name || 'Lista de fornecedores'} · {dateBR(loadedHistory.created_at)}</span><Button size="sm" variant="ghost" onClick={() => { setLoadedHistory(null); setResults([]); setInputText(''); setInputName(''); }}>Voltar para nova análise</Button></div>}
           <Card>
             <CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><FileText className="h-4 w-4 text-primary" /> 1. Lista de fornecedores</CardTitle></CardHeader>
             <CardContent className="space-y-3">
@@ -541,7 +603,10 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
           <Card><CardHeader className="pb-3"><CardTitle className="flex items-center gap-2 text-base"><Calculator className="h-4 w-4 text-primary" /> Gastos usados pelo Precificador</CardTitle></CardHeader><CardContent className="space-y-3"><p className="text-xs text-muted-foreground">Esses gastos entram no cálculo das próximas análises. Você pode cadastrar nomes diferentes por empresa, ativar ou desativar cada um e criar exceções por produto.</p><div className="grid gap-3 sm:grid-cols-[1fr_150px_130px_1fr_auto]"><Input value={expenseForm.label} onChange={event => setExpenseForm({ ...expenseForm, label: event.target.value })} placeholder="Ex.: Motoboy" /><select value={expenseForm.amountType} onChange={event => setExpenseForm({ ...expenseForm, amountType: event.target.value as 'percentage' | 'fixed' })} className="h-10 rounded-md border border-input bg-background px-3 text-sm"><option value="percentage">Percentual (%)</option><option value="fixed">Valor fixo (R$)</option></select><Input value={expenseForm.amount} onChange={event => setExpenseForm({ ...expenseForm, amount: event.target.value })} placeholder={expenseForm.amountType === 'percentage' ? '4,99' : '50,00'} inputMode="decimal" /><select value={expenseForm.productId} onChange={event => setExpenseForm({ ...expenseForm, productId: event.target.value })} className="h-10 rounded-md border border-input bg-background px-3 text-sm"><option value="">Gasto geral</option>{(catalogQuery.data || []).map(product => <option key={product.id} value={product.id}>Só: {product.name}</option>)}</select><Button onClick={addExpense} disabled={savingExpense}><Plus className="mr-1 h-4 w-4" /> Adicionar</Button></div><div className="space-y-2">{(expensesQuery.data || []).map(expense => <div key={expense.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3"><button type="button" onClick={() => toggleExpense(expense)} className={`h-5 w-5 rounded border ${expense.enabled ? 'border-primary bg-primary' : 'border-muted-foreground'}`} aria-label={expense.enabled ? 'Desativar gasto' : 'Ativar gasto'}>{expense.enabled && <CheckCircle2 className="h-4 w-4 text-primary-foreground" />}</button><div className="min-w-0 flex-1"><p className={`text-sm font-medium ${expense.enabled ? 'text-foreground' : 'text-muted-foreground line-through'}`}>{expense.label}</p><p className="text-[11px] text-muted-foreground">{expense.amount_type === 'percentage' ? `${Number(expense.amount).toFixed(2).replace('.', ',')}% sobre o preço` : `${money(Number(expense.amount))} por item/operação`}{expense.product_id ? ' · exceção de produto' : ' · geral'}</p></div><button type="button" onClick={() => removeExpense(expense)} className="rounded p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label="Remover gasto"><Trash2 className="h-4 w-4" /></button></div>)}</div></CardContent></Card>
         </TabsContent>
 
-        <TabsContent value="history" className="mt-4 space-y-3">{historyQuery.isLoading ? <p className="py-8 text-center text-sm text-muted-foreground">Carregando histórico...</p> : !historyQuery.data?.length ? <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">Nenhuma análise salva ainda.</CardContent></Card> : historyQuery.data.map(history => <Card key={history.id}><CardContent className="flex flex-wrap items-center gap-4 p-4"><History className="h-5 w-5 text-primary" /><div className="min-w-0 flex-1"><p className="font-medium text-foreground">{history.input_name || 'Lista de fornecedores'}</p><p className="text-xs text-muted-foreground">{dateBR(history.created_at)} · lucro mínimo {money(history.minimum_profit)}</p></div><Badge variant={history.status === 'completed' ? 'default' : 'secondary'}>{history.status === 'completed' ? 'Concluída' : 'Parcial'}</Badge><span className="text-sm font-semibold">{money(history.totals?.market_profit ?? history.totals?.profit)} de lucro no mercado</span></CardContent></Card>)}</TabsContent>
+        <TabsContent value="history" className="mt-4 space-y-3">
+          <Card className="border-primary/20 bg-primary/5"><CardContent className="p-4 text-xs text-muted-foreground">Abra uma análise para visualizar todos os produtos, copiar o resultado ou exportar CSV, TXT e PDF. Os dados exibidos são os mesmos salvos no momento da pesquisa.</CardContent></Card>
+          {historyQuery.isLoading ? <p className="py-8 text-center text-sm text-muted-foreground">Carregando histórico...</p> : !historyQuery.data?.length ? <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">Nenhuma análise salva ainda.</CardContent></Card> : historyQuery.data.map(history => <Card key={history.id}><CardContent className="flex flex-wrap items-center gap-4 p-4"><History className="h-5 w-5 text-primary" /><div className="min-w-0 flex-1"><p className="font-medium text-foreground">{history.input_name || 'Lista de fornecedores'}</p><p className="text-xs text-muted-foreground">{dateBR(history.created_at)} · {Number(history.totals?.count || 0)} produtos · lucro mínimo {money(history.minimum_profit)}</p></div><Badge variant={history.status === 'completed' ? 'default' : 'secondary'}>{history.status === 'completed' ? 'Concluída' : 'Parcial'}</Badge><span className="text-sm font-semibold">{money(history.totals?.market_profit ?? history.totals?.profit)} de lucro no mercado</span><Button size="sm" onClick={() => void openHistory(history)} disabled={loadingHistoryId === history.id}>{loadingHistoryId === history.id ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Abrindo...</> : <><Search className="mr-2 h-4 w-4" /> Abrir análise</>}</Button></CardContent></Card>)}
+        </TabsContent>
       </Tabs>
     </div>
   );
