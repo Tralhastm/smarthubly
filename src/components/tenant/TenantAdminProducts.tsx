@@ -1335,7 +1335,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       try {
         const query = (p.name || '').trim();
         if (!query) { failed++; return; }
-        const { data, error } = await unifiedInvoke("ai-media-unified", "search", { query, tenantId, download: true, curate: true });
+        const { data, error } = await unifiedInvoke("web-image-search", "", { query, tenantId });
         const imgUrl = data?.imageUrl;
         if (error || !imgUrl) {
           failed++;

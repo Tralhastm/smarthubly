@@ -19,16 +19,25 @@ function admin() {
   );
 }
 
+function decodeSearchUrl(raw: string): string {
+  return raw
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/\\u003d/g, "=")
+    .replace(/\\u0026/g, "&")
+    .replace(/\\\//g, "/");
+}
+
 // Extrai URLs reais de imagens do HTML do Bing Images.
 // Bing embute as URLs originais como `murl&quot;:&quot;https://...&quot;` em data-m JSON.
 function extractImageUrls(html: string, max: number): string[] {
   const out = new Set<string>();
 
-  // Estratégia 1 (Bing): murl="https://..."
-  const reMurl = /murl&quot;:&quot;([^&]+?)&quot;/g;
+  // Estratégia 1 (Bing): aceita HTML escapado e JSON normal.
+  const reMurl = /murl(?:&quot;|\\?"):\s*(?:&quot;|\\?")([^&quot;\\"]+?)(?:&quot;|\\?")/gi;
   let m: RegExpExecArray | null;
   while ((m = reMurl.exec(html)) !== null) {
-    const url = m[1];
+    const url = decodeSearchUrl(m[1]);
     if (isLikelyImage(url)) out.add(url);
     if (out.size >= max) return [...out];
   }
@@ -36,7 +45,7 @@ function extractImageUrls(html: string, max: number): string[] {
   // Estratégia 2 (DuckDuckGo): "image":"https://..."
   const reImg = /"image":"(https?:\/\/[^"]+?)"/g;
   while ((m = reImg.exec(html)) !== null) {
-    const url = m[1].replace(/\\u003d/g, "=").replace(/\\u0026/g, "&").replace(/\\\//g, "/");
+    const url = decodeSearchUrl(m[1]);
     if (isLikelyImage(url)) out.add(url);
     if (out.size >= max) return [...out];
   }
@@ -98,7 +107,9 @@ async function fromBing(query: string, max: number): Promise<string[]> {
       },
     });
     if (!res.ok) { console.warn(`[search-images] Bing ${res.status} for "${query}"`); return []; }
-    return extractImageUrls(await res.text(), max);
+    const urls = extractImageUrls(await res.text(), max);
+    console.log(`[search-images] Bing returned ${urls.length} image URLs for "${query}"`);
+    return urls;
   } catch (e) {
     console.warn(`[search-images] Bing exception:`, (e as Error).message);
     return [];
@@ -205,17 +216,27 @@ async function fetchAndUpload(
   excludeHashes?: Set<string>,
 ): Promise<FetchedImage | null> {
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 15000);
-    const res = await fetch(imageUrl, {
-      headers: { "User-Agent": UA, "Referer": "https://www.google.com/" },
-      signal: ctrl.signal,
-    });
-    clearTimeout(t);
-    if (!res.ok) return null;
-    const ct = res.headers.get("content-type") || "image/jpeg";
-    if (!ct.startsWith("image/")) return null;
+    let res: Response | null = null;
+    for (const headers of [
+      { "User-Agent": UA, "Referer": "https://www.google.com/", "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8" },
+      { "User-Agent": UA, "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8" },
+    ]) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 15000);
+        res = await fetch(imageUrl, { headers, signal: ctrl.signal }).finally(() => clearTimeout(t));
+        if (res.ok) break;
+      } catch { /* tenta novamente sem Referer */ }
+    }
+    if (!res?.ok) return null;
+    const ct = res.headers.get("content-type") || "";
     const buf = new Uint8Array(await res.arrayBuffer());
+    const looksImage = ct.startsWith("image/") ||
+      (buf.length >= 12 && ((buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) ||
+        (buf[0] === 0xff && buf[1] === 0xd8) ||
+        (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) ||
+        (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46)));
+    if (!looksImage) return null;
     if (!keepAny && buf.length < 5000) return null;
     const dim = readImageSize(buf);
     const width = dim?.width || 0;
@@ -230,12 +251,12 @@ async function fetchAndUpload(
       return null;
     }
 
-    const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+    const ext = ct.includes("png") || (ct === "" && buf[0] === 0x89) ? "png" : ct.includes("webp") ? "webp" : "jpg";
     // nome determinístico pelo conteúdo: a mesma foto nunca vira dois arquivos
     const path = `${tenantId}/g-${hash}.${ext}`;
     const { error } = await supabase.storage
       .from("product-images")
-      .upload(path, buf, { contentType: ct, upsert: true });
+      .upload(path, buf, { contentType: ct.startsWith("image/") ? ct.split(";")[0] : `image/${ext}`, upsert: true });
     if (error) { console.warn("[google-images] upload error", error); return null; }
     const { data } = supabase.storage.from("product-images").getPublicUrl(path);
     return { url: `${data.publicUrl}?src=google`, bytes: buf, width, height, size: buf.length, hash };
