@@ -80,6 +80,65 @@ async function persistImage(client: any, tenantId: string, sourceUrl: string) {
     return null;
   }
 }
+async function imageAsBase64(url: string) {
+  try {
+    const response = await fetch(url, { headers: { "User-Agent": UA } });
+    if (!response.ok) return null;
+    const mime = response.headers.get("content-type") || "image/jpeg";
+    if (!mime.startsWith("image/")) return null;
+    let bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length > 850_000) bytes = bytes.slice(0, 850_000);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return { mime, b64: btoa(binary) };
+  } catch { return null; }
+}
+async function curateVisually(productName: string, candidates: Array<{ url: string; source: string; reason: string }>) {
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!apiKey || candidates.length <= 1) return candidates;
+  try {
+    const content: any[] = [{ type: "text", text: `Você é o curador visual de um catálogo brasileiro. Analise as opções do produto \"${productName}\". Escolha no máximo 8 imagens, sem repetir a mesma função visual. Deve haver no máximo uma: capa/frente, traseira, lateral, câmera/detalhe, tela/uso, acessórios/caixa, conjunto de cores e ficha técnica. Duas imagens com o mesmo enquadramento ou a mesma composição são redundantes: mantenha somente a mais nítida. Rejeite imagens de outro modelo. Fichas e artes com texto em inglês ou espanhol devem ser rejeitadas; aceite fotos do aparelho sem texto independentemente do idioma. Responda SOMENTE JSON válido neste formato: [{\"index\":1,\"keep\":true,\"role\":\"cover\",\"language\":\"none\"}]. Papéis permitidos: cover, rear, side, detail, screen, accessories, colors, technical_card, other.` }];
+    const usable: number[] = [];
+    const images = await Promise.all(candidates.map(candidate => imageAsBase64(candidate.url)));
+    images.forEach((image, index) => {
+      if (!image) return;
+      usable.push(index);
+      content.push({ type: "text", text: `OPÇÃO ${index + 1}:` });
+      content.push({ type: "image_url", image_url: { url: `data:${image.mime};base64,${image.b64}` } });
+    });
+    if (usable.length <= 1) return candidates;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45_000);
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content }] }),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
+    if (!response.ok) return candidates;
+    const data = await response.json();
+    const text = String(data?.choices?.[0]?.message?.content || "");
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return candidates;
+    const decisions = JSON.parse(match[0]) as Array<{ index?: number; keep?: boolean; role?: string; language?: string }>;
+    const usedRoles = new Set<string>();
+    const selected: Array<{ url: string; source: string; reason: string }> = [];
+    for (const decision of decisions) {
+      const index = Number(decision.index || 0) - 1;
+      if (!decision.keep || index < 0 || index >= candidates.length || selected.length >= 8) continue;
+      const role = String(decision.role || "other");
+      const language = String(decision.language || "none").toLowerCase();
+      if (usedRoles.has(role) && role !== "other") continue;
+      if (role === "technical_card" && language !== "pt-br" && language !== "none" && language !== "portuguese") continue;
+      usedRoles.add(role);
+      selected.push(candidates[index]);
+    }
+    return selected.length > 0 ? selected : candidates;
+  } catch (error) {
+    console.warn("[carousel-vision] fallback heurístico:", error instanceof Error ? error.message : String(error));
+    return candidates;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
@@ -89,6 +148,17 @@ Deno.serve(async (req) => {
     const productName = String(body.productName || "").trim();
     const existingUrls = Array.isArray(body.existingUrls) ? body.existingUrls.filter((url: unknown) => typeof url === "string") : [];
     if (!tenantId || !productName) return new Response(JSON.stringify({ error: "tenant_and_product_required" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
+    const client = db();
+    if (body.action === "cleanup") {
+      const { data: files, error: listError } = await client.storage.from("product-images").list(tenantId, { limit: 1000 });
+      if (listError) throw listError;
+      const paths = (files || []).filter((file: { name?: string }) => file.name?.startsWith("carousel-")).map((file: { name: string }) => `${tenantId}/${file.name}`);
+      if (paths.length) {
+        const { error: removeError } = await client.storage.from("product-images").remove(paths);
+        if (removeError) throw removeError;
+      }
+      return new Response(JSON.stringify({ cleaned: paths.length, tenantId }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
+    }
 
     const queries = [
       `${productName} celular Brasil português`,
@@ -102,7 +172,6 @@ Deno.serve(async (req) => {
       .slice(0, 36);
     const existing = new Set(existingUrls.map((url: string) => url.split("?")[0]));
     const candidates: Array<{ url: string; source: string; reason: string }> = [];
-    const client = db();
     const savedResults = await Promise.all(sources.map(async (source) => ({ source, saved: await persistImage(client, tenantId, source) })));
     const hostCounts = new Map<string, number>();
     const sourceSignatures = new Set<string>();
@@ -110,13 +179,14 @@ Deno.serve(async (req) => {
       if (!saved || existing.has(saved.split("?")[0]) || candidates.some(candidate => candidate.url.split("?")[0] === saved.split("?")[0])) continue;
       const host = sourceHost(source);
       const signature = source.toLowerCase().replace(/[?#].*$/, '').replace(/\b(?:thumb|small|medium|large|zoom|1x|2x)\b/g, '').replace(/[^a-z0-9]+/g, '');
-      if ((hostCounts.get(host) || 0) >= 3 || sourceSignatures.has(signature)) continue;
+      if ((hostCounts.get(host) || 0) >= 1 || sourceSignatures.has(signature)) continue;
       hostCounts.set(host, (hostCounts.get(host) || 0) + 1);
       sourceSignatures.add(signature);
       candidates.push({ url: saved, source, reason: "Imagem encontrada para o modelo pesquisado e aprovada no filtro de formato, duplicidade e legibilidade." });
-      if (candidates.length >= 8) break;
+      if (candidates.length >= 6) break;
     }
-    return new Response(JSON.stringify({ productName, existingUrls, candidates, searched: sources.length, curation: "automatic" }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
+    const curated = await curateVisually(productName, candidates);
+    return new Response(JSON.stringify({ productName, existingUrls, candidates: curated, searched: sources.length, curation: curated.length < candidates.length ? "visual" : "automatic" }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
   }
