@@ -1454,26 +1454,11 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           tenantId,
           productName: product.name,
           category: product.category,
+          description: product.description || '',
           existingUrls,
         });
         if (error) throw error;
-        let candidates = Array.isArray(data?.candidates) ? data.candidates as CarouselCandidate[] : [];
-        if (candidates.length < 2) {
-          const generated = await unifiedInvoke('ai-media-unified', 'generate', {
-            tenantId,
-            productName: product.name,
-            category: product.category || 'celular',
-            useReference: true,
-          }, { timeoutMs: 150000, retries: 0 });
-          if (!generated.error && generated.data?.imageUrl) {
-            candidates = [...candidates, {
-              url: generated.data.imageUrl,
-              source: 'IA de geração de imagens',
-              kind: 'generated',
-              reason: 'Imagem adicional gerada automaticamente porque havia menos de duas imagens utilizáveis.',
-            }];
-          }
-        }
+        const candidates = Array.isArray(data?.candidates) ? data.candidates as CarouselCandidate[] : [];
         const initial = [...existingUrls, ...candidates.map(candidate => candidate.url)]
           .filter((url, index, list) => list.indexOf(url) === index)
           .slice(0, 8);

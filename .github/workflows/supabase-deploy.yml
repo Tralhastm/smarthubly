@@ -79,3 +79,8 @@ jobs:
         run: supabase functions deploy fiscal-unified --project-ref qbcplbcdxoyqpmcehnvu --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy carousel-curator
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase functions deploy carousel-curator --project-ref qbcplbcdxoyqpmcehnvu --yes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}

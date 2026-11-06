@@ -28,6 +28,37 @@ function sourceScore(value: string) {
 function sourceHost(value: string) {
   try { return new URL(value).hostname.toLowerCase(); } catch { return ''; }
 }
+function escapeXml(value: unknown) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+function technicalFacts(description: string) {
+  return description.replace(/\r\n?/g, '\n').split('\n')
+    .map(line => line.replace(/^\s*[-•*]\s*/, '').trim())
+    .filter(line => line.length >= 3 && line.length <= 90)
+    .filter(line => /\b(ram|armazenamento|mem[oó]ria|c[aâ]mera|bateria|tela|display|processador|chip|android|5g|polegadas|mah|mp|gb|tb|hz)\b/i.test(line))
+    .slice(0, 6);
+}
+async function createTechnicalBanner(client: any, tenantId: string, productName: string, description: string) {
+  const facts = technicalFacts(description);
+  const lines = facts.length ? facts : ['Consulte a descrição do produto para ver todos os detalhes técnicos.'];
+  const lineMarkup = lines.map((line, index) => `<text x="70" y="${235 + index * 43}" class="fact">${escapeXml(line)}</text>`).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#071b35"/><stop offset="1" stop-color="#1261a0"/></linearGradient></defs>
+<rect width="1200" height="800" rx="36" fill="url(#bg)"/><circle cx="1050" cy="100" r="260" fill="#36bdf5" opacity=".14"/><circle cx="1120" cy="700" r="300" fill="#7dd3fc" opacity=".1"/>
+<rect x="58" y="58" width="1084" height="684" rx="28" fill="#ffffff" opacity=".08" stroke="#ffffff" stroke-opacity=".22"/>
+<text x="70" y="130" fill="#8bdcff" font-family="Arial,sans-serif" font-size="26" font-weight="700" letter-spacing="3">ESPECIFICAÇÕES TÉCNICAS</text>
+<text x="70" y="190" fill="#ffffff" font-family="Arial,sans-serif" font-size="42" font-weight="700">${escapeXml(productName).slice(0, 48)}</text>
+${lineMarkup}<text x="70" y="690" fill="#c7eaff" font-family="Arial,sans-serif" font-size="20">Informações do cadastro do produto · Smarthubly</text></svg>`;
+  const bytes = new TextEncoder().encode(svg);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const hash = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+  const path = `${tenantId}/carousel-banner-${hash}.svg`;
+  const { error } = await client.storage.from('product-images').upload(path, bytes, { contentType: 'image/svg+xml', upsert: true });
+  if (error) return null;
+  return `${client.storage.from('product-images').getPublicUrl(path).data.publicUrl}?src=carousel-generated-banner`;
+}
 function extractBing(html: string, max: number) {
   const out = new Set<string>();
   for (const re of [
@@ -167,11 +198,11 @@ async function askWorkerVision(client: any, productName: string, content: any[])
   }
   return null;
 }
-async function curateVisually(productName: string, candidates: Array<{ url: string; source: string; kind?: string; reason: string }>) {
+async function curateVisually(productName: string, description: string, candidates: Array<{ url: string; source: string; kind?: string; reason: string }>) {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (candidates.length <= 1) return candidates;
+  if (candidates.length <= 1) return [];
   try {
-    const content: any[] = [{ type: "text", text: `Você é o curador visual de um catálogo brasileiro. Analise as opções do produto \"${productName}\". Escolha no máximo 6 imagens. NÃO mantenha duas imagens que tenham o mesmo enquadramento ou composição, mesmo que venham de domínios diferentes. Se duas mostram o aparelho de frente e traseira em um render parecido, elas pertencem ao mesmo grupo e apenas a mais nítida deve ficar. Classifique cada opção em um grupo visual único: cover, rear, side, detail, screen, accessories, colors, technical_card, front_rear_render ou other. Deve haver no máximo uma opção por grupo. É OBRIGATÓRIO manter uma technical_card quando houver uma opção marcada como ESPECIFICAÇÃO. Priorize fichas em português com RAM, armazenamento, câmera, bateria, tela e processador. Rejeite modelo errado e fichas/artes em inglês ou espanhol. Aceite fotos do aparelho sem texto. Responda SOMENTE JSON válido: [{\"index\":1,\"keep\":true,\"group\":\"cover\",\"language\":\"none\"}].` }];
+    const content: any[] = [{ type: "text", text: `Você é um curador visual extremamente rigoroso. Produto EXATO: \"${productName}\". Contexto técnico cadastrado: ${description.slice(0, 3000)}. Analise as opções e escolha no máximo 6 imagens. Uma imagem só pode ser aprovada se mostrar exatamente a marca, linha, modelo e capacidade do produto solicitado; modelo parecido, geração anterior/posterior, versão Pro/Ultra/Plus diferente ou imagem genérica deve ser REJEITADO. Não deduza identidade apenas pela aparência. Se não for possível confirmar o modelo, use keep:false. NÃO mantenha imagens repetidas por enquadramento ou composição, mesmo vindas de domínios diferentes. Classifique cada aprovada em um grupo único: cover, rear, side, detail, screen, accessories, colors, technical_card ou other. Priorize fotos reais do aparelho e fichas em português. Rejeite artes em inglês/espanhol, logos, anúncios de outro produto e qualquer imagem sem correspondência verificável. Responda SOMENTE JSON válido: [{\"index\":1,\"keep\":true,\"group\":\"cover\",\"language\":\"none\",\"exact_match\":true}].` }];
     const usable: number[] = [];
     const images = await Promise.all(candidates.map(candidate => imageAsBase64(candidate.url)));
     images.forEach((image, index) => {
@@ -180,7 +211,10 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
       content.push({ type: "text", text: `OPÇÃO ${index + 1}${candidates[index].kind === "technical" ? " — ESPECIFICAÇÃO TÉCNICA" : ""}:` });
       content.push({ type: "image_url", image_url: { url: `data:${image.mime};base64,${image.b64}` } });
     });
-    if (usable.length <= 1) return candidates;
+    // Sem pelo menos duas imagens analisáveis não há confirmação visual
+    // suficiente para aprovar um modelo parecido. O chamador criará o banner
+    // técnico determinístico em vez de arriscar uma foto errada.
+    if (usable.length <= 1) return [];
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45_000);
     let text = await askWorkerVision(db(), productName, content) || "";
@@ -197,15 +231,15 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
     }
     clearTimeout(timeout);
     if (!text) text = await askGoogleVision(db(), content) || "";
-    if (!text) return candidates;
+    if (!text) return [];
     const match = text.match(/\[[\s\S]*\]/);
-    if (!match) return candidates;
-    const decisions = JSON.parse(match[0]) as Array<{ index?: number; keep?: boolean; role?: string; language?: string }>;
+    if (!match) return [];
+    const decisions = JSON.parse(match[0]) as Array<{ index?: number; keep?: boolean; role?: string; language?: string; exact_match?: boolean }>;
     const usedRoles = new Set<string>();
     const selected: Array<{ url: string; source: string; kind?: string; reason: string }> = [];
     for (const decision of decisions) {
       const index = Number(decision.index || 0) - 1;
-      if (!decision.keep || index < 0 || index >= candidates.length || selected.length >= 8) continue;
+      if (!decision.keep || decision.exact_match === false || index < 0 || index >= candidates.length || selected.length >= 8) continue;
       const role = String((decision as any).group || (decision as any).role || "other");
       const language = String(decision.language || "none").toLowerCase();
       if (usedRoles.has(role) && role !== "other") continue;
@@ -219,10 +253,10 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
       if (selected.length < 6) selected.push(technical);
       else if (replaceIndex >= 0) selected[replaceIndex] = technical;
     }
-    return selected.length > 0 ? selected : candidates;
+    return selected;
   } catch (error) {
     console.warn("[carousel-vision] fallback heurístico:", error instanceof Error ? error.message : String(error));
-    return candidates;
+    return [];
   }
 }
 
@@ -232,6 +266,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const tenantId = String(body.tenantId || "").trim();
     const productName = String(body.productName || "").trim();
+    const description = String(body.description || "").trim();
     const existingUrls = Array.isArray(body.existingUrls) ? body.existingUrls.filter((url: unknown) => typeof url === "string") : [];
     if (!tenantId || !productName) return new Response(JSON.stringify({ error: "tenant_and_product_required" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
     const client = db();
@@ -247,11 +282,11 @@ Deno.serve(async (req) => {
     }
 
     const queries = [
-      `${productName} celular Brasil português`,
-      `${productName} especificações técnicas português Brasil oficial`,
-      `${productName} ficha técnica RAM armazenamento câmera bateria tela processador português`,
-      `${productName} imagem especificações técnicas português Brasil`,
-      `${productName} Mercado Livre Brasil`,
+      `"${productName}" celular novo lacrado Brasil`,
+      `"${productName}" especificações técnicas ficha técnica português Brasil`,
+      `"${productName}" RAM armazenamento câmera bateria tela processador português`,
+      `"${productName}" imagem especificações técnicas português Brasil`,
+      `"${productName}" Mercado Livre Brasil novo`,
     ];
     const sourceGroups = await Promise.all(queries.map(searchImages));
     const sourceEntries = [...new Map(sourceGroups.flatMap((group, queryIndex) => group.map((source) => [normalizeSourceUrl(source), { source: normalizeSourceUrl(source), queryIndex }]))).values()];
@@ -275,7 +310,13 @@ Deno.serve(async (req) => {
       candidates.push({ url: saved, source, kind, reason: "Imagem encontrada para o modelo pesquisado e aprovada no filtro de formato, duplicidade e legibilidade." });
       if (candidates.length >= 12) break;
     }
-    const curated = await curateVisually(productName, candidates);
+    let curated = await curateVisually(productName, description, candidates);
+    // A arte informativa é deliberadamente determinística: usa somente os dados
+    // já cadastrados e não uma geração livre de imagem do aparelho.
+    if (!curated.some(candidate => candidate.kind === 'technical')) {
+      const banner = await createTechnicalBanner(client, tenantId, productName, description);
+      if (banner) curated = [...curated, { url: banner, source: 'Banner técnico gerado pelo cadastro', kind: 'technical', reason: 'Arte informativa em português criada com o nome e as especificações cadastradas.' }];
+    }
     return new Response(JSON.stringify({ productName, existingUrls, candidates: curated, searched: sources.length, curation: curated.length < candidates.length ? "visual" : "automatic" }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
