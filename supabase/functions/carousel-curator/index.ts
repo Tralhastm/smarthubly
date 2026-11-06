@@ -14,6 +14,20 @@ function decodeUrl(value: string) {
 function validUrl(value: string) {
   return /^https?:\/\//i.test(value) && value.length < 2000 && !/sprite|favicon|placeholder|1x1|pixel\.gif/i.test(value);
 }
+function sourceScore(value: string) {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    let score = 0;
+    if (host.endsWith('.com.br')) score += 5;
+    if (host.includes('mlstatic.com') || host.includes('mercadolivre.com.br')) score += 4;
+    if (host.includes('motorola.com.br') || host.includes('samsung.com') || host.includes('mi.com')) score += 3;
+    if (host.endsWith('.com.ar') || host.endsWith('.com.mx') || host.endsWith('.cl')) score -= 5;
+    return score;
+  } catch { return 0; }
+}
+function sourceHost(value: string) {
+  try { return new URL(value).hostname.toLowerCase(); } catch { return ''; }
+}
 function extractBing(html: string, max: number) {
   const out = new Set<string>();
   for (const re of [
@@ -77,18 +91,28 @@ Deno.serve(async (req) => {
     if (!tenantId || !productName) return new Response(JSON.stringify({ error: "tenant_and_product_required" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
 
     const queries = [
-      `${productName} celular`,
-      `${productName} especificações oficial`,
-      `${productName} Mercado Livre`,
+      `${productName} celular Brasil português`,
+      `${productName} especificações técnicas português Brasil oficial`,
+      `${productName} Mercado Livre Brasil`,
     ];
     const sourceGroups = await Promise.all(queries.map(searchImages));
-    const sources = [...new Set(sourceGroups.flat().map(normalizeSourceUrl))].filter(validUrl).slice(0, 36);
+    const sources = [...new Set(sourceGroups.flat().map(normalizeSourceUrl))]
+      .filter(validUrl)
+      .sort((a, b) => sourceScore(b) - sourceScore(a))
+      .slice(0, 36);
     const existing = new Set(existingUrls.map((url: string) => url.split("?")[0]));
     const candidates: Array<{ url: string; source: string; reason: string }> = [];
     const client = db();
     const savedResults = await Promise.all(sources.map(async (source) => ({ source, saved: await persistImage(client, tenantId, source) })));
+    const hostCounts = new Map<string, number>();
+    const sourceSignatures = new Set<string>();
     for (const { source, saved } of savedResults) {
       if (!saved || existing.has(saved.split("?")[0]) || candidates.some(candidate => candidate.url.split("?")[0] === saved.split("?")[0])) continue;
+      const host = sourceHost(source);
+      const signature = source.toLowerCase().replace(/[?#].*$/, '').replace(/\b(?:thumb|small|medium|large|zoom|1x|2x)\b/g, '').replace(/[^a-z0-9]+/g, '');
+      if ((hostCounts.get(host) || 0) >= 3 || sourceSignatures.has(signature)) continue;
+      hostCounts.set(host, (hostCounts.get(host) || 0) + 1);
+      sourceSignatures.add(signature);
       candidates.push({ url: saved, source, reason: "Imagem encontrada para o modelo pesquisado e aprovada no filtro de formato, duplicidade e legibilidade." });
       if (candidates.length >= 8) break;
     }
