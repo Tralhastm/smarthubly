@@ -93,11 +93,34 @@ async function imageAsBase64(url: string) {
     return { mime, b64: btoa(binary) };
   } catch { return null; }
 }
+async function askGoogleVision(client: any, content: any[]) {
+  const { data: keys } = await client.from("api_keys").select("id,api_key").eq("provider", "google_ai").eq("is_exhausted", false).order("last_used_at", { ascending: true, nullsFirst: true }).limit(5);
+  for (const key of keys || []) {
+    try {
+      const parts = content.map((item: any) => item.type === "text"
+        ? { text: item.text }
+        : { inline_data: { mime_type: String(item.image_url?.url || "").match(/^data:([^;]+);/)?.[1] || "image/jpeg", data: String(item.image_url?.url || "").split(",")[1] || "" } });
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key.api_key}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ role: "user", parts }] }),
+      });
+      if (response.status === 429 || response.status === 403) {
+        await client.from("api_keys").update({ is_exhausted: true }).eq("id", key.id);
+        continue;
+      }
+      if (!response.ok) continue;
+      await client.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", key.id);
+      const data = await response.json();
+      return String(data?.candidates?.[0]?.content?.parts?.[0]?.text || "");
+    } catch { continue; }
+  }
+  return null;
+}
 async function curateVisually(productName: string, candidates: Array<{ url: string; source: string; reason: string }>) {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey || candidates.length <= 1) return candidates;
+  if (candidates.length <= 1) return candidates;
   try {
-    const content: any[] = [{ type: "text", text: `Você é o curador visual de um catálogo brasileiro. Analise as opções do produto \"${productName}\". Escolha no máximo 8 imagens, sem repetir a mesma função visual. Deve haver no máximo uma: capa/frente, traseira, lateral, câmera/detalhe, tela/uso, acessórios/caixa, conjunto de cores e ficha técnica. Duas imagens com o mesmo enquadramento ou a mesma composição são redundantes: mantenha somente a mais nítida. Rejeite imagens de outro modelo. Fichas e artes com texto em inglês ou espanhol devem ser rejeitadas; aceite fotos do aparelho sem texto independentemente do idioma. Responda SOMENTE JSON válido neste formato: [{\"index\":1,\"keep\":true,\"role\":\"cover\",\"language\":\"none\"}]. Papéis permitidos: cover, rear, side, detail, screen, accessories, colors, technical_card, other.` }];
+    const content: any[] = [{ type: "text", text: `Você é o curador visual de um catálogo brasileiro. Analise as opções do produto \"${productName}\". Escolha no máximo 6 imagens. NÃO mantenha duas imagens que tenham o mesmo enquadramento ou composição, mesmo que venham de domínios diferentes. Se duas mostram o aparelho de frente e traseira em um render parecido, elas pertencem ao mesmo grupo e apenas a mais nítida deve ficar. Classifique cada opção em um grupo visual único: cover, rear, side, detail, screen, accessories, colors, technical_card, front_rear_render ou other. Deve haver no máximo uma opção por grupo. Rejeite modelo errado e fichas/artes em inglês ou espanhol. Aceite fotos do aparelho sem texto. Responda SOMENTE JSON válido: [{\"index\":1,\"keep\":true,\"group\":\"cover\",\"language\":\"none\"}].` }];
     const usable: number[] = [];
     const images = await Promise.all(candidates.map(candidate => imageAsBase64(candidate.url)));
     images.forEach((image, index) => {
@@ -109,15 +132,21 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
     if (usable.length <= 1) return candidates;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45_000);
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content }] }),
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
-    if (!response.ok) return candidates;
-    const data = await response.json();
-    const text = String(data?.choices?.[0]?.message?.content || "");
+    let text = "";
+    if (apiKey) {
+      try {
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content }] }),
+          signal: controller.signal,
+        });
+        if (response.ok) { const data = await response.json(); text = String(data?.choices?.[0]?.message?.content || ""); }
+      } catch { /* fallback Google abaixo */ }
+      clearTimeout(timeout);
+    }
+    if (!text) text = await askGoogleVision(db(), content) || "";
+    if (!text) return candidates;
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) return candidates;
     const decisions = JSON.parse(match[0]) as Array<{ index?: number; keep?: boolean; role?: string; language?: string }>;
@@ -126,7 +155,7 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
     for (const decision of decisions) {
       const index = Number(decision.index || 0) - 1;
       if (!decision.keep || index < 0 || index >= candidates.length || selected.length >= 8) continue;
-      const role = String(decision.role || "other");
+      const role = String((decision as any).group || (decision as any).role || "other");
       const language = String(decision.language || "none").toLowerCase();
       if (usedRoles.has(role) && role !== "other") continue;
       if (role === "technical_card" && language !== "pt-br" && language !== "none" && language !== "portuguese") continue;
