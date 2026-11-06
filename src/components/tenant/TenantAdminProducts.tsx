@@ -1842,6 +1842,8 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
                     {draft.loading ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : draft.error ? <span className="text-[11px] text-destructive">{draft.error}</span> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
                   </div>
                   {!draft.loading && (
+                    <>
+                    {allImages.length === 0 && <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">Nenhuma imagem utilizável foi encontrada para este produto nesta rodada. Os outros produtos podem ser salvos normalmente.</p>}
                     <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
                       {allImages.map((item, index) => {
                         const active = draft.selected.includes(item.url);
@@ -1855,6 +1857,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
                         );
                       })}
                     </div>
+                    </>
                   )}
                 </section>
               );
@@ -1863,7 +1866,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               <p className="text-[11px] text-muted-foreground">A curadoria prioriza o nome/modelo pesquisado, remove duplicatas e limita a galeria a 10 mídias.</p>
               <div className="flex gap-2">
                 <button onClick={() => setShowCarouselPreview(false)} disabled={carouselRunning} className="rounded-lg bg-secondary text-foreground px-4 py-2 text-sm">Cancelar</button>
-                <button onClick={saveCarousels} disabled={carouselRunning || carouselDrafts.some(draft => draft.loading || !draft.selected.length)} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm disabled:opacity-50">
+                <button onClick={saveCarousels} disabled={carouselRunning || !carouselDrafts.some(draft => !draft.loading && draft.selected.length > 0)} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm disabled:opacity-50">
                   {carouselRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Salvar carrosséis
                 </button>
               </div>

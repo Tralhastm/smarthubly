@@ -17,8 +17,8 @@ function validUrl(value: string) {
 function extractBing(html: string, max: number) {
   const out = new Set<string>();
   for (const re of [
-    /murl(?:&quot;|\\?"):\s*(?:&quot;|\\?")([^&quot;\\"]+?)(?:&quot;|\\?")/gi,
-    /"murl"\s*:\s*"([^"]+)"/gi,
+    /(?:"|&quot;)?murl(?:"|&quot;)?\s*:\s*(?:"|&quot;)(https?:\/\/.*?)(?:"|&quot;)/gi,
+    /murl\\?"\s*:\s*\\?"(https?:\/\/.*?)(?:\\?"|&quot;)/gi,
   ]) {
     let match: RegExpExecArray | null;
     while ((match = re.exec(html)) && out.size < max) {
@@ -39,6 +39,11 @@ async function searchImages(query: string) {
     headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml", "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8" },
   });
   return response.ok ? extractBing(await response.text(), 18) : [];
+}
+function normalizeSourceUrl(value: string) {
+  const decoded = decodeUrl(value);
+  const embedded = decoded.match(/murl["']?\s*:\s*["'](https?:\/\/[^"']+)/i)?.[1];
+  return (embedded || decoded).replace(/["'\\]+$/g, "");
 }
 function isImage(bytes: Uint8Array) {
   return bytes.length >= 12 && ((bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) || (bytes[0] === 0xff && bytes[1] === 0xd8) || (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50));
@@ -71,16 +76,21 @@ Deno.serve(async (req) => {
     const existingUrls = Array.isArray(body.existingUrls) ? body.existingUrls.filter((url: unknown) => typeof url === "string") : [];
     if (!tenantId || !productName) return new Response(JSON.stringify({ error: "tenant_and_product_required" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
 
-    const query = `${productName} celular especificações oficial anúncio Mercado Livre`;
-    const sources = await searchImages(query);
+    const queries = [
+      `${productName} celular`,
+      `${productName} especificações oficial`,
+      `${productName} Mercado Livre`,
+    ];
+    const sourceGroups = await Promise.all(queries.map(searchImages));
+    const sources = [...new Set(sourceGroups.flat().map(normalizeSourceUrl))].filter(validUrl).slice(0, 36);
     const existing = new Set(existingUrls.map((url: string) => url.split("?")[0]));
     const candidates: Array<{ url: string; source: string; reason: string }> = [];
     const client = db();
-    for (const source of sources) {
-      if (candidates.length >= 8) break;
-      const saved = await persistImage(client, tenantId, source);
-      if (!saved || existing.has(saved.split("?")[0])) continue;
+    const savedResults = await Promise.all(sources.map(async (source) => ({ source, saved: await persistImage(client, tenantId, source) })));
+    for (const { source, saved } of savedResults) {
+      if (!saved || existing.has(saved.split("?")[0]) || candidates.some(candidate => candidate.url.split("?")[0] === saved.split("?")[0])) continue;
       candidates.push({ url: saved, source, reason: "Imagem encontrada para o modelo pesquisado e aprovada no filtro de formato, duplicidade e legibilidade." });
+      if (candidates.length >= 8) break;
     }
     return new Response(JSON.stringify({ productName, existingUrls, candidates, searched: sources.length, curation: "automatic" }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
   } catch (error) {
