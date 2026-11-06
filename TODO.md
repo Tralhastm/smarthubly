@@ -1,5 +1,13 @@
 # Entregas
 
+## Carrossel IA — curadoria de imagens por produto
+- [x] Permitir selecionar produtos no catálogo ou detectar automaticamente produtos com galeria incompleta.
+- [x] Buscar imagens adicionais específicas do modelo na web, evitando duplicatas das imagens já cadastradas.
+- [x] Exibir uma prévia editável com capa, fotos do produto e imagens informativas encontradas.
+- [x] Limitar cada carrossel a 10 mídias e só salvar depois da confirmação do administrador.
+- [x] Salvar as imagens aceitas no Storage da loja e preservar a capa atual quando o usuário não a desmarcar.
+- [x] Publicar a Edge Function `carousel-curator` no Supabase para busca, filtragem básica de formato e persistência das imagens.
+
 ## Sociedade — apuração e repasse entre plataforma e loja
 - [x] Criar uma aba **Sociedade** dentro do Financeiro Avançado.
 - [x] Permitir que o administrador informe gastos gerais, por produto ou por variação, incluindo taxa do checkout, motoboy e desconto ao cliente.

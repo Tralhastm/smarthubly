@@ -13,7 +13,7 @@ import TenantProductClicksSummary from './TenantProductClicksSummary';
 import TenantProductPricingSettings from './TenantProductPricingSettings';
 import CategoryTreeSelect from './CategoryTreeSelect';
 import TenantCategoriesTree from './TenantCategoriesTree';
-import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Download, Sparkles, Loader2, ImageIcon, Link as LinkIcon, AlertTriangle, Search, Eye, EyeOff, RefreshCw, Settings2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Check, X, Package, Percent, FileText, Download, Sparkles, Loader2, ImageIcon, Link as LinkIcon, AlertTriangle, Search, Eye, EyeOff, RefreshCw, Settings2, Images, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
@@ -46,6 +46,8 @@ const parseBrazilianMoney = (value: unknown) => {
 
 type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
 type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; condition?: 'new' | 'grade_a'; available?: boolean; variants?: ParsedVariant[]; needs_price_review?: boolean; supplier_id?: string | null; supplier_name?: string };
+type CarouselCandidate = { url: string; source?: string; reason?: string };
+type CarouselDraft = { product: Product; existing: MediaItem[]; candidates: CarouselCandidate[]; selected: string[]; loading?: boolean; error?: string };
 
 const getImportedPrices = (product: ParsedProduct, priceType: string) => {
   if (priceType === 'color') return { cost: 0, sale: 0 };
@@ -219,6 +221,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const [htmlExportIncludeCommission, setHtmlExportIncludeCommission] = useState(false);
   const [htmlExportIncludeCost, setHtmlExportIncludeCost] = useState(false);
   const [htmlExportIncludeUnavailable, setHtmlExportIncludeUnavailable] = useState(true);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [carouselDrafts, setCarouselDrafts] = useState<CarouselDraft[]>([]);
+  const [showCarouselPreview, setShowCarouselPreview] = useState(false);
+  const [carouselRunning, setCarouselRunning] = useState(false);
   const bulkDescriptionCancelled = useRef(false);
 
   const escapeHtml = (value: unknown) => String(value ?? '')
@@ -1376,6 +1382,85 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     }
   }, [products, tenantId, refetch]);
 
+  const handleCreateCarousel = useCallback(async () => {
+    const selected = products.filter(product => selectedProductIds.includes(product.id));
+    const targets = selected.length > 0
+      ? selected
+      : products.filter(product => getProductImageUrls(product).length < 4);
+    if (!targets.length) {
+      toast.info('Selecione produtos ou não há produtos com galeria incompleta.');
+      return;
+    }
+    setCarouselRunning(true);
+    setShowCarouselPreview(true);
+    setCarouselDrafts(targets.map(product => ({
+      product,
+      existing: getProductImageUrls(product).map((url, index) => ({ type: 'image' as const, url })),
+      candidates: [],
+      selected: getProductImageUrls(product),
+      loading: true,
+    })));
+    for (const product of targets) {
+      try {
+        const existingUrls = getProductImageUrls(product);
+        const { data, error } = await unifiedInvoke('carousel-curator', '', {
+          tenantId,
+          productName: product.name,
+          category: product.category,
+          existingUrls,
+        });
+        if (error) throw error;
+        const candidates = Array.isArray(data?.candidates) ? data.candidates as CarouselCandidate[] : [];
+        const initial = [...existingUrls, ...candidates.map(candidate => candidate.url)]
+          .filter((url, index, list) => list.indexOf(url) === index)
+          .slice(0, 8);
+        setCarouselDrafts(current => current.map(draft => draft.product.id === product.id
+          ? { ...draft, candidates, selected: initial, loading: false }
+          : draft));
+      } catch (error) {
+        setCarouselDrafts(current => current.map(draft => draft.product.id === product.id
+          ? { ...draft, loading: false, error: error instanceof Error ? error.message : 'Não foi possível buscar imagens.' }
+          : draft));
+      }
+    }
+    setCarouselRunning(false);
+  }, [products, selectedProductIds, tenantId]);
+
+  const toggleCarouselImage = (productId: string, url: string) => {
+    setCarouselDrafts(current => current.map(draft => {
+      if (draft.product.id !== productId) return draft;
+      const selected = draft.selected.includes(url)
+        ? draft.selected.filter(item => item !== url)
+        : draft.selected.length < 10 ? [...draft.selected, url] : draft.selected;
+      return { ...draft, selected };
+    }));
+  };
+
+  const saveCarousels = async () => {
+    const ready = carouselDrafts.filter(draft => !draft.loading && draft.selected.length > 0);
+    if (!ready.length) return;
+    setCarouselRunning(true);
+    try {
+      for (const draft of ready) {
+        const selected = draft.selected.slice(0, 10);
+        const { error } = await supabase.from('products').update({
+          image: selected[0],
+          media: selected.slice(1).map(url => ({ type: 'image', url })),
+          updated_at: new Date().toISOString(),
+        } as any).eq('id', draft.product.id).eq('tenant_id', tenantId);
+        if (error) throw error;
+      }
+      await refetch();
+      setSelectedProductIds([]);
+      setShowCarouselPreview(false);
+      toast.success(`${ready.length} carrossel(is) salvo(s) com curadoria automática.`);
+    } catch (error) {
+      toast.error(`Não foi possível salvar o carrossel: ${error instanceof Error ? error.message : 'tente novamente'}`);
+    } finally {
+      setCarouselRunning(false);
+    }
+  };
+
   const handleAdd = () => {
     if (!form.name || !form.price) return;
     if (isDropshipping && suppliers.filter(s => s.active).length > 0 && !form.supplier_id) {
@@ -1599,6 +1684,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           {bulkDescriptionRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           Gerar descrições em massa
         </button>
+        <button onClick={handleCreateCarousel} disabled={!products.length || carouselRunning}
+          className="flex items-center gap-2 rounded-lg bg-primary/15 text-primary px-4 py-2 text-sm font-medium hover:bg-primary/25 disabled:opacity-50"
+          title="Busca imagens adicionais, evita repetição e monta uma prévia de carrossel por produto">
+          {carouselRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Images className="h-4 w-4" />}
+          Carrossel IA{selectedProductIds.length ? ` (${selectedProductIds.length})` : ''}
+        </button>
         <button onClick={exportCatalogHtml} disabled={!products.length}
           className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary/80 disabled:opacity-50"
           title="Escolha se o catálogo deve mostrar custo e comissão antes de baixar">
@@ -1724,6 +1815,58 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
                   <button onClick={handleBulkDescriptionGeneration} className="rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm font-medium"><Sparkles className="inline h-4 w-4 mr-1" />Iniciar geração</button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCarouselPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-background p-6 shadow-2xl space-y-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-foreground flex items-center gap-2"><Images className="h-4 w-4 text-primary" /> Prévia do Carrossel IA</h3>
+                <p className="text-xs text-muted-foreground mt-1">As imagens atuais foram preservadas. Desmarque o que não quiser e salve somente quando a sequência estiver correta.</p>
+              </div>
+              {!carouselRunning && <button onClick={() => setShowCarouselPreview(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>}
+            </div>
+            {carouselDrafts.map(draft => {
+              const allImages = [
+                ...draft.existing.map(item => ({ ...item, existing: true })),
+                ...draft.candidates.map(candidate => ({ ...candidate, type: 'image' as const, existing: false })),
+              ].filter((item, index, list) => list.findIndex(other => other.url === item.url) === index);
+              return (
+                <section key={draft.product.id} className="rounded-xl border border-border bg-card p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div><h4 className="font-semibold text-sm text-foreground">{draft.product.name}</h4><p className="text-[11px] text-muted-foreground">{draft.loading ? 'Buscando e filtrando imagens...' : `${draft.selected.length}/10 selecionadas · a primeira será a capa`}</p></div>
+                    {draft.loading ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : draft.error ? <span className="text-[11px] text-destructive">{draft.error}</span> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                  </div>
+                  {!draft.loading && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                      {allImages.map((item, index) => {
+                        const active = draft.selected.includes(item.url);
+                        return (
+                          <button type="button" key={item.url} onClick={() => toggleCarouselImage(draft.product.id, item.url)}
+                            className={`relative aspect-square overflow-hidden rounded-lg border-2 bg-secondary text-left transition-all ${active ? 'border-primary ring-2 ring-primary/30' : 'border-transparent opacity-60 hover:opacity-100'}`} title={item.existing ? 'Imagem já cadastrada' : (item.reason || 'Imagem encontrada na web')}>
+                            <img src={item.url} alt={`${draft.product.name} ${index + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                            <span className={`absolute left-1 top-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${active ? 'bg-primary text-primary-foreground' : 'bg-black/60 text-white'}`}>{active ? (index === 0 ? 'CAPA' : index + 1) : 'Adicionar'}</span>
+                            {!item.existing && <span className="absolute bottom-1 right-1 rounded bg-black/65 px-1 py-0.5 text-[8px] text-white">WEB</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+            <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
+              <p className="text-[11px] text-muted-foreground">A curadoria prioriza o nome/modelo pesquisado, remove duplicatas e limita a galeria a 10 mídias.</p>
+              <div className="flex gap-2">
+                <button onClick={() => setShowCarouselPreview(false)} disabled={carouselRunning} className="rounded-lg bg-secondary text-foreground px-4 py-2 text-sm">Cancelar</button>
+                <button onClick={saveCarousels} disabled={carouselRunning || carouselDrafts.some(draft => draft.loading || !draft.selected.length)} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm disabled:opacity-50">
+                  {carouselRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Salvar carrosséis
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2130,6 +2273,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       {visibleProducts.map(p => (
         <EditableProduct key={p.id} product={p} variants={allVariants.filter(variant => variant.product_id === p.id)} pricingConfig={pricingConfig} isEditing={editing === p.id} isDropshipping={isDropshipping} isAffiliate={isAffiliate}
           suppliers={suppliers.filter(s => s.active)} tenantId={tenantId}
+          selected={selectedProductIds.includes(p.id)} onSelect={() => setSelectedProductIds(current => current.includes(p.id) ? current.filter(id => id !== p.id) : [...current, p.id])}
           soldOutVariantIds={allVariants.filter(variant => isVariantSoldOut(variant)).map(variant => variant.id)}
           feeRequests={feeRequests.filter(r => r.product_id === p.id)}
           onRequestFee={(productId, percent) => {
@@ -2220,13 +2364,15 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     </div>
   );
 };
-const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropshipping, isAffiliate, suppliers, tenantId, feeRequests, soldOutVariantIds, onRequestFee, onEdit, onSave, onCancel, onDelete, onToggleVisibility, onToggleVariantStock }: {
+const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropshipping, isAffiliate, suppliers, tenantId, feeRequests, soldOutVariantIds, selected, onSelect, onRequestFee, onEdit, onSave, onCancel, onDelete, onToggleVisibility, onToggleVariantStock }: {
   product: Product; variants: ProductVariant[]; isEditing: boolean; isDropshipping?: boolean; isAffiliate?: boolean;
   pricingConfig?: ConfiguredPricingConfig;
   suppliers: { id: string; name: string }[];
   tenantId: string;
   feeRequests: { id: string; requested_percent: number; status: string }[];
   soldOutVariantIds: string[];
+  selected: boolean;
+  onSelect: () => void;
   onRequestFee: (productId: string, percent: number) => void;
   onEdit: () => void; onSave: (p: Product) => void; onCancel: () => void; onDelete: () => void; onToggleVisibility: () => void;
   onToggleVariantStock: (variant: ProductVariant, manualSupplierId?: string) => Promise<void>;
@@ -2558,8 +2704,11 @@ const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropsh
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-3 space-y-2">
+    <div className={`rounded-lg border bg-card p-3 space-y-2 ${selected ? 'border-primary/60 ring-1 ring-primary/20' : 'border-border'}`}>
       <div className="flex items-center gap-3">
+        <label className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-secondary" title="Selecionar para criar carrossel">
+          <input type="checkbox" checked={selected} onChange={onSelect} className="h-4 w-4 accent-primary" aria-label={`Selecionar ${product.name} para o Carrossel IA`} />
+        </label>
         <div className="h-12 w-12 rounded-md bg-secondary flex items-center justify-center overflow-hidden flex-shrink-0">
           {product.image ? <img src={product.image} alt="" className="h-full w-full object-cover" /> : <Package className="h-6 w-6 text-primary/40" />}
         </div>
