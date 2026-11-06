@@ -46,8 +46,8 @@ const parseBrazilianMoney = (value: unknown) => {
 
 type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
 type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; condition?: 'new' | 'grade_a'; available?: boolean; variants?: ParsedVariant[]; needs_price_review?: boolean; supplier_id?: string | null; supplier_name?: string };
-type CarouselCandidate = { url: string; source?: string; kind?: string; reason?: string };
-type CarouselDraft = { product: Product; existing: MediaItem[]; candidates: CarouselCandidate[]; selected: string[]; loading?: boolean; error?: string };
+type CarouselCandidate = { url: string; source?: string; sourceKind?: 'web' | 'mercadolivre' | 'generated'; kind?: 'photo' | 'technical'; role?: string; topic?: string; reason?: string; token?: string };
+type CarouselDraft = { product: Product; existing: MediaItem[]; candidates: CarouselCandidate[]; selected: string[]; verifiedExisting: string[]; loading?: boolean; error?: string };
 
 const getImportedPrices = (product: ParsedProduct, priceType: string) => {
   if (priceType === 'color') return { cost: 0, sale: 0 };
@@ -225,6 +225,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const [carouselDrafts, setCarouselDrafts] = useState<CarouselDraft[]>([]);
   const [showCarouselPreview, setShowCarouselPreview] = useState(false);
   const [carouselRunning, setCarouselRunning] = useState(false);
+  const [carouselRunId, setCarouselRunId] = useState('');
   const bulkDescriptionCancelled = useRef(false);
 
   const escapeHtml = (value: unknown) => String(value ?? '')
@@ -1438,13 +1439,16 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       toast.info('Selecione produtos ou não há produtos com galeria incompleta.');
       return;
     }
+    const runId = crypto.randomUUID();
+    setCarouselRunId(runId);
     setCarouselRunning(true);
     setShowCarouselPreview(true);
     setCarouselDrafts(targets.map(product => ({
       product,
       existing: getProductImageUrls(product).map((url, index) => ({ type: 'image' as const, url })),
       candidates: [],
-      selected: getProductImageUrls(product),
+      selected: [],
+      verifiedExisting: [],
       loading: true,
     })));
     for (const product of targets) {
@@ -1456,14 +1460,20 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           category: product.category,
           description: product.description || '',
           existingUrls,
+          runId,
         });
         if (error) throw error;
-        const candidates = Array.isArray(data?.candidates) ? data.candidates as CarouselCandidate[] : [];
-        const initial = [...existingUrls, ...candidates.map(candidate => candidate.url)]
+        const candidates = Array.isArray(data?.candidates)
+          ? (data.candidates as CarouselCandidate[]).filter(candidate => typeof candidate?.url === 'string' && typeof candidate?.token === 'string')
+          : [];
+        const verifiedExisting = Array.isArray(data?.approvedExistingUrls)
+          ? data.approvedExistingUrls.filter((url: unknown): url is string => typeof url === 'string' && existingUrls.includes(url))
+          : [];
+        const initial = [...verifiedExisting, ...candidates.map(candidate => candidate.url)]
           .filter((url, index, list) => list.indexOf(url) === index)
-          .slice(0, 8);
+          .slice(0, 10);
         setCarouselDrafts(current => current.map(draft => draft.product.id === product.id
-          ? { ...draft, candidates, selected: initial, loading: false }
+          ? { ...draft, candidates, verifiedExisting, selected: initial, loading: false }
           : draft));
       } catch (error) {
         setCarouselDrafts(current => current.map(draft => draft.product.id === product.id
@@ -1490,7 +1500,32 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     setCarouselRunning(true);
     try {
       for (const draft of ready) {
-        const selected = draft.selected.slice(0, 10);
+        const selectedPreview = draft.selected.slice(0, 10);
+        const selectedCandidates = draft.candidates.filter(candidate => selectedPreview.includes(candidate.url));
+        const storedByPreviewUrl = new Map<string, string>();
+        if (selectedCandidates.length) {
+          if (!carouselRunId) throw new Error('Gere a prévia novamente antes de salvar.');
+          const { data, error } = await unifiedInvoke('carousel-curator', '', {
+            action: 'persist_selected',
+            tenantId,
+            productName: draft.product.name,
+            runId: carouselRunId,
+            selectedCandidates: selectedCandidates.map(candidate => ({
+              url: candidate.url,
+              token: candidate.token,
+              kind: candidate.kind,
+              sourceKind: candidate.sourceKind,
+            })),
+          }, { timeoutMs: 300_000, retries: 1 });
+          if (error) throw error;
+          for (const saved of Array.isArray(data?.saved) ? data.saved : []) {
+            if (typeof saved?.sourceUrl === 'string' && typeof saved?.url === 'string') storedByPreviewUrl.set(saved.sourceUrl, saved.url);
+          }
+          if (selectedCandidates.some(candidate => !storedByPreviewUrl.has(candidate.url))) {
+            throw new Error('Uma imagem selecionada não pôde ser validada. Gere a prévia novamente.');
+          }
+        }
+        const selected = selectedPreview.map(url => storedByPreviewUrl.get(url) || url);
         const { error } = await supabase.from('products').update({
           image: selected[0],
           media: selected.slice(1).map(url => ({ type: 'image', url })),
@@ -1501,6 +1536,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       await refetch();
       setSelectedProductIds([]);
       setShowCarouselPreview(false);
+      setCarouselRunId('');
       toast.success(`${ready.length} carrossel(is) salvo(s) com curadoria automática.`);
     } catch (error) {
       toast.error(`Não foi possível salvar o carrossel: ${error instanceof Error ? error.message : 'tente novamente'}`);
@@ -1886,14 +1922,14 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-base font-semibold text-foreground flex items-center gap-2"><Images className="h-4 w-4 text-primary" /> Prévia do Carrossel IA</h3>
-                <p className="text-xs text-muted-foreground mt-1">As imagens atuais foram preservadas. Desmarque o que não quiser e salve somente quando a sequência estiver correta.</p>
+                <p className="text-xs text-muted-foreground mt-1">Modelo exato obrigatório. Imagens atuais também são revisadas; as não confirmadas ficam desmarcadas. Banners só entram em português e com dados conferidos na descrição. Nada é copiado ao Supabase antes de salvar.</p>
               </div>
               {!carouselRunning && <button onClick={() => setShowCarouselPreview(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>}
             </div>
             {carouselDrafts.map(draft => {
               const allImages = [
-                ...draft.existing.map(item => ({ ...item, existing: true })),
-                ...draft.candidates.map(candidate => ({ ...candidate, type: 'image' as const, existing: false })),
+                ...draft.existing.map(item => ({ ...item, existing: true, verified: draft.verifiedExisting.includes(item.url) })),
+                ...draft.candidates.map(candidate => ({ ...candidate, type: 'image' as const, existing: false, verified: false })),
               ].filter((item, index, list) => list.findIndex(other => other.url === item.url) === index);
               return (
                 <section key={draft.product.id} className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -1909,10 +1945,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
                         const active = draft.selected.includes(item.url);
                         return (
                           <button type="button" key={item.url} onClick={() => toggleCarouselImage(draft.product.id, item.url)}
-                            className={`relative aspect-square overflow-hidden rounded-lg border-2 bg-secondary text-left transition-all ${active ? 'border-primary ring-2 ring-primary/30' : 'border-transparent opacity-60 hover:opacity-100'}`} title={item.existing ? 'Imagem já cadastrada' : (item.reason || 'Imagem encontrada na web')}>
+                            className={`relative aspect-square overflow-hidden rounded-lg border-2 bg-secondary text-left transition-all ${active ? 'border-primary ring-2 ring-primary/30' : 'border-transparent opacity-60 hover:opacity-100'}`} title={item.existing ? (item.verified ? 'Imagem atual aprovada pela revisão visual' : 'Imagem atual não confirmada; revise modelo, texto e duplicatas antes de selecionar') : (item.reason || 'Imagem encontrada na web')}>
                             <img src={item.url} alt={`${draft.product.name} ${index + 1}`} className="h-full w-full object-cover" loading="lazy" />
                             <span className={`absolute left-1 top-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${active ? 'bg-primary text-primary-foreground' : 'bg-black/60 text-white'}`}>{active ? (index === 0 ? 'CAPA' : index + 1) : 'Adicionar'}</span>
-                            {!item.existing && <span className="absolute bottom-1 right-1 rounded bg-black/65 px-1 py-0.5 text-[8px] text-white">WEB</span>}
+                            {item.existing && <span className={`absolute bottom-1 right-1 rounded px-1 py-0.5 text-[8px] font-semibold text-white ${item.verified ? 'bg-emerald-700/90' : 'bg-amber-700/90'}`}>{item.verified ? 'ATUAL · VALIDADA' : 'ATUAL · REVISAR'}</span>}
+                            {!item.existing && <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[8px] font-semibold text-white">{item.sourceKind === 'mercadolivre' ? 'MERCADO LIVRE' : item.sourceKind === 'generated' ? 'BANNER' : 'WEB'}</span>}
+                            {!item.existing && item.kind === 'technical' && <span className="absolute bottom-5 right-1 rounded bg-teal-700/90 px-1 py-0.5 text-[8px] font-semibold text-white">INFO · PT-BR</span>}
                           </button>
                         );
                       })}
@@ -1923,7 +1961,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               );
             })}
             <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
-              <p className="text-[11px] text-muted-foreground">A curadoria prioriza o nome/modelo pesquisado, remove duplicatas e limita a galeria a 10 mídias.</p>
+              <p className="text-[11px] text-muted-foreground">Busca na web e no Mercado Livre; confere modelo, origem, idioma e duplicatas. Imagens atuais não confirmadas ficam desmarcadas. Só imagens escolhidas são gravadas; até 10 mídias por galeria.</p>
               <div className="flex gap-2">
                 <button onClick={() => setShowCarouselPreview(false)} disabled={carouselRunning} className="rounded-lg bg-secondary text-foreground px-4 py-2 text-sm">Cancelar</button>
                 <button onClick={saveCarousels} disabled={carouselRunning || !carouselDrafts.some(draft => !draft.loading && draft.selected.length > 0)} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm disabled:opacity-50">
