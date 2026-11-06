@@ -175,7 +175,7 @@ const SuperAdminTenants = () => {
     delivery_mode: 1, platform_fee: '5.00', platform_fee_percent: '5', mercadopago_token: '',
     is_dropshipping: false, niche: '', is_donated: false,
     billing_mode: 'per_order' as 'per_order' | 'monthly_fixed',
-    billing_email: '',
+    billing_email: '', society_billing_enabled: false,
   });
   const [productForm, setProductForm] = useState({ name: '', price: '', category: 'Geral', description: '', image: '' });
 
@@ -183,23 +183,25 @@ const SuperAdminTenants = () => {
     if (!form.name) return;
     const slug = form.slug || generateSlug(form.name);
     const isMonthly = form.billing_mode === 'monthly_fixed';
+    const isSociety = form.society_billing_enabled;
     try {
     await addTenantMutation.mutateAsync({
       name: form.name, slug, logo_url: form.logo_url, address: form.address,
       phone: form.phone, whatsapp: form.whatsapp, description: form.description,
       delivery_mode: form.delivery_mode,
       // Mensalidade fixa zera taxa por pedido
-      platform_fee: isMonthly ? 0 : (parseFloat(form.platform_fee) || 5),
-      platform_fee_percent: isMonthly ? 0 : (parseFloat(form.platform_fee_percent) || 5),
+      platform_fee: isMonthly || isSociety ? 0 : (parseFloat(form.platform_fee) || 5),
+      platform_fee_percent: isMonthly || isSociety ? 0 : (parseFloat(form.platform_fee_percent) || 5),
       is_dropshipping: form.is_dropshipping, niche: form.niche,
       active: true, mercadopago_token: form.mercadopago_token || null,
       is_donated: form.is_donated,
       billing_mode: form.billing_mode,
       monthly_fee: 60,
       billing_email: form.billing_email || null,
+      society_billing_enabled: isSociety,
     } as any);
     toast.success(`Loja "${form.name}" cadastrada!`);
-    setForm({ name: '', slug: '', logo_url: '', address: '', phone: '', whatsapp: '', description: '', delivery_mode: 1, platform_fee: '5.00', platform_fee_percent: '5', mercadopago_token: '', is_dropshipping: false, niche: '', is_donated: false, billing_mode: 'per_order', billing_email: '' });
+    setForm({ name: '', slug: '', logo_url: '', address: '', phone: '', whatsapp: '', description: '', delivery_mode: 1, platform_fee: '5.00', platform_fee_percent: '5', mercadopago_token: '', is_dropshipping: false, niche: '', is_donated: false, billing_mode: 'per_order', billing_email: '', society_billing_enabled: false });
     setShowAdd(false);
     } catch (err: any) {
       const msg = err?.message || String(err);
@@ -290,6 +292,22 @@ const SuperAdminTenants = () => {
             </div>
             <p className="text-[10px] text-muted-foreground">
               {form.billing_mode === 'monthly_fixed' ? '✓ Lojista paga R$60/mês fixo. Sem taxa por pedido.' : '✓ Lojista paga taxa por cada pedido (5% padrão).'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
+            <label className="text-xs font-medium text-foreground">🤝 Modelo da loja</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setForm({ ...form, society_billing_enabled: false })}
+                className={`rounded-lg px-3 py-2 text-sm font-medium border ${!form.society_billing_enabled ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>
+                Loja normal
+              </button>
+              <button type="button" onClick={() => setForm({ ...form, society_billing_enabled: true, platform_fee: '0', platform_fee_percent: '0' })}
+                className={`rounded-lg px-3 py-2 text-sm font-medium border ${form.society_billing_enabled ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-border bg-secondary text-foreground'}`}>
+                Sociedade
+              </button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {form.society_billing_enabled ? '✓ Entra no Financeiro societário e a divisão será feita conforme a aba Sociedade. Não cobra taxa automática por pedido.' : '✓ Fica fora do consolidado societário e usa a cobrança padrão da plataforma.'}
             </p>
           </div>
           <label className="flex items-center gap-2 text-sm text-foreground">
@@ -383,6 +401,14 @@ const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCan
           <p className="text-[10px] text-muted-foreground">
             {(form as any).billing_mode === 'monthly_fixed' ? '✓ R$60/mês fixo. Sem taxa por pedido.' : '✓ Taxa por cada pedido.'}
           </p>
+        </div>
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
+          <label className="text-xs font-medium text-foreground">🤝 Modelo da loja</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setForm({ ...form, society_billing_enabled: false } as any)} className={`rounded-lg px-3 py-2 text-sm font-medium border ${!(form as any).society_billing_enabled ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>Loja normal</button>
+            <button type="button" onClick={() => setForm({ ...form, society_billing_enabled: true, platform_fee: 0, platform_fee_percent: 0 } as any)} className={`rounded-lg px-3 py-2 text-sm font-medium border ${(form as any).society_billing_enabled ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-border bg-secondary text-foreground'}`}>Sociedade</button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">{(form as any).society_billing_enabled ? '✓ Entra no consolidado societário; a divisão segue a aba Sociedade e não há taxa automática por pedido.' : '✓ Usa a cobrança padrão e fica fora do consolidado societário.'}</p>
         </div>
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" checked={(form as any).is_dropshipping ?? false} onChange={e => setForm({ ...form, is_dropshipping: e.target.checked } as any)} className="accent-primary" />
@@ -480,7 +506,7 @@ const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCan
             <p className="font-medium text-foreground">{tenant.name}</p>
             <p className="text-xs text-muted-foreground">
               /{tenant.slug} · {tenant.active ? '🟢 Ativo' : '🔴 Inativo'} · Modo {tenant.delivery_mode}
-              {(tenant as any).billing_mode === 'monthly_fixed' ? ' · 💵 R$60/mês' : ` · Taxa ${(tenant as any).platform_fee_percent ?? 5}%`}
+              {(tenant as any).society_billing_enabled ? ' · 🤝 Sociedade' : (tenant as any).billing_mode === 'monthly_fixed' ? ' · 💵 R$60/mês' : ` · Taxa ${(tenant as any).platform_fee_percent ?? 5}%`}
               {(tenant as any).is_dropshipping && ' · 📦 Dropshipping'}
               {(tenant as any).is_donated && ' · 🎁 Doada'}
               {bot && <span className={bot.ativo !== false ? ' text-green-600 font-medium' : ' text-destructive font-medium'}> · 🤖 Bot WhatsApp {bot.ativo !== false ? 'ativo' : 'pausado'}</span>}

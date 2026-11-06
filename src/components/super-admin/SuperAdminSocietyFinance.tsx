@@ -82,7 +82,7 @@ export default function SuperAdminSocietyFinance() {
           <WalletCards className="h-5 w-5 text-primary" />
           <div>
             <h2 className="text-lg font-semibold text-foreground">Financeiro societário</h2>
-            <p className="text-xs text-muted-foreground">Consolidado das lojas e repasses conforme a aba Sociedade.</p>
+            <p className="text-xs text-muted-foreground">Consolidado das lojas marcadas como Sociedade e seus repasses.</p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -96,7 +96,7 @@ export default function SuperAdminSocietyFinance() {
       </div>
 
       <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 text-xs text-muted-foreground">
-        A apuração usa somente pedidos entregues e pagos, desconta custo do produto e gastos configurados na Sociedade, e distribui apenas o lucro líquido positivo. Nenhum percentual é presumido no painel: cada loja traz a configuração vigente.
+        A apuração considera somente lojas marcadas como Sociedade, pedidos entregues e pagos, custo do produto e gastos configurados na Sociedade. Distribui apenas o lucro líquido positivo; cada loja traz a configuração vigente.
       </div>
 
       {isError && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">Não foi possível carregar o consolidado societário: {(error as Error)?.message || 'erro de acesso'}</div>}
