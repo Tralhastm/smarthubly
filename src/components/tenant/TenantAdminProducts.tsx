@@ -46,7 +46,7 @@ const parseBrazilianMoney = (value: unknown) => {
 
 type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
 type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; condition?: 'new' | 'grade_a'; available?: boolean; variants?: ParsedVariant[]; needs_price_review?: boolean; supplier_id?: string | null; supplier_name?: string };
-type CarouselCandidate = { url: string; source?: string; reason?: string };
+type CarouselCandidate = { url: string; source?: string; kind?: string; reason?: string };
 type CarouselDraft = { product: Product; existing: MediaItem[]; candidates: CarouselCandidate[]; selected: string[]; loading?: boolean; error?: string };
 
 const getImportedPrices = (product: ParsedProduct, priceType: string) => {
@@ -1457,7 +1457,23 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
           existingUrls,
         });
         if (error) throw error;
-        const candidates = Array.isArray(data?.candidates) ? data.candidates as CarouselCandidate[] : [];
+        let candidates = Array.isArray(data?.candidates) ? data.candidates as CarouselCandidate[] : [];
+        if (candidates.length < 2) {
+          const generated = await unifiedInvoke('ai-media-unified', 'generate', {
+            tenantId,
+            productName: product.name,
+            category: product.category || 'celular',
+            useReference: true,
+          }, { timeoutMs: 150000, retries: 0 });
+          if (!generated.error && generated.data?.imageUrl) {
+            candidates = [...candidates, {
+              url: generated.data.imageUrl,
+              source: 'IA de geração de imagens',
+              kind: 'generated',
+              reason: 'Imagem adicional gerada automaticamente porque havia menos de duas imagens utilizáveis.',
+            }];
+          }
+        }
         const initial = [...existingUrls, ...candidates.map(candidate => candidate.url)]
           .filter((url, index, list) => list.indexOf(url) === index)
           .slice(0, 8);
