@@ -280,34 +280,22 @@ const SuperAdminTenants = () => {
           </div>
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
             <label className="text-xs font-medium text-foreground">💰 Modelo de cobrança</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setForm({ ...form, billing_mode: 'per_order' })}
-                className={`rounded-lg px-3 py-2 text-sm font-medium border ${form.billing_mode === 'per_order' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" onClick={() => setForm({ ...form, billing_mode: 'per_order', society_billing_enabled: false, platform_fee: '5.00', platform_fee_percent: '5' })}
+                className={`rounded-lg px-3 py-2 text-sm font-medium border ${form.billing_mode === 'per_order' && !form.society_billing_enabled ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>
                 Por pedido
               </button>
-              <button type="button" onClick={() => setForm({ ...form, billing_mode: 'monthly_fixed' })}
-                className={`rounded-lg px-3 py-2 text-sm font-medium border ${form.billing_mode === 'monthly_fixed' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>
+              <button type="button" onClick={() => setForm({ ...form, billing_mode: 'monthly_fixed', society_billing_enabled: false, platform_fee: '0', platform_fee_percent: '0' })}
+                className={`rounded-lg px-3 py-2 text-sm font-medium border ${form.billing_mode === 'monthly_fixed' && !form.society_billing_enabled ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>
                 Mensalidade R$60
               </button>
-            </div>
-            <p className="text-[10px] text-muted-foreground">
-              {form.billing_mode === 'monthly_fixed' ? '✓ Lojista paga R$60/mês fixo. Sem taxa por pedido.' : '✓ Lojista paga taxa por cada pedido (5% padrão).'}
-            </p>
-          </div>
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
-            <label className="text-xs font-medium text-foreground">🤝 Modelo da loja</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setForm({ ...form, society_billing_enabled: false })}
-                className={`rounded-lg px-3 py-2 text-sm font-medium border ${!form.society_billing_enabled ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>
-                Loja normal
-              </button>
-              <button type="button" onClick={() => setForm({ ...form, society_billing_enabled: true, platform_fee: '0', platform_fee_percent: '0' })}
+              <button type="button" onClick={() => setForm({ ...form, billing_mode: 'per_order', society_billing_enabled: true, platform_fee: '0', platform_fee_percent: '0' })}
                 className={`rounded-lg px-3 py-2 text-sm font-medium border ${form.society_billing_enabled ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-border bg-secondary text-foreground'}`}>
                 Sociedade
               </button>
             </div>
             <p className="text-[10px] text-muted-foreground">
-              {form.society_billing_enabled ? '✓ Entra no Financeiro societário e a divisão será feita conforme a aba Sociedade. Não cobra taxa automática por pedido.' : '✓ Fica fora do consolidado societário e usa a cobrança padrão da plataforma.'}
+              {form.society_billing_enabled ? '✓ Calcula por pedido: valor vendido menos todos os custos da Sociedade; o líquido positivo é dividido conforme os percentuais configurados.' : form.billing_mode === 'monthly_fixed' ? '✓ Lojista paga R$60/mês fixo. Sem taxa por pedido.' : '✓ Lojista paga taxa por cada pedido (5% padrão).'}
             </p>
           </div>
           <label className="flex items-center gap-2 text-sm text-foreground">
@@ -388,27 +376,23 @@ const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCan
         </div>
         <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
           <label className="text-xs font-medium text-foreground">💰 Modelo de cobrança</label>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setForm({ ...form, billing_mode: 'per_order', platform_fee_percent: (form as any).platform_fee_percent || 5 } as any)}
-              className={`rounded-lg px-3 py-2 text-sm font-medium border ${((form as any).billing_mode || 'per_order') === 'per_order' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>
+          <div className="grid grid-cols-3 gap-2">
+            <button type="button" onClick={() => setForm({ ...form, billing_mode: 'per_order', society_billing_enabled: false, platform_fee: 5, platform_fee_percent: 5 } as any)}
+              className={`rounded-lg px-3 py-2 text-sm font-medium border ${((form as any).billing_mode || 'per_order') === 'per_order' && !(form as any).society_billing_enabled ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>
               Por pedido
             </button>
-            <button type="button" onClick={() => setForm({ ...form, billing_mode: 'monthly_fixed', platform_fee: 0, platform_fee_percent: 0 } as any)}
-              className={`rounded-lg px-3 py-2 text-sm font-medium border ${(form as any).billing_mode === 'monthly_fixed' ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>
+            <button type="button" onClick={() => setForm({ ...form, billing_mode: 'monthly_fixed', society_billing_enabled: false, platform_fee: 0, platform_fee_percent: 0 } as any)}
+              className={`rounded-lg px-3 py-2 text-sm font-medium border ${(form as any).billing_mode === 'monthly_fixed' && !(form as any).society_billing_enabled ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>
               Mensalidade R$60
+            </button>
+            <button type="button" onClick={() => setForm({ ...form, billing_mode: 'per_order', society_billing_enabled: true, platform_fee: 0, platform_fee_percent: 0 } as any)}
+              className={`rounded-lg px-3 py-2 text-sm font-medium border ${(form as any).society_billing_enabled ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-border bg-secondary text-foreground'}`}>
+              Sociedade
             </button>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            {(form as any).billing_mode === 'monthly_fixed' ? '✓ R$60/mês fixo. Sem taxa por pedido.' : '✓ Taxa por cada pedido.'}
+            {(form as any).society_billing_enabled ? '✓ Calcula cada pedido: valor vendido menos todos os custos; o líquido positivo é dividido conforme a aba Sociedade.' : (form as any).billing_mode === 'monthly_fixed' ? '✓ R$60/mês fixo. Sem taxa por pedido.' : '✓ Taxa por cada pedido.'}
           </p>
-        </div>
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
-          <label className="text-xs font-medium text-foreground">🤝 Modelo da loja</label>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setForm({ ...form, society_billing_enabled: false } as any)} className={`rounded-lg px-3 py-2 text-sm font-medium border ${!(form as any).society_billing_enabled ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary text-foreground'}`}>Loja normal</button>
-            <button type="button" onClick={() => setForm({ ...form, society_billing_enabled: true, platform_fee: 0, platform_fee_percent: 0 } as any)} className={`rounded-lg px-3 py-2 text-sm font-medium border ${(form as any).society_billing_enabled ? 'border-emerald-500 bg-emerald-600 text-white' : 'border-border bg-secondary text-foreground'}`}>Sociedade</button>
-          </div>
-          <p className="text-[10px] text-muted-foreground">{(form as any).society_billing_enabled ? '✓ Entra no consolidado societário; a divisão segue a aba Sociedade e não há taxa automática por pedido.' : '✓ Usa a cobrança padrão e fica fora do consolidado societário.'}</p>
         </div>
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" checked={(form as any).is_dropshipping ?? false} onChange={e => setForm({ ...form, is_dropshipping: e.target.checked } as any)} className="accent-primary" />
