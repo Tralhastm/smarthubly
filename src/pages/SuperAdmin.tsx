@@ -5,7 +5,7 @@ import SuperAdminDashboard from '@/components/super-admin/SuperAdminDashboard';
 import SuperAdminTenants from '@/components/super-admin/SuperAdminTenants';
 import SuperAdminMetrics from '@/components/super-admin/SuperAdminMetrics';
 import SuperAdminFeeRequests from '@/components/super-admin/SuperAdminFeeRequests';
-import { LayoutDashboard, Store, BarChart3, LogOut, Percent, Key, Search, Bot, Users, Activity, DollarSign, Receipt, MapPin, Sun, Moon, Sparkles, Gauge, LifeBuoy, Code2, Zap } from 'lucide-react';
+import { LayoutDashboard, Store, BarChart3, LogOut, Percent, Key, Search, Bot, Users, Activity, DollarSign, Receipt, WalletCards, MapPin, Sun, Moon, Sparkles, Gauge, LifeBuoy, Code2, Zap } from 'lucide-react';
 import adminLogo from '@/assets/admin-logo.png';
 import SuperAdminApiKeys from '@/components/super-admin/SuperAdminApiKeys';
 import SuperAdminSerpApi from '@/components/super-admin/SuperAdminSerpApi';
@@ -13,6 +13,7 @@ import SuperAdminWorkers from '@/components/super-admin/SuperAdminWorkers';
 import SuperAdminUsers from '@/components/super-admin/SuperAdminUsers';
 import SuperAdminStoreHealth from '@/components/super-admin/SuperAdminStoreHealth';
 import SuperAdminFinancialReport from '@/components/super-admin/SuperAdminFinancialReport';
+import SuperAdminSocietyFinance from '@/components/super-admin/SuperAdminSocietyFinance';
 import SuperAdminBilling from '@/components/super-admin/SuperAdminBilling';
 import SuperAdminProspectingHub from '@/components/super-admin/SuperAdminProspectingHub';
 import SuperAdminRemoteProspecting from '@/components/super-admin/SuperAdminRemoteProspecting';
@@ -26,7 +27,7 @@ import SuperAdminWhatsAppBots from '@/components/super-admin/SuperAdminWhatsAppB
 import SuperAdminSofiaKnowledge from '@/components/super-admin/SuperAdminSofiaKnowledge';
 import { useAuthReady } from '@/hooks/useAuthReady';
 
-type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'serpapi' | 'workers' | 'users' | 'health' | 'financial' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test' | 'whatsapp_bots' | 'sofia_knowledge';
+type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'serpapi' | 'workers' | 'users' | 'health' | 'financial' | 'society_finance' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test' | 'whatsapp_bots' | 'sofia_knowledge';
 
 const ROLE_CHECK_TIMEOUT_MS = 8000;
 
@@ -107,6 +108,7 @@ const SuperAdmin = () => {
     { id: 'tenants' as Tab, label: 'Comércios', icon: <Store className="h-4 w-4" /> },
     { id: 'health' as Tab, label: 'Saúde Lojas', icon: <Activity className="h-4 w-4" /> },
     { id: 'financial' as Tab, label: 'Financeiro', icon: <DollarSign className="h-4 w-4" /> },
+    { id: 'society_finance' as Tab, label: 'Financeiro societário', icon: <WalletCards className="h-4 w-4" /> },
     { id: 'billing' as Tab, label: 'Cobranças', icon: <Receipt className="h-4 w-4" /> },
     { id: 'fee_requests' as Tab, label: 'Taxas', icon: <Percent className="h-4 w-4" /> },
     { id: 'metrics' as Tab, label: 'Métricas', icon: <BarChart3 className="h-4 w-4" /> },
@@ -166,6 +168,7 @@ const SuperAdmin = () => {
           {tab === 'tenants' && <SuperAdminTenants />}
           {tab === 'health' && <SuperAdminStoreHealth />}
           {tab === 'financial' && <SuperAdminFinancialReport />}
+          {tab === 'society_finance' && <SuperAdminSocietyFinance />}
           {tab === 'billing' && <SuperAdminBilling />}
           {tab === 'fee_requests' && <SuperAdminFeeRequests />}
           {tab === 'metrics' && <SuperAdminMetrics />}
