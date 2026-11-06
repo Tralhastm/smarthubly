@@ -600,6 +600,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
 
   const [deletingAi, setDeletingAi] = useState(false);
   const [deletingGoogle, setDeletingGoogle] = useState(false);
+  const [deletingCarousel, setDeletingCarousel] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
   const [confirmAll, setConfirmAll] = useState(false);
 
@@ -676,6 +677,52 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       if (source === 'ai') setDeletingAi(false); else setDeletingGoogle(false);
     }
   }, [tenantId, refetch]);
+
+  const isCarouselGeneratedUrl = (url: unknown) => {
+    const value = String(url || '');
+    return value.includes('?src=carousel-web') || value.includes('/carousel-');
+  };
+
+  const handleDeleteCarouselImages = useCallback(async () => {
+    const generated = products.flatMap(product => {
+      const media = Array.isArray((product as any).media) ? (product as any).media : [];
+      return [product.image, ...media.map((item: any) => typeof item === 'string' ? item : item?.url)].filter(isCarouselGeneratedUrl);
+    });
+    const uniqueGenerated = [...new Set(generated)];
+    if (!uniqueGenerated.length) {
+      toast.info('Nenhuma imagem gerada pelo Carrossel IA foi encontrada.');
+      return;
+    }
+    if (!confirm(`Excluir ${uniqueGenerated.length} imagem(ns) gerada(s) pelo Carrossel IA? Fotos manuais, da IA e do Google serão preservadas.`)) return;
+    setDeletingCarousel(true);
+    try {
+      const storagePaths = uniqueGenerated.map(url => {
+        const marker = '/storage/v1/object/public/product-images/';
+        const start = String(url).indexOf(marker);
+        return start >= 0 ? decodeURIComponent(String(url).slice(start + marker.length).split('?')[0]) : null;
+      }).filter((path): path is string => Boolean(path));
+      for (const product of products) {
+        const media = Array.isArray((product as any).media) ? (product as any).media : [];
+        const nextMedia = media.filter((item: any) => !isCarouselGeneratedUrl(typeof item === 'string' ? item : item?.url));
+        const currentImageIsGenerated = isCarouselGeneratedUrl(product.image);
+        const fallbackImage = nextMedia.map((item: any) => typeof item === 'string' ? item : item?.url).find((url: string) => !isCarouselGeneratedUrl(url)) || '';
+        if (!currentImageIsGenerated && nextMedia.length === media.length) continue;
+        const { error } = await supabase.from('products').update({
+          image: currentImageIsGenerated ? fallbackImage : product.image,
+          media: nextMedia,
+          updated_at: new Date().toISOString(),
+        } as any).eq('id', product.id).eq('tenant_id', tenantId);
+        if (error) throw error;
+      }
+      if (storagePaths.length) await supabase.storage.from('product-images').remove(storagePaths);
+      await refetch();
+      toast.success(`${uniqueGenerated.length} imagem(ns) do Carrossel IA excluída(s).`);
+    } catch (error) {
+      toast.error(`Não foi possível excluir as imagens: ${error instanceof Error ? error.message : 'tente novamente'}`);
+    } finally {
+      setDeletingCarousel(false);
+    }
+  }, [products, tenantId, refetch]);
 
   // On mount: rehydrate active job (if any) so user reloading the page still sees progress
   useEffect(() => {
@@ -1546,6 +1593,10 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         .filter(Boolean).join(' ').toLowerCase().includes(normalizedCatalogSearch))
     : orderedProducts;
   const productsWithGoogleImage = products.filter(p => p.image && p.image.includes('?src=google')).length;
+  const carouselGeneratedImageCount = [...new Set(products.flatMap(product => {
+    const media = Array.isArray((product as any).media) ? (product as any).media : [];
+    return [product.image, ...media.map((item: any) => typeof item === 'string' ? item : item?.url)].filter(isCarouselGeneratedUrl);
+  }))].length;
   const lossProducts = products.flatMap(product => {
     if (!pricingConfig) return [];
     const variants = allVariants.filter(variant => variant.product_id === product.id);
@@ -1752,6 +1803,14 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             title="Remove em massa todas as fotos importadas do Google/web. Mantém fotos de IA e uploads manuais.">
             {deletingGoogle ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
             Excluir {productsWithGoogleImage} fotos do Google
+          </button>
+        )}
+        {carouselGeneratedImageCount > 0 && !activeJob && (
+          <button onClick={handleDeleteCarouselImages} disabled={deletingCarousel}
+            className="flex items-center gap-2 rounded-lg bg-destructive/15 text-destructive px-4 py-2 text-sm font-medium hover:bg-destructive/25 disabled:opacity-50"
+            title="Remove somente as imagens criadas pelo Carrossel IA e preserva as outras fontes">
+            {deletingCarousel ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            Excluir {carouselGeneratedImageCount} imagens do Carrossel
           </button>
         )}
         <AutoCategorizeButton
