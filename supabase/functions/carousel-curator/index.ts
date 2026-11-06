@@ -167,17 +167,17 @@ async function askWorkerVision(client: any, productName: string, content: any[])
   }
   return null;
 }
-async function curateVisually(productName: string, candidates: Array<{ url: string; source: string; reason: string }>) {
+async function curateVisually(productName: string, candidates: Array<{ url: string; source: string; kind?: string; reason: string }>) {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   if (candidates.length <= 1) return candidates;
   try {
-    const content: any[] = [{ type: "text", text: `Você é o curador visual de um catálogo brasileiro. Analise as opções do produto \"${productName}\". Escolha no máximo 6 imagens. NÃO mantenha duas imagens que tenham o mesmo enquadramento ou composição, mesmo que venham de domínios diferentes. Se duas mostram o aparelho de frente e traseira em um render parecido, elas pertencem ao mesmo grupo e apenas a mais nítida deve ficar. Classifique cada opção em um grupo visual único: cover, rear, side, detail, screen, accessories, colors, technical_card, front_rear_render ou other. Deve haver no máximo uma opção por grupo. Rejeite modelo errado e fichas/artes em inglês ou espanhol. Aceite fotos do aparelho sem texto. Responda SOMENTE JSON válido: [{\"index\":1,\"keep\":true,\"group\":\"cover\",\"language\":\"none\"}].` }];
+    const content: any[] = [{ type: "text", text: `Você é o curador visual de um catálogo brasileiro. Analise as opções do produto \"${productName}\". Escolha no máximo 6 imagens. NÃO mantenha duas imagens que tenham o mesmo enquadramento ou composição, mesmo que venham de domínios diferentes. Se duas mostram o aparelho de frente e traseira em um render parecido, elas pertencem ao mesmo grupo e apenas a mais nítida deve ficar. Classifique cada opção em um grupo visual único: cover, rear, side, detail, screen, accessories, colors, technical_card, front_rear_render ou other. Deve haver no máximo uma opção por grupo. É OBRIGATÓRIO manter uma technical_card quando houver uma opção marcada como ESPECIFICAÇÃO. Priorize fichas em português com RAM, armazenamento, câmera, bateria, tela e processador. Rejeite modelo errado e fichas/artes em inglês ou espanhol. Aceite fotos do aparelho sem texto. Responda SOMENTE JSON válido: [{\"index\":1,\"keep\":true,\"group\":\"cover\",\"language\":\"none\"}].` }];
     const usable: number[] = [];
     const images = await Promise.all(candidates.map(candidate => imageAsBase64(candidate.url)));
     images.forEach((image, index) => {
       if (!image) return;
       usable.push(index);
-      content.push({ type: "text", text: `OPÇÃO ${index + 1}:` });
+      content.push({ type: "text", text: `OPÇÃO ${index + 1}${candidates[index].kind === "technical" ? " — ESPECIFICAÇÃO TÉCNICA" : ""}:` });
       content.push({ type: "image_url", image_url: { url: `data:${image.mime};base64,${image.b64}` } });
     });
     if (usable.length <= 1) return candidates;
@@ -202,7 +202,7 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
     if (!match) return candidates;
     const decisions = JSON.parse(match[0]) as Array<{ index?: number; keep?: boolean; role?: string; language?: string }>;
     const usedRoles = new Set<string>();
-    const selected: Array<{ url: string; source: string; reason: string }> = [];
+    const selected: Array<{ url: string; source: string; kind?: string; reason: string }> = [];
     for (const decision of decisions) {
       const index = Number(decision.index || 0) - 1;
       if (!decision.keep || index < 0 || index >= candidates.length || selected.length >= 8) continue;
@@ -212,6 +212,12 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
       if (role === "technical_card" && language !== "pt-br" && language !== "none" && language !== "portuguese") continue;
       usedRoles.add(role);
       selected.push(candidates[index]);
+    }
+    const technical = candidates.find((candidate) => candidate.kind === "technical");
+    if (technical && !selected.some((candidate) => candidate.url === technical.url)) {
+      const replaceIndex = selected.findIndex((candidate) => candidate.kind !== "technical");
+      if (selected.length < 6) selected.push(technical);
+      else if (replaceIndex >= 0) selected[replaceIndex] = technical;
     }
     return selected.length > 0 ? selected : candidates;
   } catch (error) {
@@ -243,27 +249,31 @@ Deno.serve(async (req) => {
     const queries = [
       `${productName} celular Brasil português`,
       `${productName} especificações técnicas português Brasil oficial`,
+      `${productName} ficha técnica RAM armazenamento câmera bateria tela processador português`,
+      `${productName} imagem especificações técnicas português Brasil`,
       `${productName} Mercado Livre Brasil`,
     ];
     const sourceGroups = await Promise.all(queries.map(searchImages));
-    const sources = [...new Set(sourceGroups.flat().map(normalizeSourceUrl))]
-      .filter(validUrl)
-      .sort((a, b) => sourceScore(b) - sourceScore(a))
-      .slice(0, 36);
+    const sourceEntries = [...new Map(sourceGroups.flatMap((group, queryIndex) => group.map((source) => [normalizeSourceUrl(source), { source: normalizeSourceUrl(source), queryIndex }]))).values()];
+    const sources = sourceEntries
+      .filter((entry) => validUrl(entry.source))
+      .sort((a, b) => (b.queryIndex === 2 ? 1 : 0) - (a.queryIndex === 2 ? 1 : 0) || sourceScore(b.source) - sourceScore(a.source))
+      .slice(0, 60);
     const existing = new Set(existingUrls.map((url: string) => url.split("?")[0]));
     const candidates: Array<{ url: string; source: string; reason: string }> = [];
-    const savedResults = await Promise.all(sources.map(async (source) => ({ source, saved: await persistImage(client, tenantId, source) })));
+    const savedResults = await Promise.all(sources.map(async (entry) => ({ ...entry, saved: await persistImage(client, tenantId, entry.source) })));
     const hostCounts = new Map<string, number>();
     const sourceSignatures = new Set<string>();
-    for (const { source, saved } of savedResults) {
+    for (const { source, queryIndex, saved } of savedResults) {
       if (!saved || existing.has(saved.split("?")[0]) || candidates.some(candidate => candidate.url.split("?")[0] === saved.split("?")[0])) continue;
       const host = sourceHost(source);
       const signature = source.toLowerCase().replace(/[?#].*$/, '').replace(/\b(?:thumb|small|medium|large|zoom|1x|2x)\b/g, '').replace(/[^a-z0-9]+/g, '');
-      if ((hostCounts.get(host) || 0) >= 1 || sourceSignatures.has(signature)) continue;
+      const kind = queryIndex === 1 || queryIndex === 2 || /spec|ficha|technical|ram|camera|bateria|display|tela/i.test(source) ? "technical" : "photo";
+      if ((hostCounts.get(host) || 0) >= 2 || sourceSignatures.has(signature)) continue;
       hostCounts.set(host, (hostCounts.get(host) || 0) + 1);
       sourceSignatures.add(signature);
-      candidates.push({ url: saved, source, reason: "Imagem encontrada para o modelo pesquisado e aprovada no filtro de formato, duplicidade e legibilidade." });
-      if (candidates.length >= 6) break;
+      candidates.push({ url: saved, source, kind, reason: "Imagem encontrada para o modelo pesquisado e aprovada no filtro de formato, duplicidade e legibilidade." });
+      if (candidates.length >= 12) break;
     }
     const curated = await curateVisually(productName, candidates);
     return new Response(JSON.stringify({ productName, existingUrls, candidates: curated, searched: sources.length, curation: curated.length < candidates.length ? "visual" : "automatic" }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
