@@ -116,6 +116,57 @@ async function askGoogleVision(client: any, content: any[]) {
   }
   return null;
 }
+async function askWorkerVision(client: any, productName: string, content: any[]) {
+  const { data: workers } = await client.from("ai_workers")
+    .select("id,base_url,is_exhausted")
+    .eq("worker_type", "chat")
+    .eq("is_active", true)
+    .eq("is_exhausted", false)
+    .order("last_used_at", { ascending: true, nullsFirst: true })
+    .limit(12);
+  for (const worker of workers || []) {
+    const url = worker.base_url.includes("/functions/") ? worker.base_url : `${worker.base_url}/functions/v1/ai-chat`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content }],
+          systemPrompt: "Você é um curador visual multimodal. Responda somente JSON válido, sem markdown.",
+          tenantName: "Carrossel IA",
+          niche: `Catálogo de celulares; produto: ${productName}`,
+        }),
+        signal: AbortSignal.timeout(45_000),
+      });
+      if (response.status === 429 || response.status === 402 || response.status === 503) {
+        await client.from("ai_workers").update({ is_exhausted: true, exhausted_at: new Date().toISOString() }).eq("id", worker.id);
+        continue;
+      }
+      if (!response.ok) continue;
+      let text = "";
+      const raw = await response.text();
+      try {
+        const parsed = JSON.parse(raw);
+        text = String(parsed?.choices?.[0]?.message?.content || parsed?.content || parsed?.text || "");
+      } catch {
+        for (const line of raw.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const parsed = JSON.parse(line.slice(6));
+            text += String(parsed?.choices?.[0]?.delta?.content || parsed?.choices?.[0]?.message?.content || "");
+          } catch { /* ignora eventos SSE não JSON */ }
+        }
+      }
+      if (text.trim()) {
+        await client.from("ai_workers").update({ last_used_at: new Date().toISOString() }).eq("id", worker.id);
+        return text;
+      }
+    } catch {
+      await client.from("ai_workers").update({ is_exhausted: true, exhausted_at: new Date().toISOString() }).eq("id", worker.id);
+    }
+  }
+  return null;
+}
 async function curateVisually(productName: string, candidates: Array<{ url: string; source: string; reason: string }>) {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   if (candidates.length <= 1) return candidates;
@@ -132,8 +183,8 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
     if (usable.length <= 1) return candidates;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 45_000);
-    let text = "";
-    if (apiKey) {
+    let text = await askWorkerVision(db(), productName, content) || "";
+    if (!text && apiKey) {
       try {
         const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
@@ -143,8 +194,8 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
         });
         if (response.ok) { const data = await response.json(); text = String(data?.choices?.[0]?.message?.content || ""); }
       } catch { /* fallback Google abaixo */ }
-      clearTimeout(timeout);
     }
+    clearTimeout(timeout);
     if (!text) text = await askGoogleVision(db(), content) || "";
     if (!text) return candidates;
     const match = text.match(/\[[\s\S]*\]/);
