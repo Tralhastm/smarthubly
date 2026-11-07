@@ -23,12 +23,15 @@ type ImageCandidate = {
   reason: string;
   role?: CarouselRole;
   topic?: string;
+  queryIndex?: number;
+  cardTitle?: string;
+  facts?: string[];
   bytes?: Uint8Array;
   mime?: string;
   hash?: string;
   token?: string;
 };
-type CurationResult = { candidates: ImageCandidate[]; approvedExistingUrls: string[]; approvedExistingTechnicalCard: boolean };
+type CurationResult = { candidates: ImageCandidate[]; approvedExistingUrls: string[]; approvedExistingTechnicalUrls: string[] };
 const db = () => createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 function decodeHtml(value: string) {
@@ -53,7 +56,7 @@ function validExternalUrl(value: string) {
   try {
     const url = new URL(value);
     const host = url.hostname.toLowerCase();
-    if (!(["http:", "https:"].includes(url.protocol)) || url.username || url.password) return false;
+    if (!( ["http:", "https:"] .includes(url.protocol)) || url.username || url.password) return false;
     if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal") || isPrivateIp(host)) return false;
     if (url.port && url.port !== "80" && url.port !== "443") return false;
     return true;
@@ -102,20 +105,77 @@ function sourceScore(value: string) {
   if (host.endsWith(".com.ar") || host.endsWith(".com.mx") || host.endsWith(".cl")) score -= 4;
   return score;
 }
-function escapeXml(value: unknown) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-}
 function technicalFacts(description: string) {
-  const technicalTerm = /\b(ram|rom|armazenamento|mem[oó]ria|c[aâ]mera|bateria|tela|display|processador|chip|android|5g|polegadas|mah|mp|gb|tb|hz|resist[eê]ncia|autonomia|carregamento)\b/i;
-  const portugueseTerm = /\b(de|com|para|em|tela|c[aâ]mera|bateria|mem[oó]ria|armazenamento|processador|resist[eê]ncia|autonomia|carregamento|polegadas|cor|at[eé]|durabilidade|resolu[cç][aã]o)\b/i;
+  const technicalTerm = /\b(ram|rom|armazenamento|mem[oó]ria|c[aâ]mera|bateria|tela|display|processador|chip|android|5g|polegadas|mah|mp|gb|tb|hz|resist[eê]ncia|autonomia|carregamento|nfc|wi-?fi|bluetooth|resolu[cç][aã]o|amoled|oled|ips|conectividade)\b/i;
+  const portugueseTerm = /\b(de|do|da|dos|das|com|para|em|tela|c[aâ]mera|bateria|mem[oó]ria|armazenamento|processador|resist[eê]ncia|autonomia|carregamento|polegadas|cor|at[eé]|durabilidade|resolu[cç][aã]o|sistema|conectividade)\b/i;
   const foreignPhrase = /\b(up to|battery|screen|camera|processor|storage|memory|display|waterproof|fast charging|pantalla|cámara|batería|procesador|almacenamiento|hasta|resistencia al agua)\b/i;
+  const seen = new Set<string>();
   return String(description || "").replace(/\r\n?/g, "\n").split(/[\n;•]+/)
     .map((line) => line.replace(/^\s*[-*•]\s*/, "").trim())
     .filter((line) => line.length >= 4 && line.length <= 110)
     .filter((line) => technicalTerm.test(line) && portugueseTerm.test(line) && !foreignPhrase.test(line))
+    .filter((line) => {
+      const key = normalizeText(line).replace(/[^a-z0-9]+/g, " ").trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .slice(0, 6);
+}
+async function researchTechnicalDescription(productName: string, category: string) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) return null;
+  try {
+    const response = await fetch(`${supabaseUrl.replace(/\/+$/, "")}/functions/v1/ai-media-unified/describe`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${serviceKey}`, apikey: serviceKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: productName,
+        category,
+        researchWeb: true,
+        rules: "Pesquise o modelo exato antes de responder. Priorize especificações e recursos confirmados por pesquisa na web. Coloque cada especificação real em uma linha separada; não complete lacunas nem invente dados. Preserve exatamente a marca, a linha, a geração e a variante do produto. A descrição pesquisada será usada somente para criar cards técnicos da prévia e não será gravada no cadastro.",
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || data?.error || data?.provider !== "google" || typeof data?.description !== "string") return null;
+    return { description: data.description, source: "web_research" as const };
+  } catch (error) {
+    console.warn("[carousel-spec-research] pesquisa indisponível:", error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+function createTechnicalCards(productName: string, description: string, runId: string, source: "catalog" | "web_research"): ImageCandidate[] {
+  const facts = technicalFacts(description);
+  if (facts.length < 2) return [];
+  const categories: Array<{ title: string; pattern: RegExp }> = [
+    { title: "TELA E CÂMERAS", pattern: /\b(tela|display|polegadas|amoled|oled|ips|resolu[cç][aã]o|hz|c[aâ]mera|lente|sensor|mp)\b/i },
+    { title: "DESEMPENHO E MEMÓRIA", pattern: /\b(processador|chip|ram|rom|mem[oó]ria|armazenamento|gb|tb)\b/i },
+    { title: "BATERIA E CONECTIVIDADE", pattern: /\b(bateria|mah|autonomia|carregamento|5g|nfc|wi-?fi|bluetooth|android|conectividade|resist[eê]ncia)\b/i },
+  ];
+  const assigned = new Set<string>();
+  const groups: Array<{ title: string; facts: string[] }> = [];
+  for (const category of categories) {
+    const matched = facts.filter((fact) => category.pattern.test(fact) && !assigned.has(fact)).slice(0, 3);
+    if (matched.length) {
+      matched.forEach((fact) => assigned.add(fact));
+      groups.push({ title: category.title, facts: matched });
+    }
+  }
+  const remaining = facts.filter((fact) => !assigned.has(fact));
+  if (remaining.length) groups.push({ title: "RECURSOS DO MODELO", facts: remaining.slice(0, 3) });
+  if (!groups.length) groups.push({ title: "ESPECIFICAÇÕES", facts: facts.slice(0, 3) });
+  return groups.slice(0, 3).map((group, index) => ({
+    url: `spec-card://${runId}/${index + 1}`,
+    sourceKind: "generated",
+    kind: "technical",
+    role: "technical_card",
+    topic: group.title,
+    cardTitle: group.title,
+    facts: group.facts,
+    reason: `Card técnico em português com dados do modelo ${productName}, obtidos de ${source === "web_research" ? "pesquisa na web" : "descrição cadastrada"}.`,
+  }));
 }
 function bytesToBase64(bytes: Uint8Array) {
   let binary = "";
@@ -133,20 +193,6 @@ function base64ToBytes(value: string) {
 }
 function dataUrl(bytes: Uint8Array, mime: string) {
   return `data:${mime};base64,${bytesToBase64(bytes)}`;
-}
-function createTechnicalBanner(productName: string, description: string): ImageCandidate | null {
-  const facts = technicalFacts(description);
-  if (facts.length < 2) return null;
-  const boxes = facts.map((line, index) => {
-    const col = index % 2;
-    const row = Math.floor(index / 2);
-    const x = 64 + col * 536;
-    const y = 270 + row * 135;
-    return `<rect x="${x}" y="${y}" width="492" height="104" rx="18" fill="#f7fafc" stroke="#dce8ed"/><circle cx="${x + 34}" cy="${y + 36}" r="8" fill="#14b8a6"/><text x="${x + 58}" y="${y + 46}" class="fact">${escapeXml(line)}</text>`;
-  }).join("");
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800"><rect width="1200" height="800" rx="34" fill="#ffffff"/><rect width="1200" height="225" rx="34" fill="#0f2638"/><rect y="190" width="1200" height="35" fill="#0f2638"/><text x="64" y="74" fill="#48d6c4" font-family="Arial,sans-serif" font-size="24" font-weight="700" letter-spacing="2">INFORMAÇÕES DO PRODUTO</text><text x="64" y="145" fill="#ffffff" font-family="Arial,sans-serif" font-size="40" font-weight="700">${escapeXml(productName).slice(0, 48)}</text><text x="64" y="190" fill="#d2e5eb" font-family="Arial,sans-serif" font-size="20">Dados extraídos da descrição cadastrada</text><style>.fact{font:600 22px Arial,sans-serif;fill:#102a3b}</style>${boxes}<text x="64" y="748" fill="#607d8b" font-family="Arial,sans-serif" font-size="17">Informações em português conforme cadastro do produto</text></svg>`;
-  const bytes = new TextEncoder().encode(svg);
-  return { url: dataUrl(bytes, "image/svg+xml"), sourceKind: "generated", kind: "technical", reason: "Banner em português com especificações copiadas da descrição cadastrada." };
 }
 function sha256Hex(bytes: Uint8Array) {
   return crypto.subtle.digest("SHA-256", bytes).then((digest) => [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join(""));
@@ -324,24 +370,29 @@ async function askWorkerVision(client: any, productName: string, content: any[])
   return null;
 }
 async function curateVisually(productName: string, description: string, candidates: ImageCandidate[], existingImages: ImageCandidate[]): Promise<CurationResult> {
-  if (!candidates.length && !existingImages.length) return { candidates: [], approvedExistingUrls: [], approvedExistingTechnicalCard: false };
+  if (!candidates.length && !existingImages.length) return { candidates: [], approvedExistingUrls: [], approvedExistingTechnicalUrls: [] };
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   try {
     const identity = productIdentityTokens(productName).join(" ");
     const existingForVision = existingImages.slice(0, MAX_EXISTING_VISION_IMAGES);
-    const candidatesForVision = candidates.slice(0, MAX_VISION_IMAGES);
-    const content: any[] = [{ type: "text", text: `Tarefa: auditoria visual conservadora para catálogo. Produto solicitado, exato: "${productName}". Tokens de identidade obrigatórios: ${identity}. Descrição cadastrada (única fonte permitida para validar especificações): ${description.slice(0, 3000)}. Avalie imagens EXISTENTES e CANDIDATAS separadamente. Imagens existentes podem conter erros; não presuma que estão certas.
+    const candidatesForVision = [
+      candidates.filter((candidate) => candidate.queryIndex === 0).slice(0, 4),
+      candidates.filter((candidate) => candidate.queryIndex === 1).slice(0, 2),
+      candidates.filter((candidate) => candidate.queryIndex === 2).slice(0, 4),
+      candidates.filter((candidate) => candidate.queryIndex === 3).slice(0, 2),
+    ].flat().slice(0, MAX_VISION_IMAGES);
+    const content: any[] = [{ type: "text", text: `Tarefa: auditoria visual conservadora para catálogo. Produto solicitado, exato: "${productName}". Tokens de identidade obrigatórios: ${identity}. Descrição técnica efetiva (cadastro ou pesquisa web validada, única fonte permitida para conferir especificações): ${description.slice(0, 3000)}. Avalie imagens EXISTENTES e CANDIDATAS separadamente. Imagens existentes podem conter erros; não presuma que estão certas.
 
 REGRAS INEGOCIÁVEIS:
 1) Só aprove produto da mesma marca, linha, geração e variante exata. Não aceite Plus no lugar de Ultra, Pro no lugar de padrão, Max no lugar de Pro, outra geração ou outro modelo parecido. Se o título/página não prova o modelo exato, rejeite.
 2) A imagem precisa ser nitidamente relacionada ao produto identificado no título e na página de origem fornecidos junto dela. Não conclua modelo apenas por ser parecido.
 3) Fotos sem texto devem mostrar o produto exato; uma variante de memória/capacidade diferente não pode ser inferida como igual se houver diferença visível ou escrita.
 4) Qualquer texto legível dentro de QUALQUER imagem deve estar em português do Brasil. Foto sem palavras: language="none". Texto em inglês, espanhol ou outro idioma: rejeite.
-5) Banner informativo só pode ser aprovado se estiver em português e cada afirmação técnica for confirmada literalmente pela descrição cadastrada acima. Não traduza, complete lacunas nem aceite número/especificação não confirmado.
-6) Remova imagens iguais ou quase iguais, inclusive imagens candidatas que repitam uma imagem existente. Use duplicate_of com índice positivo quando houver duplicata; use null somente se a imagem for única.
+5) Banner informativo só pode ser aprovado se estiver em português e cada afirmação técnica for confirmada literalmente pela descrição ou pesquisa validada acima. Não traduza, complete lacunas nem aceite número/especificação não confirmado.
+6) Remova imagens iguais ou quase iguais, inclusive imagens candidatas que repitam uma imagem existente. unique_visual é obrigatório e só pode ser true se você comparou a imagem com todas as outras; duplicate_of deve ser null somente para uma imagem única.
 7) Priorize fotos limpas do produto (frente, traseira, lateral, detalhe, cores) e depois até 3 banners informativos exclusivos, todos coerentes. Não force a quantidade: na dúvida, rejeite.
 
-Responda SOMENTE JSON válido, um objeto para cada imagem. Campos obrigatórios: source (existing ou candidate), index (número da imagem dentro da sua categoria), keep (booleano), exact_match (true somente se houver confirmação exata), group (cover|front|rear|side|detail|screen|colors|technical_card|accessories|other), language (pt-BR quando houver qualquer texto em português; none somente se não houver texto legível), specs_match (true somente se TODAS as afirmações do banner forem confirmadas na descrição), topic (ex.: câmera, tela, bateria, processador, memória, resistência), duplicate_of (índice positivo ou null obrigatório; null somente se for única). Para as imagens existentes, mantenha-as aprovadas somente se passarem por todas as mesmas regras. Exemplo: [{"source":"candidate","index":1,"keep":true,"exact_match":true,"group":"cover","language":"none","specs_match":true,"topic":"","duplicate_of":null}].` }];
+Responda SOMENTE JSON válido, um objeto para cada imagem. Campos obrigatórios: source (existing ou candidate), index (número da imagem dentro da sua categoria), keep (booleano), exact_match (true somente se houver confirmação exata), group (cover|front|rear|side|detail|screen|colors|technical_card|accessories|other), language (pt-BR quando houver qualquer texto em português; none somente se não houver texto legível), specs_match (true somente se TODAS as afirmações técnicas forem confirmadas na descrição ou pesquisa validada), topic (ex.: câmera, tela, bateria, processador, memória, resistência), unique_visual (booleano obrigatório), duplicate_of (índice positivo ou null obrigatório; null somente se for única). Para as imagens existentes, mantenha-as aprovadas somente se passarem por todas as mesmas regras. Exemplo: [{"source":"candidate","index":1,"keep":true,"exact_match":true,"group":"cover","language":"none","specs_match":true,"topic":"","unique_visual":true,"duplicate_of":null}].` }];
     existingForVision.forEach((image, index) => {
       content.push({ type: "text", text: `IMAGEM EXISTENTE ${index + 1}: item já presente na galeria; valide modelo, texto e duplicação, não presuma que está correta.` });
       content.push({ type: "image_url", image_url: { url: dataUrl(image.bytes!, image.mime!) } });
@@ -366,14 +417,16 @@ Responda SOMENTE JSON válido, um objeto para cada imagem. Campos obrigatórios:
     }
     if (!text) text = await askGoogleVision(db(), content) || "";
     const decisions = parseJsonArray(text);
-    if (!Array.isArray(decisions)) return { candidates: [], approvedExistingUrls: [], approvedExistingTechnicalCard: false };
+    if (!Array.isArray(decisions)) return { candidates: [], approvedExistingUrls: [], approvedExistingTechnicalUrls: [] };
     const allowedRoles = new Set<CarouselRole>(["cover", "front", "rear", "side", "detail", "screen", "colors", "technical_card", "accessories", "other"]);
     const roleLimits: Record<CarouselRole, number> = { cover: 1, front: 1, rear: 1, side: 1, detail: 2, screen: 1, colors: 1, technical_card: 3, accessories: 1, other: 1 };
     const counts = new Map<CarouselRole, number>();
     const topics = new Set<string>();
     const accepted: Array<{ candidate: ImageCandidate; role: CarouselRole; index: number }> = [];
     const approvedExisting = new Set<string>();
-    let approvedExistingTechnicalCard = false;
+    const approvedExistingTechnical = new Set<string>();
+    let acceptedPhotoCount = 0;
+    let acceptedTechnicalCount = 0;
     const seenIndex = new Set<string>();
     for (const decision of decisions) {
       const source = String(decision?.source || "").toLowerCase();
@@ -389,24 +442,27 @@ Responda SOMENTE JSON válido, um objeto para cada imagem. Campos obrigatórios:
       if (!allowedRoles.has(roleValue)) continue;
       const language = normalizeLanguage(decision?.language);
       if (!(language === "none" || language === "pt-br" || language === "pt" || language === "portuguese")) continue;
-      if (decision?.unique_visual === false) continue;
+      if (decision?.unique_visual !== true) continue;
       if (roleValue === "technical_card") {
         if (!(language === "pt-br" || language === "pt" || language === "portuguese")) continue;
         if (decision?.specs_match !== true) continue;
       }
       if ((counts.get(roleValue) || 0) >= roleLimits[roleValue]) continue;
+      if (source === "candidate" && (roleValue === "technical_card" ? acceptedTechnicalCount >= 3 : acceptedPhotoCount >= 5)) continue;
       const topic = normalizeText(String(decision?.topic || "")).trim();
       if (roleValue === "technical_card" && topic && topics.has(topic)) continue;
       const candidate = sourceImages[index];
       if (roleValue === "accessories" && !/acessor|kit|bundle|combo/i.test(productName)) continue;
-      counts.set(roleValue, (counts.get(roleValue) || 0) + 1);
-      if (roleValue === "technical_card" && topic) topics.add(topic);
       if (source === "existing") {
+        counts.set(roleValue, (counts.get(roleValue) || 0) + 1);
+        if (roleValue === "technical_card" && topic) topics.add(topic);
         approvedExisting.add(candidate.url);
-        if (roleValue === "technical_card") approvedExistingTechnicalCard = true;
+        if (roleValue === "technical_card") approvedExistingTechnical.add(candidate.url);
         continue;
       }
       if (accepted.length >= 8) continue;
+      counts.set(roleValue, (counts.get(roleValue) || 0) + 1);
+      if (roleValue === "technical_card" && topic) topics.add(topic);
       accepted.push({
         candidate: {
           ...candidate,
@@ -420,16 +476,18 @@ Responda SOMENTE JSON válido, um objeto para cada imagem. Campos obrigatórios:
         role: roleValue,
         index,
       });
+      if (roleValue === "technical_card") acceptedTechnicalCount += 1;
+      else acceptedPhotoCount += 1;
     }
     accepted.sort((a, b) => rolePriority(a.role) - rolePriority(b.role) || a.index - b.index);
     return {
       candidates: accepted.map((entry) => entry.candidate),
       approvedExistingUrls: existingForVision.filter((image) => approvedExisting.has(image.url)).map((image) => image.url),
-      approvedExistingTechnicalCard,
+      approvedExistingTechnicalUrls: [...approvedExistingTechnical],
     };
   } catch (error) {
     console.warn("[carousel-vision] nenhuma imagem aprovada pela auditoria:", error instanceof Error ? error.message : String(error));
-    return { candidates: [], approvedExistingUrls: [], approvedExistingTechnicalCard: false };
+    return { candidates: [], approvedExistingUrls: [], approvedExistingTechnicalUrls: [] };
   }
 }
 function bytesToBase64Url(bytes: Uint8Array) {
@@ -440,13 +498,16 @@ async function hmacKey() {
   if (!secret) throw new Error("service_role_key_unavailable");
   return crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
 }
-function candidatePayload(tenantId: string, productName: string, runId: string, candidate: { url: string; kind: string; sourceKind: string }, expires: number) {
-  return `${tenantId}\n${productName}\n${runId}\n${candidate.kind}\n${candidate.sourceKind}\n${expires}\n${candidate.url}`;
+function candidatePayload(tenantId: string, productName: string, runId: string, candidate: { url: string; kind: string; sourceKind: string; cardTitle?: string; facts?: string[] }, expires: number) {
+  const signedFacts = candidate.sourceKind === "generated" && Array.isArray(candidate.facts) && candidate.facts.length
+    ? `\n${candidate.cardTitle || ""}\n${JSON.stringify(candidate.facts)}`
+    : "";
+  return `${tenantId}\n${productName}\n${runId}\n${candidate.kind}\n${candidate.sourceKind}\n${expires}\n${candidate.url}${signedFacts}`;
 }
 async function signCandidate(tenantId: string, productName: string, runId: string, candidate: ImageCandidate) {
   const expires = Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS;
   const key = await hmacKey();
-  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(candidatePayload(tenantId, productName, runId, candidate))));
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(candidatePayload(tenantId, productName, runId, candidate, expires))));
   return `${expires}.${bytesToBase64Url(mac)}`;
 }
 async function verifyCandidateToken(tenantId: string, productName: string, runId: string, candidate: any) {
@@ -456,8 +517,15 @@ async function verifyCandidateToken(tenantId: string, productName: string, runId
     const expires = Number(expiresText);
     const now = Math.floor(Date.now() / 1000);
     if (!Number.isFinite(expires) || expires < now || expires > now + TOKEN_TTL_SECONDS + 60 || !signatureText) return false;
-    const normalized = { url: candidate.url, kind: String(candidate.kind || ""), sourceKind: String(candidate.sourceKind || "") };
+    const normalized = {
+      url: candidate.url,
+      kind: String(candidate.kind || ""),
+      sourceKind: String(candidate.sourceKind || ""),
+      ...(typeof candidate.cardTitle === "string" ? { cardTitle: candidate.cardTitle } : {}),
+      ...(Array.isArray(candidate.facts) ? { facts: candidate.facts } : {}),
+    };
     if (!["photo", "technical"].includes(normalized.kind) || !["web", "mercadolivre", "generated"].includes(normalized.sourceKind)) return false;
+    if (normalized.url.startsWith("spec-card://") && (normalized.sourceKind !== "generated" || normalized.kind !== "technical" || !normalized.cardTitle || !Array.isArray(normalized.facts) || normalized.facts.length < 1 || normalized.facts.length > 3 || normalized.facts.some((fact: unknown) => typeof fact !== "string" || fact.length > 110))) return false;
     const signature = base64ToBytes(signatureText.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - signatureText.length % 4) % 4));
     return await crypto.subtle.verify("HMAC", await hmacKey(), signature, new TextEncoder().encode(candidatePayload(tenantId, productName, runId, normalized, expires)));
   } catch { return false; }
@@ -466,13 +534,25 @@ async function materializeCandidate(client: any, tenantId: string, runId: string
   let bytes: Uint8Array;
   let mime: string;
   if (candidate.sourceKind === "generated") {
-    const match = String(candidate.url).match(/^data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)$/);
-    if (!match) throw new Error("generated_banner_invalid");
-    bytes = base64ToBytes(match[1]);
-    if (bytes.length > 200_000) throw new Error("generated_banner_too_large");
-    const svg = new TextDecoder().decode(bytes).trim();
-    if (!/^<svg\b/i.test(svg) || /<script\b|onload\s*=|javascript:/i.test(svg)) throw new Error("generated_banner_unsafe");
-    mime = "image/svg+xml";
+    const rendered = String(candidate.renderedImage || "");
+    const pngMatch = rendered.match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
+    if (pngMatch) {
+      if (rendered.length > MAX_STORED_IMAGE_BYTES * 1.4) throw new Error("generated_card_too_large");
+      bytes = base64ToBytes(pngMatch[1]);
+      if (bytes.length > MAX_STORED_IMAGE_BYTES || detectImageMime(bytes, "image/png") !== "image/png" || bytes.length < 24) throw new Error("generated_card_invalid");
+      const width = ((bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19]) >>> 0;
+      const height = ((bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23]) >>> 0;
+      if (width < 64 || height < 64 || width > 2048 || height > 2048) throw new Error("generated_card_dimensions_invalid");
+      mime = "image/png";
+    } else {
+      const legacySvg = String(candidate.url).match(/^data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)$/);
+      if (!legacySvg) throw new Error("generated_banner_invalid");
+      bytes = base64ToBytes(legacySvg[1]);
+      if (bytes.length > 200_000) throw new Error("generated_banner_too_large");
+      const svg = new TextDecoder().decode(bytes).trim();
+      if (!/^<svg\b/i.test(svg) || /<script\b|onload\s*=|javascript:/i.test(svg)) throw new Error("generated_banner_unsafe");
+      mime = "image/svg+xml";
+    }
   } else {
     if (!validExternalUrl(candidate.url)) throw new Error("image_source_invalid");
     const image = await downloadExternalImage(candidate.url, MAX_STORED_IMAGE_BYTES);
@@ -502,6 +582,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const tenantId = String(body.tenantId || "").trim();
     const productName = String(body.productName || "").trim();
+    const category = String(body.category || "").trim();
     const description = String(body.description || "").trim();
     const runId = String(body.runId || "").trim();
     if (!tenantId || !productName) return jsonResponse({ error: "tenant_and_product_required" }, 400);
@@ -540,7 +621,16 @@ Deno.serve(async (req) => {
       { query: `site:mercadolivre.com.br "${productName}"`, sourceKind: "mercadolivre" },
       { query: `site:mercadolivre.com.br "${productName}" ficha técnica`, sourceKind: "mercadolivre" },
     ];
-    const groups = await Promise.all(queries.map((item) => searchImages(item.query)));
+    const catalogFacts = technicalFacts(description);
+    const researchPromise = catalogFacts.length >= 2
+      ? Promise.resolve({ description, source: "catalog" as const })
+      : researchTechnicalDescription(productName, category);
+    const [groups, researched] = await Promise.all([
+      Promise.all(queries.map((item) => searchImages(item.query))),
+      researchPromise,
+    ]);
+    const factualDescription = researched?.description || description;
+    const factSource = researched?.source || "catalog";
     const sourceMap = new Map<string, SearchEntry>();
     groups.forEach((results, queryIndex) => {
       const requestedSourceKind = queries[queryIndex].sourceKind;
@@ -554,9 +644,12 @@ Deno.serve(async (req) => {
       }
     });
     const existingKeys = new Set(existingUrls.map(stableUrlKey));
-    const entries = [...sourceMap.values()]
-      .filter((entry) => !existingKeys.has(stableUrlKey(entry.imageUrl)))
-      .sort((a, b) => a.queryIndex - b.queryIndex || sourceScore(b.pageUrl) - sourceScore(a.pageUrl))
+    const allEntries = [...sourceMap.values()]
+      .filter((entry) => !existingKeys.has(stableUrlKey(entry.imageUrl)));
+    const entries = queries.flatMap((_, queryIndex) => allEntries
+      .filter((entry) => entry.queryIndex === queryIndex)
+      .sort((a, b) => sourceScore(b.pageUrl) - sourceScore(a.pageUrl))
+      .slice(0, 8))
       .slice(0, MAX_SEARCH_RESULTS);
     const existingReviewUrls = [...new Map(existingUrls.filter(validExternalUrl).map((url) => [stableUrlKey(url), url])).values()].slice(0, MAX_EXISTING_VISION_IMAGES);
     const [downloaded, existingDownloaded] = await Promise.all([
@@ -600,17 +693,24 @@ Deno.serve(async (req) => {
         url: item.entry.imageUrl,
         sourceKind: item.entry.sourceKind,
         kind: "photo",
+        queryIndex: item.entry.queryIndex,
         reason: `Título: ${item.entry.title} · página: ${item.entry.pageUrl} · ${item.entry.description}`.slice(0, 1200),
         bytes: item.bytes,
         mime: item.mime,
         hash: item.hash,
       });
     }
-    const curation = await curateVisually(productName, description, candidates, existingReferences);
-    if (!curation.approvedExistingTechnicalCard && !curation.candidates.some((candidate) => candidate.kind === "technical")) {
-      const banner = createTechnicalBanner(productName, description);
-      if (banner) curation.candidates.push(banner);
-    }
+    const curation = await curateVisually(productName, factualDescription, candidates, existingReferences);
+    const generatedTechnicalCards = curation.approvedExistingTechnicalUrls.length
+      ? []
+      : createTechnicalCards(productName, factualDescription, previewRunId, factSource);
+    const photoCandidates = curation.candidates.filter((candidate) => candidate.kind === "photo").slice(0, 5);
+    const externalTechnicalCandidates = curation.candidates.filter((candidate) => candidate.kind === "technical").slice(0, 3);
+    curation.candidates = [
+      ...photoCandidates,
+      ...(generatedTechnicalCards.length ? generatedTechnicalCards : externalTechnicalCandidates),
+    ].slice(0, 8);
+    const technicalCardCount = curation.approvedExistingTechnicalUrls.length + curation.candidates.filter((candidate) => candidate.kind === "technical").length;
     const signedCandidates = [];
     for (const candidate of curation.candidates.slice(0, 8)) {
       signedCandidates.push({
@@ -620,6 +720,8 @@ Deno.serve(async (req) => {
         kind: candidate.kind,
         role: candidate.role,
         topic: candidate.topic,
+        cardTitle: candidate.cardTitle,
+        facts: candidate.facts,
         reason: candidate.reason,
         token: await signCandidate(tenantId, productName, previewRunId, candidate),
       });
@@ -629,7 +731,11 @@ Deno.serve(async (req) => {
       runId: previewRunId,
       existingUrls,
       approvedExistingUrls: curation.approvedExistingUrls,
+      approvedExistingTechnicalUrls: curation.approvedExistingTechnicalUrls,
       candidates: signedCandidates,
+      technicalNotice: technicalCardCount === 0
+        ? "Não encontrei especificações suficientes confirmadas no cadastro ou na pesquisa online. Não inventei dados; preencha a descrição técnica e gere a prévia novamente."
+        : null,
       searched: entries.length,
       verifiedSources: { web: entries.filter((entry) => entry.sourceKind === "web").length, mercadolivre: entries.filter((entry) => entry.sourceKind === "mercadolivre").length },
       curation: signedCandidates.length < candidates.length ? "strict_visual" : "strict_visual_complete",

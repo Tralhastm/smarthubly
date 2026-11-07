@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import html2canvas from 'html2canvas';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useProducts, useAddProduct, useUpdateProduct, useDeleteProduct, type Product } from '@/hooks/useProducts';
 import type { ProductVariant } from '@/hooks/useProductExtras';
@@ -46,8 +47,8 @@ const parseBrazilianMoney = (value: unknown) => {
 
 type ParsedVariant = { name: string; price: number; cost_price?: number; resale_price?: number; available?: boolean };
 type ParsedProduct = { name: string; price: number; cost_price?: number; resale_price?: number; category: string; description: string; condition?: 'new' | 'grade_a'; available?: boolean; variants?: ParsedVariant[]; needs_price_review?: boolean; supplier_id?: string | null; supplier_name?: string };
-type CarouselCandidate = { url: string; source?: string; sourceKind?: 'web' | 'mercadolivre' | 'generated'; kind?: 'photo' | 'technical'; role?: string; topic?: string; reason?: string; token?: string };
-type CarouselDraft = { product: Product; existing: MediaItem[]; candidates: CarouselCandidate[]; selected: string[]; verifiedExisting: string[]; loading?: boolean; error?: string };
+type CarouselCandidate = { url: string; source?: string; sourceKind?: 'web' | 'mercadolivre' | 'generated'; kind?: 'photo' | 'technical'; role?: string; topic?: string; cardTitle?: string; facts?: string[]; reason?: string; token?: string };
+type CarouselDraft = { product: Product; existing: MediaItem[]; candidates: CarouselCandidate[]; selected: string[]; verifiedExisting: string[]; verifiedExistingTechnical: string[]; notice?: string; loading?: boolean; error?: string };
 
 const getImportedPrices = (product: ParsedProduct, priceType: string) => {
   if (priceType === 'color') return { cost: 0, sale: 0 };
@@ -227,6 +228,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
   const [carouselRunning, setCarouselRunning] = useState(false);
   const [carouselRunId, setCarouselRunId] = useState('');
   const bulkDescriptionCancelled = useRef(false);
+  const technicalCardElements = useRef<Record<string, HTMLDivElement | null>>({});
 
   const escapeHtml = (value: unknown) => String(value ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -1449,6 +1451,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
       candidates: [],
       selected: [],
       verifiedExisting: [],
+      verifiedExistingTechnical: [],
       loading: true,
     })));
     for (const product of targets) {
@@ -1469,11 +1472,25 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         const verifiedExisting = Array.isArray(data?.approvedExistingUrls)
           ? data.approvedExistingUrls.filter((url: unknown): url is string => typeof url === 'string' && existingUrls.includes(url))
           : [];
-        const initial = [...verifiedExisting, ...candidates.map(candidate => candidate.url)]
+        const verifiedExistingTechnical = Array.isArray(data?.approvedExistingTechnicalUrls)
+          ? data.approvedExistingTechnicalUrls.filter((url: unknown): url is string => typeof url === 'string' && verifiedExisting.includes(url))
+          : [];
+        const verifiedExistingPhotos = verifiedExisting.filter(url => !verifiedExistingTechnical.includes(url));
+        const photoCandidates = candidates.filter(candidate => candidate.kind !== 'technical');
+        const technicalCandidates = candidates.filter(candidate => candidate.kind === 'technical');
+        const initial = [
+          ...verifiedExistingPhotos.slice(0, 4),
+          ...photoCandidates.slice(0, 4).map(candidate => candidate.url),
+          ...verifiedExistingTechnical.slice(0, 2),
+          ...technicalCandidates.slice(0, 2).map(candidate => candidate.url),
+          ...verifiedExistingPhotos.slice(4),
+          ...photoCandidates.slice(4).map(candidate => candidate.url),
+          ...technicalCandidates.slice(2).map(candidate => candidate.url),
+        ]
           .filter((url, index, list) => list.indexOf(url) === index)
           .slice(0, 10);
         setCarouselDrafts(current => current.map(draft => draft.product.id === product.id
-          ? { ...draft, candidates, verifiedExisting, selected: initial, loading: false }
+          ? { ...draft, candidates, verifiedExisting, verifiedExistingTechnical, selected: initial, notice: typeof data?.technicalNotice === 'string' ? data.technicalNotice : undefined, loading: false }
           : draft));
       } catch (error) {
         setCarouselDrafts(current => current.map(draft => draft.product.id === product.id
@@ -1505,17 +1522,31 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
         const storedByPreviewUrl = new Map<string, string>();
         if (selectedCandidates.length) {
           if (!carouselRunId) throw new Error('Gere a prévia novamente antes de salvar.');
+          const candidatesForSave = [];
+          for (const candidate of selectedCandidates) {
+            let renderedImage: string | undefined;
+            if (candidate.sourceKind === 'generated' && candidate.facts?.length) {
+              const element = technicalCardElements.current[candidate.url];
+              if (!element) throw new Error('Não foi possível capturar o card técnico. Gere a prévia novamente.');
+              const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#ffffff', logging: false });
+              renderedImage = canvas.toDataURL('image/png');
+            }
+            candidatesForSave.push({
+              url: candidate.url,
+              token: candidate.token,
+              kind: candidate.kind,
+              sourceKind: candidate.sourceKind,
+              cardTitle: candidate.cardTitle,
+              facts: candidate.facts,
+              renderedImage,
+            });
+          }
           const { data, error } = await unifiedInvoke('carousel-curator', '', {
             action: 'persist_selected',
             tenantId,
             productName: draft.product.name,
             runId: carouselRunId,
-            selectedCandidates: selectedCandidates.map(candidate => ({
-              url: candidate.url,
-              token: candidate.token,
-              kind: candidate.kind,
-              sourceKind: candidate.sourceKind,
-            })),
+            selectedCandidates: candidatesForSave,
           }, { timeoutMs: 300_000, retries: 1 });
           if (error) throw error;
           for (const saved of Array.isArray(data?.saved) ? data.saved : []) {
@@ -1922,7 +1953,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-base font-semibold text-foreground flex items-center gap-2"><Images className="h-4 w-4 text-primary" /> Prévia do Carrossel IA</h3>
-                <p className="text-xs text-muted-foreground mt-1">Modelo exato obrigatório. Imagens atuais também são revisadas; as não confirmadas ficam desmarcadas. Banners só entram em português e com dados conferidos na descrição. Nada é copiado ao Supabase antes de salvar.</p>
+                <p className="text-xs text-muted-foreground mt-1">Modelo exato obrigatório. Fotos e cards técnicos são revisados separadamente; quando faltarem especificações na descrição, a prévia tenta pesquisá-las sem alterar o cadastro. Nada é copiado ao Supabase antes de salvar.</p>
               </div>
               {!carouselRunning && <button onClick={() => setShowCarouselPreview(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>}
             </div>
@@ -1934,11 +1965,12 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               return (
                 <section key={draft.product.id} className="rounded-xl border border-border bg-card p-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <div><h4 className="font-semibold text-sm text-foreground">{draft.product.name}</h4><p className="text-[11px] text-muted-foreground">{draft.loading ? 'Buscando e filtrando imagens...' : `${draft.selected.length}/10 selecionadas · a primeira será a capa`}</p></div>
+                    <div><h4 className="font-semibold text-sm text-foreground">{draft.product.name}</h4><p className="text-[11px] text-muted-foreground">{draft.loading ? 'Buscando fotos e especificações, conferindo modelo e removendo repetidas...' : `${draft.selected.length}/10 selecionadas · a primeira será a capa`}</p></div>
                     {draft.loading ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : draft.error ? <span className="text-[11px] text-destructive">{draft.error}</span> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
                   </div>
                   {!draft.loading && (
                     <>
+                    {draft.notice && <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">{draft.notice}</p>}
                     {allImages.length === 0 && <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">Nenhuma imagem utilizável foi encontrada para este produto nesta rodada. Os outros produtos podem ser salvos normalmente.</p>}
                     <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
                       {allImages.map((item, index) => {
@@ -1946,10 +1978,28 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
                         return (
                           <button type="button" key={item.url} onClick={() => toggleCarouselImage(draft.product.id, item.url)}
                             className={`relative aspect-square overflow-hidden rounded-lg border-2 bg-secondary text-left transition-all ${active ? 'border-primary ring-2 ring-primary/30' : 'border-transparent opacity-60 hover:opacity-100'}`} title={item.existing ? (item.verified ? 'Imagem atual aprovada pela revisão visual' : 'Imagem atual não confirmada; revise modelo, texto e duplicatas antes de selecionar') : (item.reason || 'Imagem encontrada na web')}>
-                            <img src={item.url} alt={`${draft.product.name} ${index + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                            {!item.existing && item.sourceKind === 'generated' && item.kind === 'technical' && Array.isArray(item.facts) ? (
+                              <div ref={element => { if (element) technicalCardElements.current[item.url] = element; else delete technicalCardElements.current[item.url]; }}
+                                style={{ width: '100%', height: '100%', boxSizing: 'border-box', padding: 11, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 6, color: '#17354a', background: 'linear-gradient(145deg, #ffffff 0%, #edf4f5 100%)', fontFamily: 'Arial, sans-serif' }}>
+                                <div>
+                                  <div style={{ fontSize: 7, fontWeight: 800, letterSpacing: '0.1em', color: '#0f766e' }}>ESPECIFICAÇÕES DO PRODUTO</div>
+                                  <div style={{ marginTop: 5, fontSize: 11, lineHeight: 1.2, fontWeight: 800, overflowWrap: 'anywhere' }}>{draft.product.name}</div>
+                                  <div style={{ marginTop: 4, fontSize: 8, fontWeight: 700, color: '#39736e' }}>{item.cardTitle || 'RECURSOS EM DESTAQUE'}</div>
+                                </div>
+                                <div style={{ display: 'grid', gap: 5 }}>
+                                  {item.facts.slice(0, 3).map((fact, factIndex) => (
+                                    <div key={`${item.url}-${factIndex}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '6px 7px', border: '1px solid #dbe7e9', borderRadius: 7, background: '#ffffff', color: '#17354a', fontSize: 9, lineHeight: 1.2, fontWeight: 700 }}>
+                                      <span style={{ flex: '0 0 12px', width: 12, height: 12, borderRadius: 7, display: 'grid', placeItems: 'center', background: '#d9f0eb', color: '#0f766e', fontSize: 8 }}>✓</span>
+                                      <span>{fact}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div style={{ fontSize: 7, color: '#607b86' }}>Detalhes do modelo selecionado</div>
+                              </div>
+                            ) : <img src={item.url} alt={`${draft.product.name} ${index + 1}`} className="h-full w-full object-cover" loading="lazy" />}
                             <span className={`absolute left-1 top-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${active ? 'bg-primary text-primary-foreground' : 'bg-black/60 text-white'}`}>{active ? (index === 0 ? 'CAPA' : index + 1) : 'Adicionar'}</span>
                             {item.existing && <span className={`absolute bottom-1 right-1 rounded px-1 py-0.5 text-[8px] font-semibold text-white ${item.verified ? 'bg-emerald-700/90' : 'bg-amber-700/90'}`}>{item.verified ? 'ATUAL · VALIDADA' : 'ATUAL · REVISAR'}</span>}
-                            {!item.existing && <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[8px] font-semibold text-white">{item.sourceKind === 'mercadolivre' ? 'MERCADO LIVRE' : item.sourceKind === 'generated' ? 'BANNER' : 'WEB'}</span>}
+                            {!item.existing && <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1 py-0.5 text-[8px] font-semibold text-white">{item.sourceKind === 'mercadolivre' ? 'MERCADO LIVRE' : item.sourceKind === 'generated' ? 'CARD TÉCNICO' : 'WEB'}</span>}
                             {!item.existing && item.kind === 'technical' && <span className="absolute bottom-5 right-1 rounded bg-teal-700/90 px-1 py-0.5 text-[8px] font-semibold text-white">INFO · PT-BR</span>}
                           </button>
                         );
@@ -1961,7 +2011,7 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
               );
             })}
             <div className="flex items-center justify-between gap-2 border-t border-border pt-4">
-              <p className="text-[11px] text-muted-foreground">Busca na web e no Mercado Livre; confere modelo, origem, idioma e duplicatas. Imagens atuais não confirmadas ficam desmarcadas. Só imagens escolhidas são gravadas; até 10 mídias por galeria.</p>
+              <p className="text-[11px] text-muted-foreground">A prévia reserva espaço para fotos e cards técnicos. Cards usam fatos do cadastro ou pesquisa na web; imagens repetidas são rejeitadas. Itens não confirmados ficam desmarcados; só as escolhas são gravadas (até 10 mídias).</p>
               <div className="flex gap-2">
                 <button onClick={() => setShowCarouselPreview(false)} disabled={carouselRunning} className="rounded-lg bg-secondary text-foreground px-4 py-2 text-sm">Cancelar</button>
                 <button onClick={saveCarousels} disabled={carouselRunning || !carouselDrafts.some(draft => !draft.loading && draft.selected.length > 0)} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-4 py-2 text-sm disabled:opacity-50">
