@@ -97,6 +97,7 @@ const SupplierPanel = () => {
   const [priceText, setPriceText] = useState('');
   const [priceUpdateMode, setPriceUpdateMode] = useState<'cost' | 'resale' | 'both' | 'color'>('cost');
   const [importingPrices, setImportingPrices] = useState(false);
+  const [endingCatalog, setEndingCatalog] = useState(false);
   const [importResult, setImportResult] = useState<{ updated: string[]; notFound: string[]; invalid: string[]; warnings: string[]; available: number; exhausted: number; conflicts?: string[]; manualBlocked?: { id: string; name: string }[] } | null>(null);
   const [unlockIds, setUnlockIds] = useState<string[]>([]);
   const [exportIncludeCost, setExportIncludeCost] = useState(false);
@@ -1076,6 +1077,30 @@ const SupplierPanel = () => {
     }
   };
 
+  const expireCurrentCatalog = async () => {
+    if (!supplier || !token || endingCatalog) return;
+    if (!confirm(`Encerrar a lista vigente de ${supplier.name}? As ofertas desta lista deixarão de sustentar o estoque; outro fornecedor ainda pode manter um produto disponível. Para voltar a ofertar, importe uma nova lista.`)) return;
+
+    setEndingCatalog(true);
+    try {
+      const { data, error } = await supabase.rpc('expire_supplier_catalog_by_token', { _token: token });
+      if (error) throw error;
+      const status = data && typeof data === 'object' && !Array.isArray(data) ? data.status : undefined;
+      if (status !== 'expired') {
+        toast.info('Não há uma lista vigente para encerrar.');
+        return;
+      }
+      await fetchProducts();
+      setImportResult(null);
+      toast.success('Lista encerrada. O estoque da loja foi recalculado.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Não foi possível encerrar a lista: ${message}`);
+    } finally {
+      setEndingCatalog(false);
+    }
+  };
+
   const exportPrices = () => {
     const lines = products.map(p => {
       const sale = Number(p.price || 0);
@@ -1519,6 +1544,12 @@ const SupplierPanel = () => {
             <div className="rounded-lg border border-border bg-card p-4 space-y-2">
               <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground"><Upload className="h-5 w-5 text-primary" /> Importar preços</h2>
               <p className="text-xs text-muted-foreground">Cole a lista original do fornecedor ou escolha um arquivo .txt. O valor entre parênteses é o custo e as cores após o preço também são importadas. O produto pode mudar de fornecedor: a reconciliação sempre escolhe a menor oferta vigente.</p>
+              <div className="flex flex-col gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">A lista vigente não vence por tempo. Encerre-a manualmente quando as ofertas deixarem de valer; uma nova importação concluída também substitui a lista anterior.</p>
+                <button type="button" onClick={expireCurrentCatalog} disabled={endingCatalog || importingPrices} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-destructive/50 px-3 py-2 text-sm font-semibold text-destructive hover:bg-destructive/10 disabled:opacity-50">
+                  <PackageX className="h-4 w-4" /> {endingCatalog ? 'Encerrando lista…' : 'Encerrar lista atual'}
+                </button>
+              </div>
               <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-2">
                 <label className="block text-xs font-semibold text-foreground">O que deseja atualizar?</label>
                 <select value={priceUpdateMode} onChange={e => { setPriceUpdateMode(e.target.value as 'cost' | 'resale' | 'both' | 'color'); setImportResult(null); }} className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">

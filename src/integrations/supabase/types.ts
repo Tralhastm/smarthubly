@@ -5722,6 +5722,10 @@ export type Database = {
         Args: { _order_id: string; _payload: Json; _tenant_id: string }
         Returns: string
       }
+      expire_supplier_catalog_by_token: {
+        Args: { _token: string }
+        Returns: Json
+      }
       find_or_create_order_chat: {
         Args: {
           _customer_name: string
