@@ -14,6 +14,9 @@ function decodeUrl(value: string) {
 function validUrl(value: string) {
   return /^https?:\/\//i.test(value) && value.length < 2000 && !/sprite|favicon|placeholder|1x1|pixel\.gif/i.test(value);
 }
+function validProductSource(value: string) {
+  return validUrl(value) && !/(?:recondicionado|refurbished|renewed|usado|seminovo|open.?box|grade.?a|screenshot|captura|print|thumbnail|avatar|logo)/i.test(value);
+}
 function extractBing(html: string, max: number) {
   const out = new Set<string>();
   for (const re of [
@@ -73,8 +76,14 @@ Deno.serve(async (req) => {
     const existingUrls = Array.isArray(body.existingUrls) ? body.existingUrls.filter((url: unknown) => typeof url === "string") : [];
     if (!tenantId || !productName) return new Response(JSON.stringify({ error: "tenant_and_product_required" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
 
-    const query = `${productName} celular especificações oficial anúncio Mercado Livre`;
-    const sources = await searchImages(query);
+    const queries = [
+      `"${productName}" celular novo lacrado`,
+      `"${productName}" ficha técnica especificações`,
+      `"${productName}" Mercado Livre novo`,
+    ];
+    const sources = [...new Set((await Promise.all(queries.map(searchImages))).flat())]
+      .filter(validProductSource)
+      .slice(0, 36);
     const existing = new Set(existingUrls.map((url: string) => url.split("?")[0]));
     const candidates: Array<{ url: string; source: string; reason: string }> = [];
     const client = db();
