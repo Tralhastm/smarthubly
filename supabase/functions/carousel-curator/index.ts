@@ -19,7 +19,7 @@ function validProductSource(value: string, productName: string) {
   const source = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const product = productName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   for (const variant of ['pro', 'plus', 'ultra', 'max', 'mini', 'fe', 'fusion', 'neo']) {
-    if (new RegExp(`(?:^|[-_/])${variant}(?:[-_/]|$)`, 'i').test(source) && !new RegExp(`\\b${variant}\\b`, 'i').test(product)) return false;
+    if (new RegExp(`(?:^|[-_/])${variant}(?:[-_/.]|$)`, 'i').test(source) && !new RegExp(`\\b${variant}\\b`, 'i').test(product)) return false;
   }
   return true;
 }
