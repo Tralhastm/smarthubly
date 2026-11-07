@@ -14,8 +14,14 @@ function decodeUrl(value: string) {
 function validUrl(value: string) {
   return /^https?:\/\//i.test(value) && value.length < 2000 && !/sprite|favicon|placeholder|1x1|pixel\.gif/i.test(value);
 }
-function validProductSource(value: string) {
-  return validUrl(value) && !/(?:recondicionado|refurbished|renewed|usado|seminovo|open.?box|grade.?a|screenshot|captura|print|thumbnail|avatar|logo)/i.test(value);
+function validProductSource(value: string, productName: string) {
+  if (!validUrl(value) || /(?:recondicionado|refurbished|renewed|usado|seminovo|open.?box|grade.?a|screenshot|captura|print|thumbnail|avatar|logo|sem.?t[ií]tulo)/i.test(value)) return false;
+  const source = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const product = productName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  for (const variant of ['pro', 'plus', 'ultra', 'max', 'mini', 'fe', 'fusion', 'neo']) {
+    if (new RegExp(`(?:^|[-_/])${variant}(?:[-_/]|$)`, 'i').test(source) && !new RegExp(`\\b${variant}\\b`, 'i').test(product)) return false;
+  }
+  return true;
 }
 function extractBing(html: string, max: number) {
   const out = new Set<string>();
@@ -82,7 +88,7 @@ Deno.serve(async (req) => {
       `"${productName}" Mercado Livre novo`,
     ];
     const sources = [...new Set((await Promise.all(queries.map(searchImages))).flat())]
-      .filter(validProductSource)
+      .filter(source => validProductSource(source, productName))
       .slice(0, 36);
     const existing = new Set(existingUrls.map((url: string) => url.split("?")[0]));
     const candidates: Array<{ url: string; source: string; reason: string }> = [];
