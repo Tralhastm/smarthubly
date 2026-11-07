@@ -83,9 +83,11 @@ Deno.serve(async (req) => {
     if (!tenantId || !productName) return new Response(JSON.stringify({ error: "tenant_and_product_required" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
 
     const queries = [
+      `site:mercadolivre.com.br "${productName}" novo`,
+      `site:amazon.com.br "${productName}"`,
+      `site:magazineluiza.com.br "${productName}"`,
       `"${productName}" celular novo lacrado`,
       `"${productName}" ficha técnica especificações`,
-      `"${productName}" Mercado Livre novo`,
     ];
     const sources = [...new Set((await Promise.all(queries.map(searchImages))).flat())]
       .filter(source => validProductSource(source, productName))
