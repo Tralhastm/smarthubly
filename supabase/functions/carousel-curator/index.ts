@@ -17,6 +17,8 @@ function validUrl(value: string) {
 function extractBing(html: string, max: number) {
   const out = new Set<string>();
   for (const re of [
+    /murl(?:&quot;|")\s*:\s*(?:&quot;|")((?:https?:\/\/).*?)(?:&quot;|")/gi,
+    /["']murl["']\s*:\s*["'](https?:\/\/.*?)["']/gi,
     /murl(?:&quot;|\\?"):\s*(?:&quot;|\\?")([^&quot;\\"]+?)(?:&quot;|\\?")/gi,
     /"murl"\s*:\s*"([^"]+)"/gi,
   ]) {
