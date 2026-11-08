@@ -261,7 +261,7 @@ Deno.serve(async (req) => {
     ];
     const sourceGroups = await Promise.all(queries.map(searchImages));
     const sources = [...new Set(sourceGroups.flat().map(normalizeSourceUrl))]
-      .filter(validUrl)
+      .filter(source => validProductSource(source, productName))
       .sort((a, b) => sourceScore(b) - sourceScore(a));
     const existing = new Set(existingUrls.map((url: string) => url.split("?")[0]));
     const candidates: Array<{ url: string; source: string; reason: string }> = [];
