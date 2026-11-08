@@ -180,7 +180,7 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   if (candidates.length <= 1) return candidates;
   try {
-    const content: any[] = [{ type: "text", text: `Você é um curador visual extremamente rigoroso de catálogo brasileiro. Produto EXATO solicitado: \"${productName}\". Analise cada imagem e escolha no máximo 6. Só aprove uma imagem se conseguir confirmar visualmente a marca, linha, modelo e capacidade exatos; modelo parecido, geração diferente, versão Pro/Plus/Ultra/Max/Mini diferente, aparelho usado ou recondicionado deve ser rejeitado. Não deduza identidade apenas pela aparência. Rejeite prints, telas de marketplace, logos, colagens e imagens promocionais sem o produto identificável. NÃO mantenha duas imagens com o mesmo enquadramento ou composição, mesmo de domínios diferentes. Use no máximo uma imagem por grupo: cover, rear, side, detail, screen, accessories, colors, technical_card, front_rear_render ou other. Para technical_card, prefira português e não aceite duas fichas equivalentes. Se não puder confirmar, use keep:false. Responda SOMENTE JSON válido: [{\"index\":1,\"keep\":true,\"group\":\"cover\",\"language\":\"none\",\"exact_match\":true}].` }];
+    const content: any[] = [{ type: "text", text: `Você é um filtro visual de catálogo. Produto solicitado: \"${productName}\". Analise todas as opções e retorne no máximo 8 imagens APROVADAS do produto exato. Rejeite qualquer outro dispositivo, outra marca, outra linha, outra geração, versão Pro/Plus/Ultra/Max/Mini diferente, usado ou recondicionado. Não rejeite a imagem apenas por ser foto de anúncio: banners e fichas técnicas do próprio produto são válidos. Remova somente prints da página, logos sem produto, colagens ilegíveis e duplicatas visuais. Para formar uma galeria variada, escolha no máximo uma imagem de cada grupo: cover (frente), rear (traseira), side, detail, screen, accessories, colors, technical_card e front_rear_render. Priorize ângulos diferentes do mesmo aparelho. Se não conseguir identificar o produto, use keep:false. Responda SOMENTE JSON válido no formato [{\"index\":1,\"keep\":true,\"group\":\"cover\",\"language\":\"none\",\"exact_match\":true}].` }];
     const usable: number[] = [];
     const images = await Promise.all(candidates.map(candidate => imageAsBase64(candidate.url)));
     images.forEach((image, index) => {
@@ -206,15 +206,15 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
     }
     clearTimeout(timeout);
     if (!text) text = await askGoogleVision(db(), content) || "";
-    if (!text) return [];
+    if (!text) return candidates;
     const match = text.match(/\[[\s\S]*\]/);
-    if (!match) return [];
+    if (!match) return candidates;
     const decisions = JSON.parse(match[0]) as Array<{ index?: number; keep?: boolean; role?: string; language?: string; exact_match?: boolean }>;
     const usedRoles = new Set<string>();
     const selected: Array<{ url: string; source: string; reason: string }> = [];
     for (const decision of decisions) {
       const index = Number(decision.index || 0) - 1;
-      if (!decision.keep || decision.exact_match === false || index < 0 || index >= candidates.length || selected.length >= 6) continue;
+      if (!decision.keep || decision.exact_match === false || index < 0 || index >= candidates.length || selected.length >= 8) continue;
       const role = String((decision as any).group || (decision as any).role || "other");
       const language = String(decision.language || "none").toLowerCase();
       if (usedRoles.has(role) && role !== "other") continue;
@@ -222,10 +222,10 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
       usedRoles.add(role);
       selected.push(candidates[index]);
     }
-    return selected;
+    return selected.length > 0 ? selected : candidates;
   } catch (error) {
     console.warn("[carousel-vision] fallback heurístico:", error instanceof Error ? error.message : String(error));
-    return [];
+    return candidates;
   }
 }
 
@@ -270,7 +270,8 @@ Deno.serve(async (req) => {
       if (!saved || existing.has(saved.split("?")[0]) || candidates.some(candidate => candidate.url.split("?")[0] === saved.split("?")[0])) continue;
       candidates.push({ url: saved, source, reason: "Imagem encontrada para o modelo pesquisado e aprovada no filtro de formato, duplicidade e legibilidade." });
     }
-    return new Response(JSON.stringify({ productName, existingUrls, candidates, searched: sources.length, curation: "manual" }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
+    const curated = await curateVisually(productName, candidates);
+    return new Response(JSON.stringify({ productName, existingUrls, candidates: curated, searched: sources.length, curation: curated.length < candidates.length ? "visual_angles_manual" : "manual" }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
   }
