@@ -251,6 +251,7 @@ Deno.serve(async (req) => {
 
     const queries = [
       `site:mercadolivre.com.br "${productName}" novo`,
+      `site:mlstatic.com "${productName}"`,
       `site:amazon.com.br "${productName}"`,
       `site:magazineluiza.com.br "${productName}"`,
       `site:shopee.com.br "${productName}"`,
