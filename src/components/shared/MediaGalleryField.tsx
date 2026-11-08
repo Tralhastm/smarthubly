@@ -91,6 +91,12 @@ const MediaGalleryField = ({ value, onChange, tenantId, label }: Props) => {
           <label className="text-xs text-muted-foreground">
             {label} <span className="text-[10px]">(opcional — carrossel no cardápio, até {MAX})</span>
           </label>
+          {value.some(item => item.origin === 'ai-curation') && (
+            <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground">
+              <span className="h-3 w-3 rounded-sm border-2 border-yellow-400" />
+              Borda amarela: curadoria IA
+            </span>
+          )}
         </div>
       )}
 
@@ -130,7 +136,7 @@ const MediaGalleryField = ({ value, onChange, tenantId, label }: Props) => {
       {value.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
           {value.map((m, i) => (
-            <div key={`${m.url}-${i}`} className="relative group aspect-square overflow-hidden rounded-md border border-border bg-secondary">
+            <div key={`${m.url}-${i}`} title={m.origin === 'ai-curation' ? 'Imagem adicionada pela curadoria IA' : undefined} className={`relative group aspect-square overflow-hidden rounded-md bg-secondary ${m.origin === 'ai-curation' ? 'border-2 border-yellow-400 ring-1 ring-yellow-300/60' : 'border border-border'}`}>
               {m.type === 'video' ? (
                 <video src={m.url} className="h-full w-full object-cover" muted />
               ) : (
@@ -139,11 +145,6 @@ const MediaGalleryField = ({ value, onChange, tenantId, label }: Props) => {
               {m.type === 'video' && (
                 <span className="absolute top-1 left-1 rounded-full bg-black/60 p-1 text-white">
                   <Video className="h-3 w-3" />
-                </span>
-              )}
-              {m.origin === 'ai-curation' && (
-                <span title="Imagem adicionada pela curadoria IA" className="absolute top-1 right-1 rounded bg-primary px-1 py-0.5 text-[9px] font-semibold text-primary-foreground shadow">
-                  Curadoria IA
                 </span>
               )}
               <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-0.5 bg-black/60 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
