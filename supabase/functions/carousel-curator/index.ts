@@ -15,7 +15,7 @@ function validUrl(value: string) {
   return /^https?:\/\//i.test(value) && value.length < 2000 && !/sprite|favicon|placeholder|1x1|pixel\.gif/i.test(value);
 }
 function validProductSource(value: string, productName: string) {
-  if (!validUrl(value) || /(?:recondicionado|refurbished|renewed|usado|seminovo|open.?box|grade.?a|screenshot|captura|print|thumbnail|avatar|logo|sem.?t[ií]tulo)/i.test(value)) return false;
+  if (!validUrl(value) || /(?:recondicionado|refurbished|renewed|usado|seminovo|open.?box|grade.?a|screenshot|captura|print|thumbnail|avatar|logo|sem[-_ ]?t[-_ ]?tul|sem[-_ ]?t[ií]tulo)/i.test(value)) return false;
   const source = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const product = productName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   for (const variant of ['pro', 'plus', 'ultra', 'max', 'mini', 'fe', 'fusion', 'neo']) {
@@ -214,7 +214,7 @@ async function curateVisually(productName: string, candidates: Array<{ url: stri
     const selected: Array<{ url: string; source: string; reason: string }> = [];
     for (const decision of decisions) {
       const index = Number(decision.index || 0) - 1;
-      if (!decision.keep || decision.exact_match === false || index < 0 || index >= candidates.length || selected.length >= 6) continue;
+      if (!decision.keep || decision.exact_match !== true || index < 0 || index >= candidates.length || selected.length >= 6) continue;
       const role = String((decision as any).group || (decision as any).role || "other");
       const language = String(decision.language || "none").toLowerCase();
       if (usedRoles.has(role) && role !== "other") continue;
