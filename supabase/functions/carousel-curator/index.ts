@@ -261,26 +261,16 @@ Deno.serve(async (req) => {
     ];
     const sourceGroups = await Promise.all(queries.map(searchImages));
     const sources = [...new Set(sourceGroups.flat().map(normalizeSourceUrl))]
-      .filter(source => validProductSource(source, productName))
-      .sort((a, b) => sourceScore(b) - sourceScore(a))
-      .slice(0, 36);
+      .filter(validUrl)
+      .sort((a, b) => sourceScore(b) - sourceScore(a));
     const existing = new Set(existingUrls.map((url: string) => url.split("?")[0]));
     const candidates: Array<{ url: string; source: string; reason: string }> = [];
     const savedResults = await Promise.all(sources.map(async (source) => ({ source, saved: await persistImage(client, tenantId, source) })));
-    const hostCounts = new Map<string, number>();
-    const sourceSignatures = new Set<string>();
     for (const { source, saved } of savedResults) {
       if (!saved || existing.has(saved.split("?")[0]) || candidates.some(candidate => candidate.url.split("?")[0] === saved.split("?")[0])) continue;
-      const host = sourceHost(source);
-      const signature = source.toLowerCase().replace(/[?#].*$/, '').replace(/\b(?:thumb|small|medium|large|zoom|1x|2x)\b/g, '').replace(/[^a-z0-9]+/g, '');
-      if ((hostCounts.get(host) || 0) >= 1 || sourceSignatures.has(signature)) continue;
-      hostCounts.set(host, (hostCounts.get(host) || 0) + 1);
-      sourceSignatures.add(signature);
       candidates.push({ url: saved, source, reason: "Imagem encontrada para o modelo pesquisado e aprovada no filtro de formato, duplicidade e legibilidade." });
-      if (candidates.length >= 10) break;
     }
-    const curated = await curateVisually(productName, candidates);
-    return new Response(JSON.stringify({ productName, existingUrls, candidates: curated, searched: sources.length, curation: curated.length < candidates.length ? "visual" : "automatic" }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ productName, existingUrls, candidates, searched: sources.length, curation: "manual" }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
   }
