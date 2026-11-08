@@ -1442,10 +1442,27 @@ const TenantAdminProducts = ({ tenantId, isDropshipping, isAffiliate }: { tenant
     setCarouselRunning(true);
     try {
       for (const draft of ready) {
-        const selected = draft.selected.slice(0, 10);
+        const selectedUrls = draft.selected.slice(0, 10);
+        const existingUrls = new Set(getProductImageUrls(draft.product));
+        const existingOrigins = new Map<string, string>();
+        if (draft.product.image && (draft.product as any).image_source) {
+          existingOrigins.set(draft.product.image, (draft.product as any).image_source);
+        }
+        const existingMedia = Array.isArray((draft.product as any).media) ? (draft.product as any).media : [];
+        for (const item of existingMedia) {
+          const url = typeof item === 'string' ? item : item?.url;
+          if (typeof url === 'string' && typeof item?.origin === 'string') existingOrigins.set(url, item.origin);
+        }
+        const selected = selectedUrls.map(url => ({
+          url,
+          origin: existingUrls.has(url)
+            ? existingOrigins.get(url)
+            : draft.candidates.some(candidate => candidate.url === url) ? 'ai-curation' : undefined,
+        }));
         const { error } = await supabase.from('products').update({
-          image: selected[0],
-          media: selected.slice(1).map(url => ({ type: 'image', url })),
+          image: selected[0].url,
+          image_source: selected[0].origin || null,
+          media: selected.slice(1).map(({ url, origin }) => ({ type: 'image', url, ...(origin ? { origin } : {}) })),
           updated_at: new Date().toISOString(),
         } as any).eq('id', draft.product.id).eq('tenant_id', tenantId);
         if (error) throw error;
@@ -2379,6 +2396,7 @@ const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropsh
 }) => {
   const [form, setForm] = useState(product);
   const [media, setMedia] = useState<MediaItem[]>((product as any).media || []);
+  const [imageSource, setImageSource] = useState<string | null>((product as any).image_source || null);
   const [feePercent, setFeePercent] = useState('');
   const [showFeeInput, setShowFeeInput] = useState(false);
   const [generatingDesc, setGeneratingDesc] = useState(false);
@@ -2521,7 +2539,10 @@ const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropsh
             {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         )}
-          <ImageUploadField value={form.image} onChange={url => setForm({ ...form, image: url })} tenantId={tenantId} searchQuery={[form.name, form.category].filter(Boolean).join(' ')} />
+          <ImageUploadField value={form.image} imageSource={imageSource} onChange={url => {
+            setForm({ ...form, image: url });
+            if (url !== form.image) setImageSource(null);
+          }} tenantId={tenantId} searchQuery={[form.name, form.category].filter(Boolean).join(' ')} />
           <MediaGalleryField value={media} onChange={setMedia} tenantId={tenantId} label="Galeria do produto" />
         {/* Tipo do item na edição */}
         <div>
@@ -2696,7 +2717,7 @@ const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropsh
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => onSave({ ...form, subcategory_ids: (form as any).subcategory_ids || null, media } as any)} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-3 py-1.5 text-sm"><Check className="h-3 w-3" /> Salvar</button>
+          <button onClick={() => onSave({ ...form, subcategory_ids: (form as any).subcategory_ids || null, media, image_source: imageSource } as any)} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-3 py-1.5 text-sm"><Check className="h-3 w-3" /> Salvar</button>
           <button onClick={onCancel} className="flex items-center gap-1 rounded-lg bg-secondary text-muted-foreground px-3 py-1.5 text-sm"><X className="h-3 w-3" /> Cancelar</button>
         </div>
       </div>
@@ -2709,8 +2730,9 @@ const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropsh
         <label className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-secondary" title="Selecionar para criar carrossel">
           <input type="checkbox" checked={selected} onChange={onSelect} className="h-4 w-4 accent-primary" aria-label={`Selecionar ${product.name} para o Carrossel IA`} />
         </label>
-        <div className="h-12 w-12 rounded-md bg-secondary flex items-center justify-center overflow-hidden flex-shrink-0">
+        <div className="relative h-12 w-12 rounded-md bg-secondary flex items-center justify-center overflow-hidden flex-shrink-0">
           {product.image ? <img src={product.image} alt="" className="h-full w-full object-cover" /> : <Package className="h-6 w-6 text-primary/40" />}
+          {(product as any).image_source === 'ai-curation' && <span title="Capa adicionada pela curadoria IA" className="absolute bottom-0 right-0 rounded-tl bg-primary px-1 text-[8px] font-bold leading-3 text-primary-foreground">IA</span>}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-medium text-foreground text-sm truncate">

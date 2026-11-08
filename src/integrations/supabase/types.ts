@@ -3089,6 +3089,7 @@ export type Database = {
           has_shipping: boolean
           id: string
           image: string
+          image_source: string | null
           in_stock: boolean
           item_type: string
           kitchen_sector: string | null
@@ -3127,6 +3128,7 @@ export type Database = {
           has_shipping?: boolean
           id?: string
           image?: string
+          image_source?: string | null
           in_stock?: boolean
           item_type?: string
           kitchen_sector?: string | null
@@ -3165,6 +3167,7 @@ export type Database = {
           has_shipping?: boolean
           id?: string
           image?: string
+          image_source?: string | null
           in_stock?: boolean
           item_type?: string
           kitchen_sector?: string | null

@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Upload, Loader2, Link, Video, Image as ImageIcon, Trash2, MoveUp, MoveDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
-export type MediaItem = { type: 'image' | 'video'; url: string };
+export type MediaItem = { type: 'image' | 'video'; url: string; origin?: string };
 
 const uploadProductVideo = async (file: File, tenantId: string): Promise<string> => {
   const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
@@ -137,8 +137,13 @@ const MediaGalleryField = ({ value, onChange, tenantId, label }: Props) => {
                 <img src={m.url} alt="" loading="lazy" className="h-full w-full object-cover" />
               )}
               {m.type === 'video' && (
-                <span className="absolute top-1 right-1 rounded-full bg-black/60 p-1 text-white">
+                <span className="absolute top-1 left-1 rounded-full bg-black/60 p-1 text-white">
                   <Video className="h-3 w-3" />
+                </span>
+              )}
+              {m.origin === 'ai-curation' && (
+                <span title="Imagem adicionada pela curadoria IA" className="absolute top-1 right-1 rounded bg-primary px-1 py-0.5 text-[9px] font-semibold text-primary-foreground shadow">
+                  Curadoria IA
                 </span>
               )}
               <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-0.5 bg-black/60 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

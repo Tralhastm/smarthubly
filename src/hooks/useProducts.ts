@@ -111,6 +111,7 @@ export const useUpdateProduct = () => {
         price: product.price,
         original_price: (product as any).original_price ?? 0,
         image: product.image,
+        image_source: (product as any).image_source ?? null,
         media: (product as any).media ?? [],
         category: product.category,
         description: product.description,

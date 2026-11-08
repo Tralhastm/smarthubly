@@ -6,7 +6,7 @@ import { Upload, Loader2, Link, ImageIcon, Search, X, Plus, Wand2, Eraser } from
 import { toast } from 'sonner';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
-const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, transparentBg }: { value: string; onChange: (url: string) => void; tenantId: string; label?: string; searchQuery?: string; transparentBg?: boolean }) => {
+const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, transparentBg, imageSource }: { value: string; onChange: (url: string) => void; tenantId: string; label?: string; searchQuery?: string; transparentBg?: boolean; imageSource?: string | null }) => {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
@@ -346,6 +346,9 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, trans
           <div className="flex flex-wrap items-center gap-2">
             <img src={value} alt="" className="h-10 w-10 rounded object-contain bg-[repeating-conic-gradient(hsl(var(--muted))_0%_25%,transparent_0%_50%)] bg-[length:10px_10px]" />
             <span className="text-xs text-muted-foreground truncate max-w-[200px]">{value.split('/').pop()?.split('?')[0]}</span>
+            {imageSource === 'ai-curation' && (
+              <span title="Imagem adicionada pela curadoria IA" className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">Curadoria IA</span>
+            )}
             <button type="button" onClick={handleRemoveBg} disabled={strippingBg}
               className="flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 text-xs text-foreground hover:bg-secondary/80 disabled:opacity-50">
               {strippingBg ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eraser className="h-3 w-3" />}
