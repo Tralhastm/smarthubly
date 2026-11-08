@@ -86,6 +86,8 @@ Deno.serve(async (req) => {
       `site:mercadolivre.com.br "${productName}" novo`,
       `site:amazon.com.br "${productName}"`,
       `site:magazineluiza.com.br "${productName}"`,
+      `site:shopee.com.br "${productName}"`,
+      `site:casasbahia.com.br "${productName}"`,
       `"${productName}" celular novo lacrado`,
       `"${productName}" ficha técnica especificações`,
     ];
