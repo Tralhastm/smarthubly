@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -74,6 +76,7 @@ const qualityClass: Record<MarketQualityStatus, string> = {
   suspect: 'border-amber-500/30 bg-amber-500/10 text-amber-500',
 };
 const sourceStatusLabel = (status: MarketEvidence['status']) => status === 'comparable' ? 'APROVADO' : status === 'indicative' ? 'INDICATIVO' : 'REJEITADO';
+const whatsappStatusLabel = (status: MarketQualityStatus) => status === 'approved' ? 'APROVADO' : status === 'suspect' ? 'REPROVADO' : 'INCONCLUSIVO';
 const marketConditionLabel = (condition: PricedItem['marketCondition']) => condition === 'new' ? 'Preço aprovado' : condition === 'semi_new' ? 'Mercado semi-novo encontrado' : condition === 'indicative' ? 'Preço indicativo' : 'Sem mercado confirmado';
 
 function fileToText(file: File): Promise<string> {
@@ -93,6 +96,8 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
   const [minimumProfit, setMinimumProfit] = useState('100');
   const [results, setResults] = useState<PricedItem[]>([]);
   const [loadedHistory, setLoadedHistory] = useState<HistoryRow | null>(null);
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [copyOptions, setCopyOptions] = useState({ includeCost: false, includeSuggestedResale: true, includeSources: false, includeStatus: true });
   const [loadingHistoryId, setLoadingHistoryId] = useState<string | null>(null);
   const [researching, setResearching] = useState(false);
   const [savingExpense, setSavingExpense] = useState(false);
@@ -423,18 +428,48 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'precificador-mercado.txt'; anchor.click(); URL.revokeObjectURL(url);
   };
 
-  const copyText = async () => {
+  const openCopyOptions = () => {
     if (!results.length) return toast.info('Faça uma análise antes de copiar.');
-    const lines = results.map(item => [
-      item.name,
-      `Custo: ${money(item.supplierCost)} | Mínimo viável: ${money(item.pricing?.minimumPrice)} | Mercado aprovado: ${approvedMoney(item.pricing?.marketRecommendedPrice)} | Lucro mínimo: ${money(item.pricing?.netProfit)} (${(item.pricing?.marginPercent || 0).toFixed(2)}%) | Lucro no mercado: ${approvedMoney(item.pricing?.marketNetProfit)} (${approvedPercent(item.pricing?.marketMarginPercent)})`,
-      `Decisão: ${item.pricing ? decisionLabel[item.pricing.decision] : 'Inconclusivo'} | Anúncios: ${item.foundCount} encontrados, ${item.evidenceCount} aprovados, ${item.indicativeCount} indicativos, ${item.rejectedCount} rejeitados`,
-      `Mercado: ${marketConditionLabel(item.marketCondition)} | Qualidade: ${item.qualityStatus} — ${item.qualityNote}`,
-      ...item.sources.map(source => `${sourceStatusLabel(source.status)}: ${source.title} | ${source.price == null ? 'sem preço' : money(source.price)} | ${source.url || 'sem link'} | ${source.rejection_reason || source.acceptance_reason || 'sem justificativa'}`),
-    ].join('\n')).join('\n\n');
+    setCopyDialogOpen(true);
+  };
+
+  const copyToWhatsApp = async () => {
+    if (!results.length) return toast.info('Faça uma análise antes de copiar.');
+    const productMessages = results.map(item => {
+      const lines = [`*${item.name}*`];
+      if (copyOptions.includeCost) lines.push(`Custo: ${money(item.supplierCost)}`);
+      if (copyOptions.includeSuggestedResale) {
+        const marketPrice = item.pricing?.marketRecommendedPrice;
+        const minimumPrice = item.pricing?.minimumPrice;
+        lines.push(marketPrice != null
+          ? `Revenda sugerida: ${money(marketPrice)}`
+          : minimumPrice != null ? `Revenda sugerida (mínimo viável): ${money(minimumPrice)}` : 'Revenda sugerida: sem valor disponível');
+      }
+      if (copyOptions.includeStatus) lines.push(`Status: ${whatsappStatusLabel(item.qualityStatus)}`);
+      if (copyOptions.includeSources) {
+        const prioritizedSources = [
+          ...item.sources.filter(source => source.status === 'comparable'),
+          ...item.sources.filter(source => source.status === 'indicative'),
+          ...item.sources.filter(source => source.status === 'rejected'),
+        ].slice(0, 3);
+        lines.push('Fontes (até 3):');
+        if (prioritizedSources.length) {
+          prioritizedSources.forEach(source => {
+            const sourceTitle = source.title || source.source || 'Fonte';
+            lines.push(`• ${sourceStatusLabel(source.status)} — ${sourceTitle}${source.price == null ? '' : ` · ${money(source.price)}`}`);
+            if (source.url) lines.push(`  ${source.url}`);
+          });
+        } else {
+          lines.push('• Nenhuma fonte encontrada');
+        }
+      }
+      return lines.join('\n');
+    });
+    const message = [`*${inputName.trim() || 'Precificador de mercado'}*`, ...productMessages].join('\n\n');
     try {
-      await navigator.clipboard.writeText(lines);
-      toast.success('Resultado copiado para o clipboard.');
+      await navigator.clipboard.writeText(message);
+      setCopyDialogOpen(false);
+      toast.success('Texto pronto para colar no WhatsApp.');
     } catch {
       toast.error('Não foi possível acessar o clipboard neste navegador.');
     }
@@ -556,7 +591,7 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
             </CardContent>
           </Card>}
 
-          <div className="flex flex-wrap gap-2"><Button onClick={analyze} disabled={researching || !selectedItems.length}>{researching ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Pesquisando fontes...</> : <><Search className="mr-2 h-4 w-4" /> Pesquisar mercado e calcular</>}</Button>{results.length > 0 && <><Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar CSV</Button><Button variant="outline" onClick={exportText}><FileText className="mr-2 h-4 w-4" /> Exportar TXT</Button><Button variant="outline" onClick={exportPdf}><FileDown className="mr-2 h-4 w-4" /> Exportar PDF</Button><Button variant="outline" onClick={() => void copyText()}><Clipboard className="mr-2 h-4 w-4" /> Copiar resultado</Button></>}</div>
+          <div className="flex flex-wrap gap-2"><Button onClick={analyze} disabled={researching || !selectedItems.length}>{researching ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Pesquisando fontes...</> : <><Search className="mr-2 h-4 w-4" /> Pesquisar mercado e calcular</>}</Button>{results.length > 0 && <><Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" /> Exportar CSV</Button><Button variant="outline" onClick={exportText}><FileText className="mr-2 h-4 w-4" /> Exportar TXT</Button><Button variant="outline" onClick={exportPdf}><FileDown className="mr-2 h-4 w-4" /> Exportar PDF</Button><Button variant="outline" onClick={openCopyOptions}><Clipboard className="mr-2 h-4 w-4" /> Copiar para WhatsApp</Button></>}</div>
 
           {results.length > 0 && <>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-9"><Metric title="Produtos" value={String(totals.count)} /><Metric title="Custo do lote" value={money(totals.cost)} /><Metric title="Mínimo viável" value={money(totals.revenue)} /><Metric title="Mercado / indicativo" value={money(totals.recommendedRevenue)} /><Metric title="Lucro mínimo" value={money(totals.profit)} tone="text-green-500" /><Metric title="Lucro no mercado" value={money(totals.marketProfit)} tone="text-green-500" /><Metric title="Carro-chefe" value={String(totals.stars)} tone="text-primary" /><Metric title="Margem segura" value={String(totals.safe)} tone="text-amber-500" /><Metric title="Inconclusivos" value={String(totals.inconclusive)} tone="text-destructive" /></div>
@@ -608,6 +643,36 @@ export default function TenantPriceIntelligence({ tenantId }: Props) {
           {historyQuery.isLoading ? <p className="py-8 text-center text-sm text-muted-foreground">Carregando histórico...</p> : !historyQuery.data?.length ? <Card><CardContent className="p-6 text-center text-sm text-muted-foreground">Nenhuma análise salva ainda.</CardContent></Card> : historyQuery.data.map(history => <Card key={history.id}><CardContent className="flex flex-wrap items-center gap-4 p-4"><History className="h-5 w-5 text-primary" /><div className="min-w-0 flex-1"><p className="font-medium text-foreground">{history.input_name || 'Lista de fornecedores'}</p><p className="text-xs text-muted-foreground">{dateBR(history.created_at)} · {Number(history.totals?.count || 0)} produtos · lucro mínimo {money(history.minimum_profit)}</p></div><Badge variant={history.status === 'completed' ? 'default' : 'secondary'}>{history.status === 'completed' ? 'Concluída' : 'Parcial'}</Badge><span className="text-sm font-semibold">{money(history.totals?.market_profit ?? history.totals?.profit)} de lucro no mercado</span><Button size="sm" onClick={() => void openHistory(history)} disabled={loadingHistoryId === history.id}>{loadingHistoryId === history.id ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Abrindo...</> : <><Search className="mr-2 h-4 w-4" /> Abrir análise</>}</Button></CardContent></Card>)}
         </TabsContent>
       </Tabs>
+      <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Copiar para WhatsApp</DialogTitle>
+            <DialogDescription>Escolha quais informações incluir. O texto será organizado para colar direto na conversa.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label htmlFor="copy-pricer-cost" className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm">
+              <Checkbox id="copy-pricer-cost" checked={copyOptions.includeCost} onCheckedChange={checked => setCopyOptions(current => ({ ...current, includeCost: checked === true }))} />
+              Preço de custo
+            </label>
+            <label htmlFor="copy-pricer-resale" className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm">
+              <Checkbox id="copy-pricer-resale" checked={copyOptions.includeSuggestedResale} onCheckedChange={checked => setCopyOptions(current => ({ ...current, includeSuggestedResale: checked === true }))} />
+              Preço de revenda sugerido
+            </label>
+            <label htmlFor="copy-pricer-sources" className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm">
+              <Checkbox id="copy-pricer-sources" checked={copyOptions.includeSources} onCheckedChange={checked => setCopyOptions(current => ({ ...current, includeSources: checked === true }))} />
+              Fontes (até 3 por produto)
+            </label>
+            <label htmlFor="copy-pricer-status" className="flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm">
+              <Checkbox id="copy-pricer-status" checked={copyOptions.includeStatus} onCheckedChange={checked => setCopyOptions(current => ({ ...current, includeStatus: checked === true }))} />
+              Status (aprovado, reprovado ou inconclusivo)
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCopyDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={() => void copyToWhatsApp()}><Clipboard className="mr-2 h-4 w-4" /> Copiar texto</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
