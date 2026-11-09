@@ -39,6 +39,48 @@ function productMatchKey(value: string | null | undefined): string {
   return normalized.split(/\s+/).filter(Boolean).sort().join(' ');
 }
 
+/** Identidade técnica que não pode ser perdida pela extração da IA. */
+function identityTokens(value: string | null | undefined): {
+  memories: string[];
+  networks: string[];
+  qualifiers: string[];
+} {
+  const normalized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const memories = Array.from(normalized.matchAll(/\b\d{2,4}\s?(?:gb|tb)\b/g))
+    .map((m) => m[0].replace(/\s+/g, ''))
+    .sort();
+  const networks = Array.from(new Set(normalized.match(/\b(?:4g|5g)\b/g) || [])).sort();
+  const qualifiers = ['nfc', 'pro', 'pro+', 'max', 'plus', 'ultra', 'fe', 'neo', 'fusion', 'edge']
+    .filter((token) => new RegExp(`\\b${token.replace('+', '\\+')}\\b`, 'i').test(normalized));
+  return { memories, networks, qualifiers };
+}
+
+function identityCompatible(source: string, catalog: string): boolean {
+  const incoming = identityTokens(source);
+  const target = identityTokens(catalog);
+  if (incoming.memories.length && target.memories.length && incoming.memories.join('|') !== target.memories.join('|')) return false;
+  if (incoming.networks.length && target.networks.length && incoming.networks.join('|') !== target.networks.join('|')) return false;
+  for (const qualifier of new Set([...incoming.qualifiers, ...target.qualifiers])) {
+    if (incoming.qualifiers.includes(qualifier) !== target.qualifiers.includes(qualifier)) return false;
+  }
+  return true;
+}
+
+/** A IA pode resumir "Galaxy A07 5G" para "Galaxy A07"; confira a linha original. */
+function rawLineHasIdentityConflict(source: string, catalog: string, rawText: string): boolean {
+  if (!rawText || !source || !catalog) return false;
+  const sourceTokens = productMatchKey(source).split(' ').filter((token) => /\d/.test(token));
+  if (!sourceTokens.length) return false;
+  const lines = rawText.split(/\r?\n/).filter((line) => {
+    const keyTokens = productMatchKey(line).split(' ');
+    return sourceTokens.some((token) => keyTokens.includes(token));
+  });
+  return lines.some((line) => !identityCompatible(line, catalog));
+}
+
 /** Normaliza cores/variações em português e inglês para uma chave canônica. */
 function variantMatchKey(value: string | null | undefined): string {
   let normalized = String(value || '')
@@ -247,7 +289,7 @@ export async function catalog(req: Request, body?: any): Promise<Response> {
     const USER = `Extraia desta ${kind === "image" ? "imagem" : "lista"} TODOS os produtos com preços.
 Regras:
 1. Retorne JSON: { \"items\": [{ \"name\", \"price\", \"cost_price\", \"resale_price\", \"category\", \"description\", \"available\", \"variants\" }] }.
-2. \"name\" é o modelo sem a cor. Não junte modelos diferentes; preserve memória, RAM, 4G/5G, NFC, Pro, Max e edições especiais.
+2. \"name\" é o modelo sem a cor. Não junte modelos diferentes; preserve literalmente memória, RAM, 4G/5G, NFC, Pro, Max, Plus, Ultra, FE e edições especiais. Nunca remova 4G/5G, memória ou qualificadores para simplificar o nome.
 3. Se cores, capacidades ou outras opções do mesmo modelo tiverem preços diferentes, use como \"price\" o menor preço explícito e retorne cada opção em \"variants\": [{ \"name\": \"Preto\", \"price\": 1350, \"cost_price\": 1350, \"resale_price\": 0 }].
 4. Se todas as opções tiverem o mesmo preço, também pode retornar as opções, mas não crie diferença de preço. Nunca invente cor ou preço.
 5. Informe cost_price quando o catálogo der custo e resale_price quando der venda sugerida; use 0 quando ausente. Para cada variante, faça o mesmo.
@@ -328,6 +370,13 @@ Regras:
       const sourceName = String(it.name || it.product_name || "").trim();
       const name = sourceName.toLowerCase();
       const catalogProduct = productsByKey.get(productMatchKey(sourceName));
+      if (catalogProduct && (!identityCompatible(sourceName, String(catalogProduct.name))
+        || rawLineHasIdentityConflict(sourceName, String(catalogProduct.name), text))) {
+        skipped++;
+        skippedProducts.push(`${sourceName} (identidade técnica incompatível com ${catalogProduct.name})`);
+        warnings.push(`${sourceName}: ignorado por diferença de memória, rede ou versão em relação a ${catalogProduct.name}`);
+        continue;
+      }
       if (!catalogProduct) {
         // Preços de fornecedor precisam ser persistidos mesmo quando o produto
         // ainda não está no catálogo oficial. Caso contrário, o fornecedor é
