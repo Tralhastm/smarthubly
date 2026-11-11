@@ -2397,6 +2397,7 @@ const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropsh
   const [form, setForm] = useState(product);
   const [media, setMedia] = useState<MediaItem[]>((product as any).media || []);
   const [imageSource, setImageSource] = useState<string | null>((product as any).image_source || null);
+  const [mobileVariantsExpanded, setMobileVariantsExpanded] = useState(false);
   const [feePercent, setFeePercent] = useState('');
   const [showFeeInput, setShowFeeInput] = useState(false);
   const [generatingDesc, setGeneratingDesc] = useState(false);
@@ -2726,14 +2727,14 @@ const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropsh
 
   return (
     <div className={`rounded-lg border bg-card p-3 space-y-2 ${selected ? 'border-primary/60 ring-1 ring-primary/20' : 'border-border'}`}>
-      <div className="flex items-center gap-3">
-        <label className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-secondary" title="Selecionar para criar carrossel">
+      <div className="flex flex-wrap items-start gap-3 sm:flex-nowrap sm:items-center">
+        <label className="order-1 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-secondary" title="Selecionar para criar carrossel">
           <input type="checkbox" checked={selected} onChange={onSelect} className="h-4 w-4 accent-primary" aria-label={`Selecionar ${product.name} para o Carrossel IA`} />
         </label>
-        <div className={`relative h-12 w-12 rounded-md bg-secondary flex items-center justify-center overflow-hidden flex-shrink-0 ${(product as any).image_source === 'ai-curation' ? 'border-2 border-yellow-400 ring-1 ring-yellow-300/60' : (product as any).image_source === 'mobiletec-import' ? 'border-2 border-sky-500 ring-1 ring-sky-300/60' : ''}`}>
+        <div className={`order-2 hidden h-12 w-12 rounded-md bg-secondary sm:flex items-center justify-center overflow-hidden flex-shrink-0 ${(product as any).image_source === 'ai-curation' ? 'border-2 border-yellow-400 ring-1 ring-yellow-300/60' : (product as any).image_source === 'mobiletec-import' ? 'border-2 border-sky-500 ring-1 ring-sky-300/60' : ''}`}>
           {product.image ? <img src={product.image} alt="" className="h-full w-full object-cover" /> : <Package className="h-6 w-6 text-primary/40" />}
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="order-4 basis-full min-w-0 sm:order-none sm:basis-auto sm:flex-1">
           <p className="font-medium text-foreground text-sm truncate">
             {product.name}
             {(product as any).item_type === 'service' && (
@@ -2773,35 +2774,43 @@ const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropsh
             {(product as any).auto_categorize === false && <span className="text-muted-foreground"> · 🚫 IA off</span>}
           </p>
           {variantPrices.length > 0 && (
-            <div className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-primary/80">Preço por cor</p>
-              {variantPrices.map(variant => {
-                const variantUnavailable = !isStockAvailable(product.in_stock)
-                  || isVariantSoldOut(variant)
-                  || soldOutVariantIds.includes(variant.id);
-                const manualSupplierId = String((variant as any).manual_supplier_id || '');
-                return (
-                  <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
-                    <span className="font-medium text-foreground">{variant.name}</span>
-                    {variantUnavailable && (
-                      <select value={manualSupplierId} onChange={e => onToggleVariantStock(variant, e.target.value)} className="rounded border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-foreground" title="Fornecedor temporário desta liberação">
-                        <option value="">Escolher fornecedor</option>
-                        {suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
-                      </select>
-                    )}
-                    <button type="button" onClick={() => onToggleVariantStock(variant, manualSupplierId || undefined)} className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${variantUnavailable ? 'bg-amber-500/15 text-amber-600 hover:bg-amber-500/25' : 'bg-green-500/15 text-green-600 hover:bg-green-500/25'}`} title={variantUnavailable ? 'Liberar esta cor manualmente' : 'Marcar esta cor como esgotada'}>
-                      {variantUnavailable ? 'Liberar' : 'Esgotar'}
-                    </button>
-                    {manualSupplierId && variantUnavailable && <span className="text-[10px] text-muted-foreground">({suppliers.find(s => s.id === manualSupplierId)?.name || 'fornecedor manual'})</span>}
-                    <span>Custo: {variant.costPrice > 0 ? `R$${variant.costPrice.toFixed(2)}` : '—'}</span>
-                    <span className="text-primary">Revenda: {hasExplicitVariantSale(variant) ? `R$${variant.salePrice.toFixed(2)}` : 'Pendente'}</span>
-                  </p>
-                );
-              })}
+            <div className="mt-1">
+              <button type="button" onClick={() => setMobileVariantsExpanded(open => !open)}
+                aria-expanded={mobileVariantsExpanded}
+                className="sm:hidden flex w-full items-center justify-between rounded-md border border-border bg-secondary/40 px-2.5 py-2 text-xs font-semibold text-primary">
+                <span>Ver cores e preços ({variantPrices.length})</span>
+                <span aria-hidden="true">{mobileVariantsExpanded ? '−' : '+'}</span>
+              </button>
+              <div className={`${mobileVariantsExpanded ? 'block' : 'hidden'} sm:block mt-1 space-y-0.5 text-[11px] text-muted-foreground`}>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-primary/80">Preço por cor</p>
+                {variantPrices.map(variant => {
+                  const variantUnavailable = !isStockAvailable(product.in_stock)
+                    || isVariantSoldOut(variant)
+                    || soldOutVariantIds.includes(variant.id);
+                  const manualSupplierId = String((variant as any).manual_supplier_id || '');
+                  return (
+                    <p key={variant.id} className="flex flex-wrap items-center gap-x-2">
+                      <span className="font-medium text-foreground">{variant.name}</span>
+                      {variantUnavailable && (
+                        <select value={manualSupplierId} onChange={e => onToggleVariantStock(variant, e.target.value)} className="rounded border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-foreground" title="Fornecedor temporário desta liberação">
+                          <option value="">Escolher fornecedor</option>
+                          {suppliers.map(supplier => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                        </select>
+                      )}
+                      <button type="button" onClick={() => onToggleVariantStock(variant, manualSupplierId || undefined)} className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${variantUnavailable ? 'bg-amber-500/15 text-amber-600 hover:bg-amber-500/25' : 'bg-green-500/15 text-green-600 hover:bg-green-500/25'}`} title={variantUnavailable ? 'Liberar esta cor manualmente' : 'Marcar esta cor como esgotada'}>
+                        {variantUnavailable ? 'Liberar' : 'Esgotar'}
+                      </button>
+                      {manualSupplierId && variantUnavailable && <span className="text-[10px] text-muted-foreground">({suppliers.find(s => s.id === manualSupplierId)?.name || 'fornecedor manual'})</span>}
+                      <span>Custo: {variant.costPrice > 0 ? `R$${variant.costPrice.toFixed(2)}` : '—'}</span>
+                      <span className="text-primary">Revenda: {hasExplicitVariantSale(variant) ? `R$${variant.salePrice.toFixed(2)}` : 'Pendente'}</span>
+                    </p>
+                  );
+                })}
+              </div>
             </div>
           )}
           {(unavailableVariants.length > 0 || resaleReviewVariants.length > 0) && (
-            <div className="mt-2 space-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-600">
+            <div className={`${mobileVariantsExpanded ? 'block' : 'hidden'} sm:block mt-2 space-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-600`}>
               {unavailableVariants.map(variant => (
                 <p key={`missing-${variant.id}`}>⚠ A cor {variant.name} do {product.name} está esgotada — não apareceu na última lista do fornecedor.</p>
               ))}
@@ -2811,7 +2820,7 @@ const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropsh
             </div>
           )}
         </div>
-        <div className="flex gap-1">
+        <div className="order-3 ml-auto flex gap-1 sm:order-none sm:ml-0">
           <button
             onClick={() => onSave({ ...product, manual_blocked: !(product as any).manual_blocked } as any)}
             className={`rounded-md px-2 py-1 text-[11px] font-medium ${((product as any).manual_blocked) ? 'bg-green-500/15 text-green-600 hover:bg-green-500/25' : 'bg-destructive/15 text-destructive hover:bg-destructive/25'}`}
