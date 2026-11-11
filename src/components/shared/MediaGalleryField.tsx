@@ -130,7 +130,7 @@ const MediaGalleryField = ({ value, onChange, tenantId, label }: Props) => {
       {value.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
           {value.map((m, i) => (
-            <div key={`${m.url}-${i}`} className={`relative group aspect-square overflow-hidden rounded-md bg-secondary ${m.origin === 'ai-curation' ? 'border-2 border-yellow-400 ring-1 ring-yellow-300/60' : 'border border-border'}`}>
+            <div key={`${m.url}-${i}`} className={`relative group aspect-square overflow-hidden rounded-md bg-secondary ${m.origin === 'ai-curation' ? 'border-2 border-yellow-400 ring-1 ring-yellow-300/60' : m.origin === 'mobiletec-import' ? 'border-2 border-sky-500 ring-1 ring-sky-300/60' : 'border border-border'}`}>
               {m.type === 'video' ? (
                 <video src={m.url} className="h-full w-full object-cover" muted />
               ) : (

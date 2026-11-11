@@ -344,7 +344,7 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, trans
       {value && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <img src={value} alt="" className={`h-10 w-10 rounded object-contain bg-[repeating-conic-gradient(hsl(var(--muted))_0%_25%,transparent_0%_50%)] bg-[length:10px_10px] ${imageSource === 'ai-curation' ? 'ring-2 ring-yellow-400' : ''}`} />
+            <img src={value} alt="" className={`h-10 w-10 rounded object-contain bg-[repeating-conic-gradient(hsl(var(--muted))_0%_25%,transparent_0%_50%)] bg-[length:10px_10px] ${imageSource === 'ai-curation' ? 'ring-2 ring-yellow-400' : imageSource === 'mobiletec-import' ? 'ring-2 ring-sky-500' : ''}`} />
             <span className="text-xs text-muted-foreground truncate max-w-[200px]">{value.split('/').pop()?.split('?')[0]}</span>
             <button type="button" onClick={handleRemoveBg} disabled={strippingBg}
               className="flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 text-xs text-foreground hover:bg-secondary/80 disabled:opacity-50">
