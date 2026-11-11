@@ -2731,7 +2731,7 @@ const EditableProduct = ({ product, variants, pricingConfig, isEditing, isDropsh
         <label className="order-1 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-secondary" title="Selecionar para criar carrossel">
           <input type="checkbox" checked={selected} onChange={onSelect} className="h-4 w-4 accent-primary" aria-label={`Selecionar ${product.name} para o Carrossel IA`} />
         </label>
-        <div className={`order-2 hidden h-12 w-12 rounded-md bg-secondary sm:flex items-center justify-center overflow-hidden flex-shrink-0 ${(product as any).image_source === 'ai-curation' ? 'border-2 border-yellow-400 ring-1 ring-yellow-300/60' : (product as any).image_source === 'mobiletec-import' ? 'border-2 border-sky-500 ring-1 ring-sky-300/60' : ''}`}>
+        <div className={`order-2 flex h-10 w-10 shrink-0 rounded-md bg-secondary items-center justify-center overflow-hidden sm:h-12 sm:w-12 ${(product as any).image_source === 'ai-curation' ? 'border-2 border-yellow-400 ring-1 ring-yellow-300/60' : (product as any).image_source === 'mobiletec-import' ? 'border-2 border-sky-500 ring-1 ring-sky-300/60' : ''}`}>
           {product.image ? <img src={product.image} alt="" className="h-full w-full object-cover" /> : <Package className="h-6 w-6 text-primary/40" />}
         </div>
         <div className="order-4 basis-full min-w-0 sm:order-none sm:basis-auto sm:flex-1">
