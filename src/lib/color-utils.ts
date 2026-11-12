@@ -25,6 +25,22 @@ export const hexToHsl = (hex: string): HSL => {
 
 export const hslString = (c: HSL) => `${c.h} ${c.s}% ${c.l}%`;
 
+export const hslToHex = ({ h, s, l }: HSL): string => {
+  const hue = ((h % 360) + 360) % 360;
+  const saturation = Math.max(0, Math.min(100, s)) / 100;
+  const lightness = Math.max(0, Math.min(100, l)) / 100;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const offset = lightness - chroma / 2;
+  const rgb = hue < 60 ? [chroma, x, 0]
+    : hue < 120 ? [x, chroma, 0]
+      : hue < 180 ? [0, chroma, x]
+        : hue < 240 ? [0, x, chroma]
+          : hue < 300 ? [x, 0, chroma]
+            : [chroma, 0, x];
+  return `#${rgb.map(channel => Math.round((channel + offset) * 255).toString(16).padStart(2, '0')).join('')}`;
+};
+
 const srgbToLin = (c: number) => {
   const v = c / 255;
   return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);

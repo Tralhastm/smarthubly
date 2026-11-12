@@ -11,7 +11,7 @@ import StoreQuoteCalculator from '@/components/tenant/StoreQuoteCalculator';
 import StoreChatbot from '@/components/tenant/StoreChatbot';
 import { useSplashOverlay } from '@/hooks/useSplashOverlay';
 import { ClipboardList, Store, MessageCircle, Heart, Calculator, ShoppingBag } from 'lucide-react';
-import { deriveBrandTokens, applyBrandTokens, clearBrandTokens } from '@/lib/color-utils';
+import { deriveBrandTokens, applyBrandTokens, clearBrandTokens, hexToHsl, hslToHex, luminance } from '@/lib/color-utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useTheme } from '@/contexts/ThemeContext';
 
@@ -58,7 +58,11 @@ const TenantStore = () => {
     const primary = (tenant as any).brand_primary_color || '#3B82F6';
     const bg = (tenant as any).brand_bg_color || '#FFFFFF';
     const root = document.documentElement;
-    const derivedTokens = deriveBrandTokens(primary, theme === 'dark' ? '#121722' : bg);
+    const bgHsl = hexToHsl(bg);
+    const lightBackground = luminance(bg) > 0.5
+      ? bg
+      : hslToHex({ ...bgHsl, s: Math.min(bgHsl.s, 18), l: 97 });
+    const derivedTokens = deriveBrandTokens(primary, theme === 'dark' ? '#121722' : lightBackground);
     const tokens = theme === 'dark'
       ? Object.fromEntries(['--primary', '--primary-foreground', '--accent', '--accent-foreground', '--ring'].map(key => [key, derivedTokens[key]]))
       : derivedTokens;
