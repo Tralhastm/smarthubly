@@ -684,7 +684,7 @@ const TenantAppearance = ({ tenantId, tenantSlug }: { tenantId: string; tenantSl
       product_splash_enabled: splashEnabled,
       show_description: showDescription,
       show_title: showTitle,
-      description: description.trim(),
+      description,
       pickup_as_delivery_fallback: pickupAsFallback,
       dropshipping_submode: (storeMode === 'dropshipping' || storeMode === 'hybrid') ? dropshippingSubmode : 'standard',
       whatsapp_consultora_phone: consultoraPhone.trim(),
@@ -825,7 +825,10 @@ const TenantAppearance = ({ tenantId, tenantSlug }: { tenantId: string; tenantSl
           <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} maxLength={300}
             placeholder="Ex: Moda contemporânea para ela e para ele — elegância em cada peça."
             className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground disabled:opacity-50 resize-y" />
-          <p className="text-[10px] text-muted-foreground text-right mt-1">{description.length}/300</p>
+          <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+            <span>Texto simples; as quebras de linha serão mantidas.</span>
+            <span>{description.length}/300</span>
+          </div>
         </div>
       </div>
 
