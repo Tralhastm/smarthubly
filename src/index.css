@@ -391,3 +391,192 @@ html.splash-open .splash-add-btn {
   .juzzy-collection-intro { display: block; }.juzzy-collection-intro p { margin-top: 18px; }
   .juzzy-main { padding-top: 48px; }.juzzy-storefront .juzzy-main .grid { gap: 14px; }
 }
+
+
+/* ==========================================================
+   Tema natalino sazonal — disponível por loja e sempre opt-in.
+   Mantém conteúdo comercial intacto; a decoração fica escopada
+   à vitrine que carrega a classe .christmas-storefront.
+   ========================================================== */
+.christmas-storefront {
+  --primary: 351 72% 42%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 43 92% 55%;
+  --accent-foreground: 150 38% 13%;
+  --ring: 43 92% 52%;
+  isolation: isolate;
+}
+
+.christmas-announcement {
+  position: relative;
+  z-index: 31;
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  overflow: hidden;
+  isolation: isolate;
+  border-bottom: 1px solid hsl(43 80% 62% / 0.42);
+  background: linear-gradient(108deg, #092d24 0%, #104633 47%, #5b1824 100%);
+  box-shadow: 0 8px 28px hsl(150 60% 8% / 0.18);
+  color: #fffaf0;
+  text-align: center;
+}
+
+.christmas-announcement::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 30%, hsl(43 95% 70% / 0.16), transparent 12rem),
+    radial-gradient(circle at 82% 80%, hsl(0 80% 60% / 0.13), transparent 14rem),
+    radial-gradient(circle at 32% 20%, #fff 0 1px, transparent 2px),
+    radial-gradient(circle at 72% 65%, #fff 0 1px, transparent 2px);
+  background-size: auto, auto, 94px 48px, 127px 66px;
+  animation: christmas-snow-shift 12s linear infinite;
+  content: '';
+  pointer-events: none;
+}
+
+.christmas-announcement::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 8px;
+  background:
+    radial-gradient(circle at 13px 4px, #ffe7a0 0 2px, transparent 3px) 0 0 / 72px 8px repeat-x,
+    radial-gradient(circle at 39px 4px, #f17b72 0 2px, transparent 3px) 0 0 / 72px 8px repeat-x,
+    radial-gradient(circle at 62px 4px, #83d6a4 0 2px, transparent 3px) 0 0 / 72px 8px repeat-x;
+  filter: drop-shadow(0 0 5px hsl(43 100% 75% / 0.62));
+  content: '';
+  pointer-events: none;
+}
+
+.christmas-announcement-copy,
+.christmas-announcement-emblem,
+.christmas-announcement-tree {
+  position: relative;
+  z-index: 1;
+}
+
+.christmas-announcement-copy { display: flex; flex-direction: column; gap: 2px; padding: 8px 0 4px; }
+.christmas-announcement-copy strong { color: #ffe4a0; font-size: 12px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
+.christmas-announcement-copy small { color: hsl(42 40% 93%); font-size: 10px; letter-spacing: 0.025em; }
+.christmas-announcement-emblem { color: #ffe4a0; animation: christmas-twinkle 2.8s ease-in-out infinite; font-size: 22px; text-shadow: 0 0 14px hsl(43 100% 70% / 0.72); }
+.christmas-announcement-tree { animation: christmas-float 4s ease-in-out infinite; filter: drop-shadow(0 0 9px hsl(43 100% 70% / 0.35)); font-size: 23px; }
+
+.christmas-storefront .storefront-header {
+  border-bottom-color: hsl(43 70% 50% / 0.3);
+  box-shadow: 0 6px 22px hsl(150 50% 10% / 0.08);
+}
+
+.christmas-storefront .storefront-header img {
+  box-shadow: 0 0 0 2px hsl(43 75% 55% / 0.44), 0 0 20px hsl(43 85% 58% / 0.18);
+}
+
+.christmas-storefront .gradient-primary {
+  background: linear-gradient(125deg, hsl(351 72% 39%), hsl(151 45% 27%));
+}
+
+.christmas-storefront .christmas-hero {
+  border-bottom: 1px solid hsl(43 65% 48% / 0.28);
+  background:
+    radial-gradient(ellipse at 9% 18%, hsl(151 52% 36% / 0.11), transparent 28rem),
+    radial-gradient(ellipse at 92% 82%, hsl(351 72% 45% / 0.09), transparent 26rem);
+}
+
+.christmas-hero-ornaments { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.christmas-ornament { position: absolute; display: block; filter: drop-shadow(0 4px 12px hsl(43 80% 45% / 0.2)); }
+.christmas-tree-left { left: max(4%, calc((100% - 1180px) / 2)); bottom: 10%; animation: christmas-float 5s ease-in-out infinite; font-size: clamp(27px, 4vw, 44px); opacity: 0.78; }
+.christmas-star-one { top: 16%; left: 25%; animation: christmas-twinkle 2.5s ease-in-out infinite; color: hsl(43 92% 54%); font-size: 27px; }
+.christmas-snow-one { top: 63%; right: 27%; animation: christmas-snow-drift 8s ease-in-out infinite; color: hsl(153 34% 42% / 0.7); font-size: 23px; }
+.christmas-star-two { top: 21%; right: 22%; animation: christmas-twinkle 3.3s ease-in-out -1s infinite; color: hsl(351 70% 52%); font-size: 22px; }
+.christmas-bell-right { right: max(5%, calc((100% - 1180px) / 2)); bottom: 14%; animation: christmas-float 4.4s ease-in-out -1.2s infinite; font-size: clamp(25px, 3.6vw, 39px); opacity: 0.72; }
+
+.christmas-storefront main .bg-card {
+  border-color: hsl(151 34% 34% / 0.25);
+  box-shadow: 0 8px 24px hsl(150 45% 12% / 0.07), inset 0 1px hsl(43 85% 68% / 0.09);
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+
+.christmas-storefront main .bg-card:hover {
+  border-color: hsl(43 75% 50% / 0.64);
+  box-shadow: 0 15px 34px hsl(150 45% 12% / 0.13), 0 0 22px hsl(43 82% 56% / 0.12);
+  transform: translateY(-2px);
+}
+
+@keyframes christmas-snow-shift {
+  from { background-position: center, center, 0 -48px, 30px -66px; }
+  to { background-position: center, center, 0 48px, 30px 66px; }
+}
+@keyframes christmas-float {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-7px) rotate(3deg); }
+}
+@keyframes christmas-twinkle {
+  0%, 100% { opacity: 0.72; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+@keyframes christmas-snow-drift {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  50% { transform: translate(8px, -9px) rotate(12deg); }
+}
+
+@media (max-width: 520px) {
+  .christmas-announcement { min-height: 54px; gap: 9px; }
+  .christmas-announcement-copy strong { font-size: 11px; }
+  .christmas-announcement-copy small { max-width: 230px; font-size: 9px; }
+  .christmas-announcement-emblem { font-size: 19px; }
+  .christmas-announcement-tree { font-size: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .christmas-announcement::before,
+  .christmas-announcement-emblem,
+  .christmas-announcement-tree,
+  .christmas-ornament {
+    animation: none !important;
+  }
+}
+
+
+/* Harmonização com a vitrine editorial Juzzy, mantendo a composição original. */
+.christmas-storefront.juzzy-storefront .juzzy-header {
+  border-bottom-color: hsl(43 72% 50% / 0.38);
+}
+.christmas-storefront.juzzy-storefront .juzzy-header-cta,
+.christmas-storefront.juzzy-storefront .juzzy-primary-button {
+  background: linear-gradient(125deg, #8f2032, #104833);
+  box-shadow: 0 9px 22px hsl(150 45% 17% / 0.18);
+}
+.christmas-storefront.juzzy-storefront .juzzy-hero {
+  background: linear-gradient(135deg, hsl(151 42% 34% / 0.09), hsl(351 68% 42% / 0.08)), var(--juzzy-yellow);
+}
+.christmas-storefront.juzzy-storefront .juzzy-hero h1 em,
+.christmas-storefront.juzzy-storefront .juzzy-text-button span,
+.christmas-storefront.juzzy-storefront .juzzy-art-spark {
+  color: #a5283a;
+}
+.christmas-storefront.juzzy-storefront .juzzy-eyebrow,
+.christmas-storefront.juzzy-storefront .juzzy-section-label {
+  color: #176044;
+}
+.christmas-storefront.juzzy-storefront .juzzy-art-ring {
+  border-color: hsl(43 78% 48% / 0.6);
+}
+.christmas-storefront.juzzy-storefront .juzzy-art-card {
+  border-color: hsl(151 38% 28% / 0.22);
+  box-shadow: 18px 20px 40px hsl(150 45% 12% / 0.13), 0 0 24px hsl(43 80% 55% / 0.12);
+}
+.christmas-storefront.juzzy-storefront .juzzy-main .gradient-primary {
+  background: linear-gradient(125deg, #a5283a, #176044);
+}
+.christmas-storefront.juzzy-storefront .juzzy-main .grid > .animate-fade-in > .group {
+  border-color: hsl(151 38% 32% / 0.2);
+}
+.christmas-storefront.juzzy-storefront .juzzy-main .grid > .animate-fade-in > .group:hover {
+  border-color: hsl(43 78% 48% / 0.62);
+  box-shadow: 0 18px 36px hsl(150 42% 16% / 0.11), 0 0 18px hsl(43 82% 56% / 0.12);
+}

@@ -588,6 +588,9 @@ const TenantAppearance = ({ tenantId, tenantSlug }: { tenantId: string; tenantSl
   const [saving, setSaving] = useState(false);
   const [storefrontConfig, setStorefrontConfig] = useState<Record<string, unknown>>({});
   const [halloweenThemeEnabled, setHalloweenThemeEnabled] = useState(true);
+  const [christmasThemeEnabled, setChristmasThemeEnabled] = useState(false);
+  const [storefrontConfigLoaded, setStorefrontConfigLoaded] = useState(false);
+  const [storefrontConfigLoadError, setStorefrontConfigLoadError] = useState(false);
 
   useEffect(() => {
     supabase.from('tenants').select('splash_bg_color, brand_primary_color, brand_bg_color, is_dropshipping, auto_dropshipping_enabled, dropshipping_review_mode, store_mode, pickup_enabled, pix_key, pix_key_type, lalamove_enabled, lalamove_api_key, lalamove_api_secret, lalamove_market, lalamove_sandbox, uber_direct_enabled, uber_direct_customer_id, uber_direct_client_id, uber_direct_client_secret, uber_direct_sandbox, catalog_layout, product_splash_enabled, whatsapp_show_pix, dropshipping_submode, whatsapp_consultora_phone, whatsapp_default_address_source, whatsapp_store_address, whatsapp_store_cep, show_description, show_title, description, payment_provider, infinitepay_handle, infinitepay_document, infinitepay_enabled, infinitepay_installment_fees').eq('id', tenantId).single().then(({ data }) => {
@@ -634,21 +637,33 @@ const TenantAppearance = ({ tenantId, tenantSlug }: { tenantId: string; tenantSl
   }, [tenantId]);
 
   useEffect(() => {
-    if (!isMobiletec) return;
-    supabase.from('tenants').select('storefront_config').eq('id', tenantId).single().then(({ data, error }) => {
-      if (error) return;
+    let current = true;
+    setStorefrontConfigLoaded(false);
+    setStorefrontConfigLoadError(false);
+    void supabase.from('tenants').select('storefront_config').eq('id', tenantId).single().then(({ data, error }) => {
+      if (!current) return;
+      if (error || !data) {
+        setStorefrontConfigLoadError(true);
+        return;
+      }
       const rawConfig = (data as any)?.storefront_config;
       const config = rawConfig && typeof rawConfig === 'object' && !Array.isArray(rawConfig)
         ? rawConfig as Record<string, unknown>
         : {};
       setStorefrontConfig(config);
       setHalloweenThemeEnabled(config.halloween_theme_enabled !== false);
+      setChristmasThemeEnabled(config.christmas_theme_enabled === true);
+      setStorefrontConfigLoaded(true);
+    }).catch(() => {
+      if (current) setStorefrontConfigLoadError(true);
     });
-  }, [isMobiletec, tenantId]);
+    return () => { current = false; };
+  }, [tenantId]);
 
   const save = async () => {
     setSaving(true);
-    await supabase.from('tenants').update({
+    try {
+      const { data: updatedTenant, error } = await supabase.from('tenants').update({
       splash_bg_color: splashColor,
       brand_primary_color: primaryColor,
       brand_bg_color: bgColor,
@@ -688,10 +703,23 @@ const TenantAppearance = ({ tenantId, tenantSlug }: { tenantId: string; tenantSl
       whatsapp_default_address_source: defaultAddrSrc,
       whatsapp_store_address: storeAddress.trim(),
       whatsapp_store_cep: storeCep.trim(),
-      ...(isMobiletec ? { storefront_config: { ...storefrontConfig, halloween_theme_enabled: halloweenThemeEnabled } } : {}),
-    } as any).eq('id', tenantId);
-    setSaving(false);
-    import('sonner').then(m => m.toast.success('Configurações salvas! Recarregue a loja para ver.'));
+      ...(storefrontConfigLoaded ? {
+        storefront_config: {
+          ...storefrontConfig,
+          christmas_theme_enabled: christmasThemeEnabled,
+          ...(isMobiletec ? { halloween_theme_enabled: halloweenThemeEnabled } : {}),
+      },
+    } : {}),
+      } as any).eq('id', tenantId).select('id').maybeSingle();
+      if (error) throw error;
+      if (!updatedTenant) throw new Error('O tenant não foi atualizado.');
+      import('sonner').then(m => m.toast.success('Configurações salvas! Recarregue a loja para ver.'));
+    } catch (error) {
+      console.error('[TenantAppearance] Falha ao salvar configurações', error);
+      import('sonner').then(m => m.toast.error('Não foi possível salvar as configurações. Confira sua conexão e tente novamente.'));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const applyPreset = (p: typeof PRESET_COLORS[number]) => {
@@ -760,16 +788,46 @@ const TenantAppearance = ({ tenantId, tenantSlug }: { tenantId: string; tenantSl
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Ative a edição sazonal da vitrine Mobiletec: noite roxa, destaques laranja, brilho e detalhes animados. Fotos, preços e produtos não mudam.</p>
             </div>
           </div>
-          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-orange-500/20 bg-background/60 p-3">
+          <label className={`flex items-center justify-between gap-3 rounded-lg border border-orange-500/20 bg-background/60 p-3 ${storefrontConfigLoaded ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
             <span>
               <span className="block text-sm font-medium text-foreground">Aplicar tema de Halloween na loja</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">Ligado por padrão nesta campanha. Desative para voltar ao visual normal.</span>
             </span>
-            <input type="checkbox" checked={halloweenThemeEnabled} onChange={e => setHalloweenThemeEnabled(e.target.checked)} className="h-5 w-5 shrink-0 accent-orange-500" />
+            <input type="checkbox" checked={halloweenThemeEnabled} disabled={!storefrontConfigLoaded} onChange={e => setHalloweenThemeEnabled(e.target.checked)} className="h-5 w-5 shrink-0 accent-orange-500" />
           </label>
-          <p className="text-[11px] text-muted-foreground">Depois, salve em <strong className="text-foreground">Salvar todas as configurações</strong> no fim desta aba.</p>
+          <p className="text-[11px] text-muted-foreground">
+            {storefrontConfigLoadError
+              ? 'Não foi possível carregar a configuração sazonal. Recarregue o painel antes de alterar o tema.'
+              : !storefrontConfigLoaded
+                ? 'Carregando configuração da loja…'
+                : <>Depois, salve em <strong className="text-foreground">Salvar todas as configurações</strong> no fim desta aba.</>}
+          </p>
         </section>
       )}
+
+      <section className="space-y-3 overflow-hidden rounded-xl border border-emerald-700/25 bg-gradient-to-br from-emerald-950/10 via-red-600/5 to-amber-400/10 p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-400/40 bg-emerald-900/10 text-2xl shadow-[0_0_24px_rgba(212,168,76,0.18)]" aria-hidden="true">🎄</div>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-heading flex items-center gap-2 text-sm text-foreground">Tema natalino da vitrine <span aria-hidden="true">✨</span></h3>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Uma edição sazonal elaborada com verde pinho, vermelho rubi, detalhes dourados, luzes, brilho suave e movimento delicado. Não altera produtos, fotos, preços ou pedidos. {isMobiletec && 'Se o Halloween também estiver ligado, o Natal terá prioridade visual; as duas preferências ficam preservadas.'}</p>
+          </div>
+        </div>
+        <label className={`flex items-center justify-between gap-3 rounded-lg border border-emerald-700/15 bg-background/60 p-3 ${storefrontConfigLoaded ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}>
+          <span>
+            <span className="block text-sm font-medium text-foreground">Aplicar tema de Natal nesta loja</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">Desligado por padrão. Você pode ativar ou remover quando quiser.</span>
+          </span>
+          <input type="checkbox" checked={christmasThemeEnabled} disabled={!storefrontConfigLoaded} onChange={e => setChristmasThemeEnabled(e.target.checked)} className="h-5 w-5 shrink-0 accent-emerald-700" />
+        </label>
+        <p className="text-[11px] text-muted-foreground">
+          {storefrontConfigLoadError
+            ? 'Não foi possível carregar a configuração sazonal. Recarregue o painel antes de alterar o tema.'
+            : !storefrontConfigLoaded
+              ? 'Carregando configuração da loja…'
+              : <>Depois, salve em <strong className="text-foreground">Salvar todas as configurações</strong> e recarregue a vitrine para ver o resultado.</>}
+        </p>
+      </section>
 
       {storeMode === 'supermarket' && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">

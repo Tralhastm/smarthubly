@@ -21,6 +21,9 @@ const TenantStore = () => {
   const [showSplash, setShowSplash] = useState(true);
   const [view, setView] = useState<'catalog' | 'quote'>('catalog');
   const [halloweenThemeEnabled, setHalloweenThemeEnabled] = useState<boolean | null>(null);
+  const [halloweenThemeLoaded, setHalloweenThemeLoaded] = useState(false);
+  const [christmasThemeEnabled, setChristmasThemeEnabled] = useState(false);
+  const [christmasThemeLoaded, setChristmasThemeLoaded] = useState(false);
   const hideSplash = useCallback(() => setShowSplash(false), []);
   // Oculta os botões flutuantes enquanto o splash de detalhes do produto está aberto.
   useSplashOverlay();
@@ -36,21 +39,55 @@ const TenantStore = () => {
   useEffect(() => {
     if (!isMobiletec) {
       setHalloweenThemeEnabled(null);
+      setHalloweenThemeLoaded(true);
       return;
     }
     let current = true;
+    setHalloweenThemeLoaded(false);
     void (supabase as any)
       .from('mobiletec_halloween_public')
       .select('halloween_theme_enabled')
       .maybeSingle()
       .then(({ data, error }: { data: any; error: any }) => {
-        if (!current || error || !data) return;
-        setHalloweenThemeEnabled(data.halloween_theme_enabled !== false);
+        if (!current) return;
+        setHalloweenThemeEnabled(error || !data ? true : data.halloween_theme_enabled !== false);
+        setHalloweenThemeLoaded(true);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!current) return;
+        setHalloweenThemeEnabled(true);
+        setHalloweenThemeLoaded(true);
+      });
     return () => { current = false; };
   }, [isMobiletec]);
-  const halloweenActive = isMobiletec && halloweenThemeEnabled !== false;
+  useEffect(() => {
+    if (!slug) {
+      setChristmasThemeEnabled(false);
+      setChristmasThemeLoaded(true);
+      return;
+    }
+    let current = true;
+    setChristmasThemeEnabled(false);
+    setChristmasThemeLoaded(false);
+    void (supabase as any)
+      .from('tenant_christmas_public')
+      .select('christmas_theme_enabled')
+      .eq('slug', slug.trim().toLowerCase())
+      .maybeSingle()
+      .then(({ data, error }: { data: any; error: any }) => {
+        if (!current) return;
+        setChristmasThemeEnabled(!error && data?.christmas_theme_enabled === true);
+        setChristmasThemeLoaded(true);
+      })
+      .catch(() => {
+        if (!current) return;
+        setChristmasThemeEnabled(false);
+        setChristmasThemeLoaded(true);
+      });
+    return () => { current = false; };
+  }, [slug]);
+  const christmasActive = christmasThemeLoaded && christmasThemeEnabled;
+  const halloweenActive = christmasThemeLoaded && halloweenThemeLoaded && isMobiletec && halloweenThemeEnabled !== false && !christmasActive;
 
   // Apply tenant brand colors with auto-derived tokens (garante contraste)
   useEffect(() => {
@@ -121,7 +158,17 @@ const TenantStore = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-background flex flex-col ${halloweenActive ? 'mobiletec-halloween' : ''} ${isJuzzy ? 'juzzy-storefront' : ''}`}>
+    <div className={`min-h-screen bg-background flex flex-col ${halloweenActive ? 'mobiletec-halloween' : ''} ${christmasActive ? 'christmas-storefront' : ''} ${isJuzzy ? 'juzzy-storefront' : ''}`}>
+      {christmasActive && (
+        <div className="christmas-announcement" role="region" aria-label={`Especial de Natal da loja ${tenant.name}`}>
+          <span className="christmas-announcement-emblem" aria-hidden="true">✦</span>
+          <span className="christmas-announcement-copy">
+            <strong>Especial de Natal</strong>
+            <small>Boas festas — explore a loja em clima de celebração</small>
+          </span>
+          <span className="christmas-announcement-tree" aria-hidden="true">🎄</span>
+        </div>
+      )}
       {halloweenActive && (
         <div className="halloween-announcement" aria-label="Tema especial de Halloween da Mobiletec">
           <span className="halloween-announcement-bat" aria-hidden="true">🦇</span>
@@ -136,7 +183,7 @@ const TenantStore = () => {
         <StoreSplash
           logoUrl={tenant.logo_url}
           name={tenant.name}
-          bgColor={halloweenActive ? '#170D25' : (tenant as any).splash_bg_color || '#0F172A'}
+          bgColor={christmasActive ? '#0D3026' : halloweenActive ? '#170D25' : (tenant as any).splash_bg_color || '#0F172A'}
           onDone={hideSplash}
         />
       )}
@@ -216,7 +263,16 @@ const TenantStore = () => {
             <span className="juzzy-art-spark spark-one">✦</span><span className="juzzy-art-spark spark-two">✧</span>
           </div>
         </section>
-      ) : <section className={`relative py-12 overflow-hidden ${halloweenActive ? 'halloween-hero' : ''}`}>
+      ) : <section className={`relative py-12 overflow-hidden ${halloweenActive ? 'halloween-hero' : ''} ${christmasActive ? 'christmas-hero' : ''}`}>
+        {christmasActive && (
+          <div className="christmas-hero-ornaments" aria-hidden="true">
+            <span className="christmas-ornament christmas-tree-left">🎄</span>
+            <span className="christmas-ornament christmas-star-one">✦</span>
+            <span className="christmas-ornament christmas-snow-one">❄</span>
+            <span className="christmas-ornament christmas-star-two">✧</span>
+            <span className="christmas-ornament christmas-bell-right">🔔</span>
+          </div>
+        )}
         {halloweenActive && (
           <div className="halloween-hero-ornaments" aria-hidden="true">
             <span className="halloween-orb halloween-orb-left">🎃</span>
