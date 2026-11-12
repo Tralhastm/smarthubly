@@ -7,6 +7,7 @@ import { useStoreOrderChats } from '@/hooks/useOrderChat';
 import { supabase } from '@/integrations/supabase/client';
 import { useAdminTenantBySlug } from '@/hooks/useTenants';
 import { useStoreManifest } from '@/hooks/useStoreManifest';
+import { useTheme } from '@/contexts/ThemeContext';
 import TenantAdminLogin from '@/components/tenant/TenantAdminLogin';
 import StorefrontEditor from '@/components/tenant/StorefrontEditor';
 import TenantAdminDashboard from '@/components/tenant/TenantAdminDashboard';
@@ -75,6 +76,7 @@ type StoreMode = 'local' | 'delivery' | 'dropshipping' | 'hybrid' | 'affiliate' 
 
 const TenantAdmin = () => {
   const { slug } = useParams<{ slug: string }>();
+  const { theme, setTheme } = useTheme();
   const {
     data: tenant,
     error: tenantError,
@@ -112,20 +114,15 @@ const TenantAdmin = () => {
     return () => window.removeEventListener('clara:open-request', handler);
   }, []);
 
-  // Tema do painel admin (light por padrão; lojista pode optar por dark)
-  const [adminTheme, setAdminTheme] = useState<'light' | 'dark' | null>(null);
+  // Carrega e persiste a preferência do tema deste painel, sincronizada ao botão global.
   useEffect(() => {
     if (!slug) return;
     const saved = localStorage.getItem(`admin-theme-${slug}`);
-    setAdminTheme(saved === 'dark' ? 'dark' : 'light');
-  }, [slug]);
+    setTheme(saved === 'dark' ? 'dark' : 'light');
+  }, [slug, setTheme]);
   useEffect(() => {
-    if (!slug || !adminTheme) return;
-    const root = document.documentElement;
-    if (adminTheme === 'dark') root.classList.add('dark'); else root.classList.remove('dark');
-    localStorage.setItem(`admin-theme-${slug}`, adminTheme);
-    return () => { root.classList.remove('dark'); };
-  }, [adminTheme, slug]);
+    if (slug) localStorage.setItem(`admin-theme-${slug}`, theme);
+  }, [theme, slug]);
 
 
   const storeMode = ((tenant as any)?.store_mode as StoreMode) || 'delivery';
@@ -356,11 +353,11 @@ const TenantAdmin = () => {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setAdminTheme(adminTheme === 'dark' ? 'light' : 'dark')}
-              title={adminTheme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              title={theme === 'dark' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
               className="flex items-center justify-center h-9 w-9 rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             >
-              {adminTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             <a href={`/loja/${slug}/kds`} target="_blank" rel="noreferrer" title="Painel da cozinha (KDS)" className="flex items-center gap-1 rounded-md border border-border bg-secondary px-2 py-1.5 text-sm text-muted-foreground hover:text-primary transition-colors">
               <ChefHat className="h-4 w-4" /> <span className="hidden sm:inline">Cozinha</span>

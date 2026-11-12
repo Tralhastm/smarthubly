@@ -26,6 +26,7 @@ import SuperAdminAutoTest from '@/components/super-admin/SuperAdminAutoTest';
 import SuperAdminWhatsAppBots from '@/components/super-admin/SuperAdminWhatsAppBots';
 import SuperAdminSofiaKnowledge from '@/components/super-admin/SuperAdminSofiaKnowledge';
 import { useAuthReady } from '@/hooks/useAuthReady';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type Tab = 'dashboard' | 'tenants' | 'metrics' | 'fee_requests' | 'api_keys' | 'serpapi' | 'workers' | 'users' | 'health' | 'financial' | 'society_finance' | 'billing' | 'prospecting' | 'remote_prospecting' | 'marketing' | 'usage' | 'support' | 'ai_editor' | 'auto_test' | 'whatsapp_bots' | 'sofia_knowledge';
 
@@ -35,24 +36,15 @@ const SuperAdmin = () => {
   const [tab, setTab] = useState<Tab>('dashboard');
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (typeof window === 'undefined') return 'dark';
-    return (localStorage.getItem('superadmin-theme') as 'light' | 'dark') || 'dark';
-  });
+  const { theme, setTheme } = useTheme();
   const { isReady, user } = useAuthReady();
 
-  // Aplica tema apenas enquanto o Super Admin está montado.
-  // Restaura ao sair pra não afetar a aba do cliente / outras rotas.
   useEffect(() => {
-    const root = document.documentElement;
-    const hadDark = root.classList.contains('dark');
-    if (theme === 'dark') root.classList.add('dark');
-    else root.classList.remove('dark');
+    const saved = localStorage.getItem('superadmin-theme');
+    setTheme(saved === 'light' ? 'light' : 'dark');
+  }, [setTheme]);
+  useEffect(() => {
     localStorage.setItem('superadmin-theme', theme);
-    return () => {
-      if (hadDark) root.classList.add('dark');
-      else root.classList.remove('dark');
-    };
   }, [theme]);
 
   const checkSuperAdmin = useCallback(async (userId?: string | null) => {

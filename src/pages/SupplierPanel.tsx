@@ -25,6 +25,7 @@ import { unifiedInvoke } from "@/lib/unifiedInvoke";
 import { getCourierCode } from '@/lib/delivery-code';
 import { calculateFinalProfit } from '@/lib/pricing';
 import { extractSupplierImportColors as extractColors, getCuratedSupplierProductAliases } from '@/lib/supplier-catalog-matching';
+import { useTheme } from '@/contexts/ThemeContext';
 
 type OrderWithItems = {
   id: string; status: string; total: number; delivery_type: string; payment_method: string;
@@ -65,6 +66,7 @@ const getNextStatus = (current: string, deliveryType: string): string | null => 
 // Painel fornecedor completo: importação/exportação, estoque, chats e avaliações.
 const SupplierPanel = () => {
   const { token } = useParams<{ token: string }>();
+  const { theme, setTheme } = useTheme();
   const { data: supplier, isLoading } = useSupplierByToken(token);
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -75,17 +77,14 @@ const SupplierPanel = () => {
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [tab, setTab] = useState<'orders' | 'deliveries' | 'stock' | 'import-export' | 'chats' | 'reviews' | 'lalamove' | 'shipping' | 'drivers' | 'profile'>('orders');
   const [group, setGroup] = useState<'operacao' | 'catalogo' | 'config'>('operacao');
-  const [isDark, setIsDark] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    const saved = localStorage.getItem('supplier-theme');
-    if (saved) return saved === 'dark';
-    return document.documentElement.classList.contains('dark');
-  });
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-    document.documentElement.classList.toggle('dark', isDark);
-    localStorage.setItem('supplier-theme', isDark ? 'dark' : 'light');
-  }, [isDark]);
+    const saved = localStorage.getItem('supplier-theme');
+    if (saved === 'dark' || saved === 'light') setTheme(saved);
+  }, [setTheme]);
+  useEffect(() => {
+    localStorage.setItem('supplier-theme', theme);
+  }, [theme]);
+  const isDark = theme === 'dark';
   const [activeDrivers, setActiveDrivers] = useState<Array<{ id: string; name: string; phone: string }>>([]);
   const [lalamoveAvailable, setLalamoveAvailable] = useState(false);
   const [choosingDispatch, setChoosingDispatch] = useState<string | null>(null);
@@ -1147,7 +1146,7 @@ const SupplierPanel = () => {
               {isActive ? 'Ativo' : 'Pausado'}
             </button>
             <button
-              onClick={() => setIsDark(d => !d)}
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
               title={isDark ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
               className="rounded-full p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary transition"
             >

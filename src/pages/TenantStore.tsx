@@ -13,9 +13,11 @@ import { useSplashOverlay } from '@/hooks/useSplashOverlay';
 import { ClipboardList, Store, MessageCircle, Heart, Calculator, ShoppingBag } from 'lucide-react';
 import { deriveBrandTokens, applyBrandTokens, clearBrandTokens } from '@/lib/color-utils';
 import { supabase } from '@/integrations/supabase/client';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const TenantStore = () => {
   const { slug } = useParams<{ slug: string }>();
+  const { theme } = useTheme();
   const [showSplash, setShowSplash] = useState(true);
   const [view, setView] = useState<'catalog' | 'quote'>('catalog');
   const [halloweenThemeEnabled, setHalloweenThemeEnabled] = useState<boolean | null>(null);
@@ -56,12 +58,13 @@ const TenantStore = () => {
     const primary = (tenant as any).brand_primary_color || '#3B82F6';
     const bg = (tenant as any).brand_bg_color || '#FFFFFF';
     const root = document.documentElement;
-    const tokens = deriveBrandTokens(primary, bg);
+    const derivedTokens = deriveBrandTokens(primary, theme === 'dark' ? '#121722' : bg);
+    const tokens = theme === 'dark'
+      ? Object.fromEntries(['--primary', '--primary-foreground', '--accent', '--accent-foreground', '--ring'].map(key => [key, derivedTokens[key]]))
+      : derivedTokens;
     applyBrandTokens(root, tokens);
-    // loja pública nunca herda .dark do painel admin
-    root.classList.remove('dark');
     return () => clearBrandTokens(root, Object.keys(tokens));
-  }, [tenant]);
+  }, [tenant, theme]);
 
 
   if (isLoading) {
