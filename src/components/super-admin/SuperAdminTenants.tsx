@@ -257,7 +257,7 @@ const SuperAdminTenants = () => {
           <div className="grid grid-cols-2 gap-2">
             <input value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value })} placeholder="slug-url" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
           </div>
-          <ImageUploadField value={form.logo_url} onChange={url => setForm({ ...form, logo_url: url })} tenantId="logos" transparentBg label="Logo do comércio" />
+          <ImageUploadField value={form.logo_url} onChange={url => setForm({ ...form, logo_url: url })} tenantId="logos" allowBackgroundRemoval label="Logo do comércio" />
           <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Endereço completo" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
           <div className="grid grid-cols-2 gap-2">
             <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="Telefone" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
@@ -358,7 +358,7 @@ const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCan
       <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3">
         <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
         <input value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value })} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" placeholder="slug" />
-        <ImageUploadField value={form.logo_url || ''} onChange={url => setForm({ ...form, logo_url: url })} tenantId="logos" transparentBg label="Logo" />
+        <ImageUploadField value={form.logo_url || ''} onChange={url => setForm({ ...form, logo_url: url })} tenantId="logos" allowBackgroundRemoval label="Logo" />
         <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
         <input value={(form as any).niche || ''} onChange={e => setForm({ ...form, niche: e.target.value } as any)} placeholder="Nicho" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
         <div className="grid grid-cols-2 gap-2">

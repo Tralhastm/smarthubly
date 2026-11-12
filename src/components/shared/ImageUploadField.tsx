@@ -6,7 +6,7 @@ import { Upload, Loader2, Link, ImageIcon, Search, X, Plus, Wand2, Eraser } from
 import { toast } from 'sonner';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 
-const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, transparentBg, imageSource }: { value: string; onChange: (url: string) => void; tenantId: string; label?: string; searchQuery?: string; transparentBg?: boolean; imageSource?: string | null }) => {
+const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, allowBackgroundRemoval, imageSource }: { value: string; onChange: (url: string) => void; tenantId: string; label?: string; searchQuery?: string; allowBackgroundRemoval?: boolean; imageSource?: string | null }) => {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const refInputRef = useRef<HTMLInputElement>(null);
@@ -25,6 +25,7 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, trans
   const [aiTag, setAiTag] = useState(true);
   const [beforeUrl, setBeforeUrl] = useState<string | null>(null);
   const [strippingBg, setStrippingBg] = useState(false);
+  const [removeBgAutomatically, setRemoveBgAutomatically] = useState(false);
 
 
   const refsKey = `img-refs:${tenantId}`;
@@ -61,7 +62,7 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, trans
     setUploading(true);
     try {
       let toUpload: File = file;
-      if (transparentBg) {
+      if (allowBackgroundRemoval && removeBgAutomatically) {
         try {
           const clean = await removeSolidBackground(file);
           if (clean) toUpload = new File([clean], file.name.replace(/\.\w+$/, '') + '.png', { type: 'image/png' });
@@ -152,9 +153,9 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, trans
     }
   };
 
-  // Garante que logos escolhidas por link/busca também percam o fundo sólido
+  // Aplica a remoção automática também a logos escolhidas por link/busca, somente quando optada.
   const applyTransparency = async (url: string): Promise<string> => {
-    if (!transparentBg || !url) return url;
+    if (!allowBackgroundRemoval || !removeBgAutomatically || !url) return url;
     try {
       const res = await fetch(url, { mode: 'cors' });
       const blob = await res.blob();
@@ -236,6 +237,16 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, trans
           <ImageIcon className="h-3 w-3 inline mr-1" />Buscar na web
         </button>
       </div>
+
+      {allowBackgroundRemoval && (
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-secondary/40 p-2.5">
+          <input type="checkbox" checked={removeBgAutomatically} onChange={e => setRemoveBgAutomatically(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 accent-primary" />
+          <span>
+            <span className="block text-xs font-medium text-foreground">Remover fundo automaticamente</span>
+            <span className="mt-0.5 block text-[10px] leading-relaxed text-muted-foreground">Desligado por padrão. Ao marcar, aplica ao arquivo enviado, URL colada ou imagem escolhida na busca. Você também pode remover manualmente depois.</span>
+          </span>
+        </label>
+      )}
 
       {mode === 'upload' && (
         <div className="flex gap-2">
