@@ -74,6 +74,11 @@ jobs:
         run: supabase functions deploy automations-cron --project-ref qbcplbcdxoyqpmcehnvu --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy affiliate-unified
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase functions deploy affiliate-unified --project-ref qbcplbcdxoyqpmcehnvu --yes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
       - name: Deploy mp-reconciliation-cron
         if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
         run: supabase functions deploy mp-reconciliation-cron --project-ref qbcplbcdxoyqpmcehnvu --yes
