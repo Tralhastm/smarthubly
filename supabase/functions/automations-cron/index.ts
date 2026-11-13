@@ -156,13 +156,15 @@ async function runReorderCatalog(supa: any, tenant: any) {
 
 // ============ #9 credit_reminders ============
 async function runCreditReminders(supa: any, tenant: any) {
-  const { data: due } = await supa.from("credit_accounts")
+  const { data: due, error: dueError } = await supa.from("credit_accounts")
     .select("id, customer_email, customer_name, due_date, amount, amount_paid, reminders_sent, last_reminder_at")
     .eq("tenant_id", tenant.id)
     .in("status", ["open", "overdue"])
     .not("customer_email", "is", null).neq("customer_email", "")
     .limit(50);
+  if (dueError) throw new Error(`credit_accounts query failed: ${dueError.message}`);
   let sent = 0;
+  const failures: string[] = [];
   for (const acc of due || []) {
     if (Number(acc.amount_paid) >= Number(acc.amount)) continue;
     const lastH = acc.last_reminder_at ? (Date.now() - new Date(acc.last_reminder_at).getTime()) / 3600000 : 999;
@@ -179,7 +181,14 @@ async function runCreditReminders(supa: any, tenant: any) {
         body: JSON.stringify({ credit_account_id: acc.id }),
       });
       if (r.ok) sent++;
-    } catch (e) { console.error("credit reminder fail", e); }
+      else failures.push(`${acc.id}: HTTP ${r.status}`);
+    } catch (e: any) {
+      console.error("credit reminder fail", e);
+      failures.push(`${acc.id}: ${e?.message ?? String(e)}`);
+    }
+  }
+  if (failures.length) {
+    return { eligible: due?.length || 0, sent, error: `credit reminders failed: ${failures.slice(0, 5).join(" | ")}` };
   }
   return { eligible: due?.length || 0, sent };
 }
@@ -194,9 +203,10 @@ async function runWeeklyReport(supa: any, tenant: any, opts?: { force?: boolean 
   const prevStart = new Date(Date.now() - 2 * weekMs);
 
   // pega 14 dias para comparar semana atual vs anterior
-  const { data: allOrders } = await supa.from("orders")
+  const { data: allOrders, error: ordersError } = await supa.from("orders")
     .select("id, total, status, created_at, payment_method, customer_phone, customer_name, order_items(product_name, product_price, quantity)")
     .eq("tenant_id", tenant.id).gte("created_at", prevStart.toISOString());
+  if (ordersError) throw new Error(`weekly orders query failed: ${ordersError.message}`);
 
   const orders = (allOrders || []).filter((o: any) => new Date(o.created_at) >= thisStart);
   const prevOrders = (allOrders || []).filter((o: any) => {

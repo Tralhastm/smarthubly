@@ -1016,7 +1016,9 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
               customer_phone: phone.replace(/\D/g, ''),
               scheduled_start: cursor.toISOString(),
               planned_duration_minutes: dur,
-              status: ((tenant as any).scheduling_auto_confirm ?? true) ? 'scheduled' : 'scheduled',
+              // Com auto-confirmação desligada o agendamento entra como pendente e
+              // precisa ser aprovado pela loja (aba Agendamentos).
+              status: ((tenant as any).scheduling_auto_confirm ?? true) ? 'scheduled' : 'pending',
             });
           } catch (e) { console.error('appointment error', e); }
           cursor = new Date(cursor.getTime() + dur * 60 * 1000);

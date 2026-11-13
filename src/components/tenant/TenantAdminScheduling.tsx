@@ -107,6 +107,11 @@ const TenantAdminScheduling = ({ tenantId }: Props) => {
     toast.success('Atendimento iniciado');
   };
 
+  const confirmAppt = async (id: string) => {
+    await updateMutation.mutateAsync({ id, status: 'scheduled' });
+    toast.success('Agendamento confirmado');
+  };
+
   const finishEarly = async (id: string) => {
     await updateMutation.mutateAsync({
       id,
@@ -250,6 +255,7 @@ const TenantAdminScheduling = ({ tenantId }: Props) => {
 
   const statusBadge = (status: string) => {
     const map: Record<string, { label: string; cls: string }> = {
+      pending: { label: 'Aguardando confirmação', cls: 'bg-amber-500/20 text-amber-600 dark:text-amber-400' },
       scheduled: { label: 'Agendado', cls: 'bg-blue-500/20 text-blue-600 dark:text-blue-400' },
       in_progress: { label: 'Em andamento', cls: 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400' },
       done: { label: 'Finalizado', cls: 'bg-green-500/20 text-green-600 dark:text-green-400' },
@@ -410,6 +416,12 @@ const TenantAdminScheduling = ({ tenantId }: Props) => {
 
                   {a.status !== 'done' && a.status !== 'cancelled' && (
                     <div className="flex flex-wrap gap-1.5">
+                      {a.status === 'pending' && (
+                        <button onClick={() => confirmAppt(a.id)}
+                          className="text-[11px] rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-2 py-1 hover:bg-emerald-500/30">
+                          ✓ Confirmar
+                        </button>
+                      )}
                       {a.status === 'scheduled' && (
                         <button onClick={() => startService(a.id)}
                           className="text-[11px] rounded-md bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 hover:bg-blue-500/30">

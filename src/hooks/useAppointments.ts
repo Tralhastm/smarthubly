@@ -38,7 +38,8 @@ export const useTenantUpcomingAppointments = (tenantId?: string) => {
         .select('*')
         .eq('tenant_id', tenantId)
         .gte('scheduled_start', new Date(now.getTime() - 12 * 60 * 60 * 1000).toISOString())
-        .in('status', ['scheduled', 'in_progress'])
+        // 'pending' também ocupa o horário: só deixa de ocupar se for cancelado.
+        .in('status', ['pending', 'scheduled', 'in_progress'])
         .order('scheduled_start', { ascending: true });
       if (error) throw error;
       return (data ?? []) as Appointment[];

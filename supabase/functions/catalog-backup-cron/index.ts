@@ -17,58 +17,96 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const { data: tenants } = await supabase
+  const { data: tenants, error: tenantsError } = await supabase
     .from("tenants")
     .select("id, name, store_mode")
     .eq("auto_backup_catalog", true)
-    .neq("store_mode", "affiliate");
+    .or("store_mode.neq.affiliate,store_mode.is.null");
+
+  if (tenantsError) {
+    console.error("tenants query failed", tenantsError.message);
+    await supabase.from("automation_runs").insert({
+      automation_type: "catalog_backup",
+      status: "error",
+      metrics: { tenants_backed_up: 0 },
+      error_message: `tenants query failed: ${tenantsError.message}`,
+    });
+    return new Response(JSON.stringify({ ok: false, error: tenantsError.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
 
   let backedUp = 0;
+  const failures: string[] = [];
 
   for (const t of tenants ?? []) {
     try {
-      const [{ data: products }, { data: variants }, { data: addons }] = await Promise.all([
+      const [productsRes, variantsRes, addonsRes] = await Promise.all([
         supabase.from("products").select("*").eq("tenant_id", t.id),
         supabase.from("product_variants").select("*").eq("tenant_id", t.id),
         supabase.from("product_addons").select("*").eq("tenant_id", t.id),
       ]);
 
+      // Uma leitura falha não pode virar "catálogo vazio" salvo como backup válido.
+      const readError = productsRes.error || variantsRes.error || addonsRes.error;
+      if (readError) throw new Error(`catalog read failed: ${readError.message}`);
+
+      const products = productsRes.data ?? [];
+      const variants = variantsRes.data ?? [];
+      const addons = addonsRes.data ?? [];
+
       const snapshot = {
         tenant_id: t.id,
         tenant_name: t.name,
         snapshotted_at: new Date().toISOString(),
-        products: products ?? [],
-        variants: variants ?? [],
-        addons: addons ?? [],
+        products,
+        variants,
+        addons,
       };
       const json = JSON.stringify(snapshot);
 
-      await supabase.from("catalog_backups").insert({
+      const { error: insertError } = await supabase.from("catalog_backups").insert({
         tenant_id: t.id,
-        product_count: products?.length ?? 0,
-        variant_count: variants?.length ?? 0,
-        addon_count: addons?.length ?? 0,
+        product_count: products.length,
+        variant_count: variants.length,
+        addon_count: addons.length,
         snapshot,
-        size_bytes: json.length,
+        // Tamanho real do payload em bytes (UTF-8), não quantidade de unidades UTF-16.
+        size_bytes: new TextEncoder().encode(json).length,
       });
+      if (insertError) throw new Error(`backup insert failed: ${insertError.message}`);
 
-      // Retenção: apaga backups > 30d
+      // Retenção: apaga backups > 30d (falha aqui não invalida o snapshot recém-criado,
+      // mas precisa aparecer no resultado para não passar como execução perfeita).
       const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      await supabase.from("catalog_backups").delete().eq("tenant_id", t.id).lt("created_at", cutoff);
+      const { error: deleteError } = await supabase
+        .from("catalog_backups")
+        .delete()
+        .eq("tenant_id", t.id)
+        .lt("created_at", cutoff);
+      if (deleteError) {
+        failures.push(`${t.id}: retention failed: ${deleteError.message}`);
+      }
 
       backedUp++;
     } catch (err: any) {
       console.error("backup error", t.id, err?.message);
+      failures.push(`${t.id}: ${err?.message ?? String(err)}`);
     }
   }
 
-  await supabase.from("automation_runs").insert({
+  const status = failures.length === 0 ? "success" : backedUp > 0 ? "error" : "error";
+  const { error: logError } = await supabase.from("automation_runs").insert({
     automation_type: "catalog_backup",
-    status: "success",
-    metrics: { tenants_backed_up: backedUp },
+    status,
+    metrics: { tenants_backed_up: backedUp, tenants_total: tenants?.length ?? 0, failures: failures.slice(0, 10) },
+    error_message: failures.length ? failures.slice(0, 10).join(" | ") : null,
   });
+  if (logError) console.error("catalog_backup run log failed", logError.message);
 
-  return new Response(JSON.stringify({ ok: true, backed_up: backedUp }), {
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify({ ok: failures.length === 0, backed_up: backedUp, failures }),
+    { status: failures.length === 0 ? 200 : 207, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+  );
 });

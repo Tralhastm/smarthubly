@@ -280,6 +280,39 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Guard: nunca enviar para endereço suprimido (bounce/complaint/descadastro).
+      // Vale mesmo para mensagens que já estavam na fila antes do opt-out.
+      const recipient = typeof payload.to === 'string' ? payload.to.toLowerCase().trim() : ''
+      if (recipient) {
+        const { data: suppressed, error: suppressedError } = await supabase
+          .from('suppressed_emails')
+          .select('email')
+          .eq('email', recipient)
+          .maybeSingle()
+
+        if (suppressedError) {
+          // Falha de leitura não pode virar envio silencioso: deixa na fila para retry.
+          console.error('Failed to check suppression list; keeping message in queue', {
+            queue,
+            msg_id: msg.msg_id,
+            error: suppressedError,
+          })
+          continue
+        }
+
+        if (suppressed) {
+          console.warn('Skipping send to suppressed recipient', { queue, msg_id: msg.msg_id })
+          const { error: supDelError } = await supabase.rpc('delete_email', {
+            queue_name: queue,
+            message_id: msg.msg_id,
+          })
+          if (supDelError) {
+            console.error('Failed to delete suppressed message from queue', { queue, msg_id: msg.msg_id, error: supDelError })
+          }
+          continue
+        }
+      }
+
       try {
         await sendViaBrevoGateway(payload, supabase)
 

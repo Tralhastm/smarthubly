@@ -94,3 +94,18 @@ jobs:
         run: supabase functions deploy carousel-curator --project-ref qbcplbcdxoyqpmcehnvu --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy review-ai-reply
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase functions deploy review-ai-reply --project-ref qbcplbcdxoyqpmcehnvu --yes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy catalog-backup-cron
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase functions deploy catalog-backup-cron --project-ref qbcplbcdxoyqpmcehnvu --yes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy auto-cancel-pending-orders
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase functions deploy auto-cancel-pending-orders --project-ref qbcplbcdxoyqpmcehnvu --yes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
