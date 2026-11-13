@@ -148,7 +148,6 @@ export default function TenantAdminAutomations({ tenantId }: Props) {
     const cols = [
       ...ITEMS.map(i => i.key),
       "auto_cancel_pending_minutes",
-      "auto_phantom_minutes",
       "billing_status",
       "store_mode",
     ].join(",");

@@ -5,7 +5,10 @@ export const CORS = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Max-Age": "86400"
 };
-export function json(body, status = 200) {
+type RouteHandler = (req: Request, body: unknown) => Response | Promise<Response>;
+type RouteHandlers = Record<string, RouteHandler>;
+
+export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -14,7 +17,7 @@ export function json(body, status = 200) {
     }
   });
 }
-function normalizePath(url) {
+function normalizePath(url: string) {
   try {
     const u = new URL(url);
     return u.pathname.replace(/\/+$/, "") || "/";
@@ -22,8 +25,8 @@ function normalizePath(url) {
     return "/";
   }
 }
-function stripSlug(path) {
-  const parts = path.split("/").filter((p)=>p.length > 0);
+function stripSlug(path: string) {
+  const parts = path.split("/").filter((p: string) => p.length > 0);
   // No Supabase, o path é /functions/v1/<slug>/<subpath>
   // O slug da função é a 3ª parte (ex: ["functions", "v1", "ai-media-unified", "parse-txt"])
   const v1Idx = parts.indexOf("v1");
@@ -38,7 +41,7 @@ function stripSlug(path) {
   }
   return "/";
 }
-export async function route(req, handlers) {
+export async function route(req: Request, handlers: RouteHandlers): Promise<Response> {
   if (req.method === "OPTIONS") return new Response(null, {
     status: 204,
     headers: CORS
@@ -69,7 +72,7 @@ export async function route(req, handlers) {
       available: Object.keys(handlers)
     }, 404);
   }
-  let body = {};
+  let body: unknown = {};
   let bodyText = "";
   try {
     // Clona o request para poder ler o body e ainda passar o request original se necessário
@@ -85,10 +88,10 @@ export async function route(req, handlers) {
   try {
     // Passamos o body já parseado como segundo argumento para o handler
     return await h(req, body);
-  } catch (e) {
+  } catch (e: unknown) {
     console.error(`[router] erro na rota ${path}:`, e);
     return json({
-      error: String(e?.message || e)
+      error: e instanceof Error ? e.message : String(e)
     }, 500);
   }
 }

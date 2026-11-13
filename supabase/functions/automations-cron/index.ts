@@ -26,6 +26,22 @@ async function logRun(supa: any, tenant_id: string | null, type: string, status:
 }
 
 async function suggest(supa: any, tenant_id: string, type: string, title: string, description: string, payload: any, dedupeKey?: string) {
+  if (["low_stock_promo", "combo_suggestion", "peak_alert"].includes(type)) {
+    if (!dedupeKey) throw new Error(`Missing atomic dedupe key for ${type}`);
+    const { data, error } = await supa.rpc("insert_automation_suggestion_once", {
+      _tenant_id: tenant_id,
+      _type: type,
+      _title: title,
+      _description: description,
+      _payload: payload,
+      _dedupe_key: dedupeKey,
+    });
+    if (error) throw error;
+    const result = Array.isArray(data) ? data[0] : data;
+    if (!result || typeof result.inserted !== "boolean") throw new Error(`Invalid atomic dedupe response for ${type}`);
+    return result.inserted;
+  }
+
   // Evita duplicatas pendentes. Fluxos com chave própria deduplicam por item/par.
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   let query = supa.from("automation_suggestions")
@@ -42,19 +58,22 @@ async function suggest(supa: any, tenant_id: string, type: string, title: string
 
 // ============ #3 low_stock_promo ============
 async function runLowStockPromo(supa: any, tenant: any) {
-  const { data: products } = await supa.from("products")
+  const { data: products, error: productsError } = await supa.from("products")
     .select("id, name, price, stock_quantity, category")
     .eq("tenant_id", tenant.id)
     .not("stock_quantity", "is", null)
     .gt("stock_quantity", 0)
     .lte("stock_quantity", 5)
+    .order("id", { ascending: true })
     .limit(10);
+  if (productsError) throw new Error(`Não foi possível consultar estoque baixo: ${productsError.message}`);
   let created = 0;
   for (const p of products || []) {
     const ok = await suggest(supa, tenant.id, "low_stock_promo",
       `Promoção sugerida: ${p.name}`,
       `Restam ${p.stock_quantity} unidades. Que tal 15% off pra girar o estoque?`,
-      { product_id: p.id, suggested_discount_percent: 15, current_stock: p.stock_quantity });
+      { product_id: String(p.id), suggested_discount_percent: 15, current_stock: p.stock_quantity },
+      `low-stock:${p.id}`);
     if (ok) created++;
   }
   return { products_checked: products?.length || 0, suggestions_created: created };
@@ -477,7 +496,7 @@ async function runComboSuggestion(supa: any, tenant: any) {
   );
   const pairs = new Map<string, { product1Id: string; product2Id: string; ordersTogether: number }>();
   for (const order of orders) {
-    const ids = [...new Set((order.order_items || [])
+    const ids = [...new Set<string>((order.order_items || [])
       .map((item: any) => productByName.get(normalizeProductName(item.product_name)))
       .filter((id: string | null | undefined): id is string => Boolean(id)))].sort();
     for (let i = 0; i < ids.length; i++) {
@@ -496,8 +515,6 @@ async function runComboSuggestion(supa: any, tenant: any) {
     .slice(0, 50);
   let created = 0;
   let skippedUnpriced = 0;
-  const since90d = new Date(Date.now() - 90 * 86400000).toISOString();
-
   for (const [dedupeKey, pair] of candidates) {
     if (created >= 3) break;
     const { data: quote, error: quoteError } = await supa.rpc("get_combo_price_quote", {
@@ -507,12 +524,6 @@ async function runComboSuggestion(supa: any, tenant: any) {
     });
     if (quoteError) throw new Error(`Não foi possível calcular o combo: ${quoteError.message}`);
     if (!quote?.ok) { skippedUnpriced++; continue; }
-
-    const { data: existing, error: existingError } = await supa.from("automation_suggestions")
-      .select("id").eq("tenant_id", tenant.id).eq("type", "combo_suggestion")
-      .contains("payload", { dedupe_key: dedupeKey }).gte("created_at", since90d).limit(1);
-    if (existingError) throw new Error(`Não foi possível verificar sugestões anteriores: ${existingError.message}`);
-    if (existing?.length) continue;
 
     const product1 = productById.get(pair.product1Id);
     const product2 = productById.get(pair.product2Id);
@@ -548,12 +559,14 @@ async function runComboSuggestion(supa: any, tenant: any) {
 async function runPeakAlert(supa: any, tenant: any) {
   const oneHourAgo = new Date(Date.now() - 3600000).toISOString();
   const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
-  const { count: lastHourCount } = await supa.from("orders")
+  const { count: lastHourCount, error: lastHourError } = await supa.from("orders")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenant.id).gte("created_at", oneHourAgo);
-  const { count: total14d } = await supa.from("orders")
+  if (lastHourError) throw new Error(`Não foi possível contar pedidos da última hora: ${lastHourError.message}`);
+  const { count: total14d, error: total14dError } = await supa.from("orders")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenant.id).gte("created_at", fourteenDaysAgo);
+  if (total14dError) throw new Error(`Não foi possível calcular a média de pedidos: ${total14dError.message}`);
   const avgPerHour = (total14d || 0) / (14 * 24);
   if (avgPerHour < 0.5) return { skipped: "low_volume_tenant" };
   if ((lastHourCount || 0) < 3) return { last_hour: lastHourCount || 0, avg: avgPerHour };
@@ -561,7 +574,8 @@ async function runPeakAlert(supa: any, tenant: any) {
     const created = await suggest(supa, tenant.id, "peak_alert",
       `🔥 Pico de pedidos detectado!`,
       `Última hora: ${lastHourCount} pedidos (média normal: ${avgPerHour.toFixed(1)}/h). Confira a cozinha e estoque.`,
-      { last_hour: lastHourCount, avg_per_hour: avgPerHour, ratio: (lastHourCount || 0) / avgPerHour });
+      { last_hour: lastHourCount, avg_per_hour: avgPerHour, ratio: (lastHourCount || 0) / avgPerHour },
+      `peak-alert:${new Date().toISOString().slice(0, 13)}`);
     return { peak: true, last_hour: lastHourCount, avg: avgPerHour, suggestion_created: created ? 1 : 0 };
   }
   return { peak: false, last_hour: lastHourCount, avg: avgPerHour };

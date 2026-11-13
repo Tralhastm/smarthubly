@@ -1,0 +1,76 @@
+name: Deno Type Check
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/**'
+      - 'supabase/deno.json'
+      - '.github/workflows/deno-check.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'supabase/functions/**'
+      - 'supabase/deno.json'
+      - '.github/workflows/deno-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.8
+      - name: Identify affected Edge Functions
+        id: affected
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+          PUSH_BEFORE: ${{ github.event.before || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$PR_BASE_SHA"
+          if [[ "$EVENT_NAME" == "push" ]]; then base="$PUSH_BEFORE"; fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            changed="$(git ls-files 'supabase/functions/*/*')"
+          else
+            changed="$(git diff --name-only "$base" "$GITHUB_SHA")"
+          fi
+
+          function_dirs="$(printf '%s\n' "$changed" | awk -F/ '$1 == "supabase" && $2 == "functions" && $3 != "_shared" && $3 != "" { print $1 "/" $2 "/" $3 }' | sort -u)"
+          if printf '%s\n' "$changed" | grep -Eq '^supabase/deno\.json$|^supabase/functions/_shared/' && [[ -z "$function_dirs" ]]; then
+            echo 'A shared Deno file changed without a function-specific consumer change; include an affected Edge Function to scope the check.' >&2
+            exit 1
+          fi
+          entrypoints="$(printf '%s\n' "$function_dirs" | sed '/^$/d; s#$#/index.ts#')"
+
+          while IFS= read -r entrypoint; do
+            [[ -z "$entrypoint" ]] && continue
+            [[ -f "$entrypoint" ]] || { echo "Missing Edge Function entrypoint: $entrypoint" >&2; exit 1; }
+          done <<< "$entrypoints"
+
+          {
+            echo 'entrypoints<<EOF'
+            printf '%s\n' "$entrypoints"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          echo "Deno check targets: $(printf '%s\n' "$entrypoints" | grep -c . || true)"
+      - name: Type-check affected Edge Functions
+        env:
+          ENTRYPOINTS: ${{ steps.affected.outputs.entrypoints }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r entrypoint; do
+            [[ -z "$entrypoint" ]] && continue
+            echo "Checking $entrypoint"
+            (cd "$(dirname "$entrypoint")" && deno check index.ts)
+          done <<< "$ENTRYPOINTS"

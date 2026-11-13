@@ -18,11 +18,58 @@ interface Divergence {
 }
 
 const fetchPaymentsForTenant = async (accessToken: string, fromIso: string, toIso: string) => {
-  const url = `https://api.mercadopago.com/v1/payments/search?sort=date_created&criteria=desc&begin_date=${encodeURIComponent(fromIso)}&end_date=${encodeURIComponent(toIso)}&limit=200`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!res.ok) throw new Error(`MP search failed: ${res.status}`);
-  const data = await res.json();
-  return data?.results ?? [];
+  const limit = 200;
+  const maxPages = 50;
+  const payments = new Map<string, any>();
+  let offset = 0;
+  let processed = 0;
+  let total: number | null = null;
+
+  for (let page = 0; page < maxPages; page++) {
+    const params = new URLSearchParams({
+      sort: "date_created",
+      criteria: "desc",
+      begin_date: fromIso,
+      end_date: toIso,
+      limit: String(limit),
+      offset: String(offset),
+    });
+    const res = await fetch(`https://api.mercadopago.com/v1/payments/search?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) throw new Error(`MP search failed at offset ${offset}: ${res.status}`);
+
+    const response = await res.json();
+    const result = Array.isArray(response) ? response[0] : response;
+    if (!result || !Array.isArray(result.results)) {
+      throw new Error(`MP search returned an invalid page at offset ${offset}`);
+    }
+    const pageResults = result.results as any[];
+    const reportedTotal = Number(result.paging?.total);
+    if (result.paging?.total !== undefined && result.paging?.total !== null && Number.isFinite(reportedTotal) && reportedTotal >= 0) {
+      total = reportedTotal;
+      if (total > limit * maxPages) {
+        throw new Error(`MP reconciliation limit exceeded: ${total} payments in the 24-hour window (maximum ${limit * maxPages})`);
+      }
+    }
+
+    for (const payment of pageResults) {
+      if (payment?.id === undefined || payment?.id === null) {
+        throw new Error(`MP search returned a payment without an id at offset ${offset}`);
+      }
+      payments.set(String(payment.id), payment);
+    }
+    processed += pageResults.length;
+
+    if (total !== null && offset + pageResults.length >= total) return [...payments.values()];
+    if (pageResults.length === 0) return [...payments.values()];
+    const pageLimit = Number(result.paging?.limit) || limit;
+    if (total === null && pageResults.length < pageLimit) return [...payments.values()];
+    offset += pageResults.length;
+  }
+
+  if (total !== null && processed >= total) return [...payments.values()];
+  throw new Error(`MP reconciliation stopped at the safety cap of ${limit * maxPages} payments before reaching the reported total`);
 };
 
 serve(async (req) => {
@@ -70,36 +117,47 @@ serve(async (req) => {
       const divergences: Divergence[] = [];
       let matched = 0;
 
-      for (const p of approved) {
-        const extRef: string | undefined = p.external_reference;
-        if (!extRef) {
-          divergences.push({ payment_id: String(p.id), amount: p.transaction_amount, status: p.status, reason: "payment_without_external_reference" });
-          continue;
+      for (let start = 0; start < approved.length; start += 200) {
+        const batch = approved.slice(start, start + 200);
+        const externalReferences = [...new Set(batch
+          .map((payment: any) => payment.external_reference)
+          .filter((reference: unknown): reference is string => typeof reference === "string" && reference.length > 0))];
+        const ordersById = new Map<string, any>();
+        if (externalReferences.length > 0) {
+          const { data: orders, error: orderError } = await supabase
+            .from("orders")
+            .select("id, total, status, tenant_id")
+            .in("id", externalReferences);
+          if (orderError) throw orderError;
+          for (const order of orders || []) ordersById.set(String(order.id), order);
         }
-        const { data: order, error: orderError } = await supabase
-          .from("orders")
-          .select("id, total, status, tenant_id")
-          .eq("id", extRef)
-          .maybeSingle();
-        if (orderError) throw orderError;
-        if (!order) {
-          divergences.push({ payment_id: String(p.id), amount: p.transaction_amount, status: p.status, external_reference: extRef, reason: "order_not_found" });
-          continue;
+
+        for (const p of batch) {
+          const extRef: string | undefined = p.external_reference;
+          if (!extRef) {
+            divergences.push({ payment_id: String(p.id), amount: p.transaction_amount, status: p.status, reason: "payment_without_external_reference" });
+            continue;
+          }
+          const order = ordersById.get(extRef);
+          if (!order) {
+            divergences.push({ payment_id: String(p.id), amount: p.transaction_amount, status: p.status, external_reference: extRef, reason: "order_not_found" });
+            continue;
+          }
+          if (order.tenant_id !== tenant.id) {
+            divergences.push({ payment_id: String(p.id), amount: p.transaction_amount, status: p.status, external_reference: extRef, reason: "tenant_mismatch" });
+            continue;
+          }
+          const totalDiff = Math.abs(Number(order.total) - Number(p.transaction_amount));
+          if (totalDiff > 0.5) {
+            divergences.push({ payment_id: String(p.id), amount: p.transaction_amount, status: p.status, external_reference: extRef, reason: `amount_mismatch_order=${order.total}` });
+            continue;
+          }
+          if (order.status === "pending_payment" || order.status === "cancelled") {
+            divergences.push({ payment_id: String(p.id), amount: p.transaction_amount, status: p.status, external_reference: extRef, reason: `paid_but_order_status=${order.status}` });
+            continue;
+          }
+          matched++;
         }
-        if (order.tenant_id !== tenant.id) {
-          divergences.push({ payment_id: String(p.id), amount: p.transaction_amount, status: p.status, external_reference: extRef, reason: "tenant_mismatch" });
-          continue;
-        }
-        const totalDiff = Math.abs(Number(order.total) - Number(p.transaction_amount));
-        if (totalDiff > 0.5) {
-          divergences.push({ payment_id: String(p.id), amount: p.transaction_amount, status: p.status, external_reference: extRef, reason: `amount_mismatch_order=${order.total}` });
-          continue;
-        }
-        if (order.status === "pending_payment" || order.status === "cancelled") {
-          divergences.push({ payment_id: String(p.id), amount: p.transaction_amount, status: p.status, external_reference: extRef, reason: `paid_but_order_status=${order.status}` });
-          continue;
-        }
-        matched++;
       }
 
       const { error: runInsertError } = await supabase.from("mp_reconciliation_runs").insert({

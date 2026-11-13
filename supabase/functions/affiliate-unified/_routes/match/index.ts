@@ -81,30 +81,41 @@ if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders }
 
       const matches = await generateMatches(supabase, t.name, topCats);
       for (const m of matches.slice(0, 3)) {
-        await supabase.from("affiliate_match_suggestions").insert({
-          tenant_id: t.id,
-          product_name: m.name || "Sem nome",
-          product_description: m.description || "",
-          category: m.category || "",
-          suggested_network: m.suggested_network || null,
-          rationale: m.rationale || "",
-          match_score: 75,
-        });
-        await supabase.from("automation_suggestions").insert({
-          tenant_id: t.id,
-          type: "affiliate_match",
-          title: `Achadinho sugerido: ${m.name || "Produto afiliado"}`,
-          description: `${m.category || "Categoria"}${m.suggested_network ? ` • ${m.suggested_network}` : ""}. ${m.rationale || "Combina com o catálogo atual."}`,
-          payload: {
-            product_name: m.name || "Produto afiliado",
-            category: m.category || "",
-            suggested_network: m.suggested_network || null,
-            rationale: m.rationale || "",
+        const productName = String(m.name || "Sem nome").trim() || "Sem nome";
+        const productDescription = String(m.description || "");
+        const category = String(m.category || "").trim();
+        const suggestedNetwork = m.suggested_network ? String(m.suggested_network).trim() : null;
+        const rationale = String(m.rationale || "");
+        const normalize = (value: string | null) => (value || "").toLowerCase().trim().replace(/\s+/g, " ");
+        const dedupeKey = JSON.stringify([normalize(productName), normalize(category), normalize(suggestedNetwork)]);
+        const title = `Achadinho sugerido: ${productName}`;
+        const description = `${category || "Categoria"}${suggestedNetwork ? ` • ${suggestedNetwork}` : ""}. ${rationale || "Combina com o catálogo atual."}`;
+        const { data, error } = await supabase.rpc("insert_affiliate_match_suggestion_once", {
+          _tenant_id: t.id,
+          _dedupe_key: dedupeKey,
+          _product_name: productName,
+          _product_description: productDescription,
+          _category: category,
+          _suggested_network: suggestedNetwork,
+          _rationale: rationale,
+          _match_score: 75,
+          _title: title,
+          _description: description,
+          _payload: {
+            product_name: productName,
+            category,
+            suggested_network: suggestedNetwork,
+            rationale,
+            dedupe_key: dedupeKey,
           },
-          status: "pending",
         });
-        tenantInserted++;
-        inserted++;
+        if (error) throw error;
+        const result: any = Array.isArray(data) ? data[0] : data;
+        if (!result || typeof result.inserted !== "boolean") throw new Error("Resposta inválida ao salvar sugestão afiliada");
+        if (result.inserted) {
+          tenantInserted++;
+          inserted++;
+        }
       }
       await logRun(supabase, t.id, "success", {
         suggestions_created: tenantInserted,
