@@ -190,7 +190,8 @@ async function createPagBank(supabase: any, tenant: any, order: any, items: any[
   const token = clean(tenant.pagbank_token, 500);
   if (!token) return reply({ provider: "pagbank", code: "PROVIDER_NOT_CONFIGURED", error: "Loja sem token PagBank configurado." }, 400);
   const base = tenant.pagbank_env === "production" ? "https://api.pagseguro.com" : "https://sandbox.api.pagseguro.com";
-  const body = { reference_id: orderId, items: reconcileItems(items, order).map((x: any) => ({ reference_id: x.title.slice(0, 64), name: x.title, quantity: x.quantity, unit_amount: Math.round(x.unit_price * 100) })), payment_methods: [{ type: "PIX" }, { type: "CREDIT_CARD" }, { type: "DEBIT_CARD" }, { type: "BOLETO" }], redirect_url: `${origin}/loja/${clean(tenant.slug)}/pedido/${orderId}`, return_url: `${origin}/loja/${clean(tenant.slug)}/pedido/${orderId}`, notification_urls: [`${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-webhook`] };
+  const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/pagbank-webhook`;
+  const body = { reference_id: orderId, items: reconcileItems(items, order).map((x: any) => ({ reference_id: x.title.slice(0, 64), name: x.title, quantity: x.quantity, unit_amount: Math.round(x.unit_price * 100) })), payment_methods: [{ type: "PIX" }, { type: "CREDIT_CARD" }, { type: "DEBIT_CARD" }, { type: "BOLETO" }], redirect_url: `${origin}/loja/${clean(tenant.slug)}/pedido/${orderId}`, return_url: `${origin}/loja/${clean(tenant.slug)}/pedido/${orderId}`, notification_urls: [webhookUrl], payment_notification_urls: [webhookUrl] };
   const result = await fetchJson(`${base}/checkouts`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json", "x-api-version": "4.0" }, body: JSON.stringify(body) });
   if (!result.response.ok) return errorFromProvider("pagbank", result.data, "Não foi possível criar o checkout no PagBank.");
   const link = result.data?.links?.find((item: any) => String(item.rel).toUpperCase() === "PAY")?.href || result.data?.links?.[0]?.href;
@@ -221,6 +222,9 @@ Deno.serve(async (req) => {
     if (orderResult.error || !orderResult.data) return reply({ code: "ORDER_NOT_FOUND", error: "Pedido não encontrado." }, 404);
     const tenant = tenantResult.data as any;
     const order = orderResult.data as any;
+    if (order.status !== "pending_payment") {
+      return reply({ code: "ORDER_NOT_PAYABLE", error: "Este pedido não está aguardando pagamento. Aguarde a revisão da loja ou atualize o pedido." }, 409);
+    }
     const provider = clean(tenant.payment_provider || "mercadopago").toLowerCase();
     const origin = req.headers.get("origin") || "https://smarthubly.pages.dev";
     console.log(`[payment] order=${orderId} provider=${provider} total=${money(order.total)}`);

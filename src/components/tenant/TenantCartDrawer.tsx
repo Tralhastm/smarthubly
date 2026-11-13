@@ -935,7 +935,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           ? 'payment_due_delivery'
           : payOnline
             ? PENDING_PAYMENT_STATUS
-            : ((tenant as any).dropshipping_review_mode ? 'pending_review' : 'received');
+            : 'pending_review'; // libera para a fila só depois da triagem antifraude
 
       const orderResult = await addOrderMutation.mutateAsync({
         order: {
@@ -983,7 +983,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             online_fee_pass_through_percent: 0,
             online_payment_method: payOnline ? onlinePaymentMethod : null,
             courier_code: courierCode,
-            online_fee_pass_through_amount: 0
+            online_fee_pass_through_amount: 0,
+            fraud_check_pending: !simulateApproved && !(tenant as any).dropshipping_review_mode
           }
         } as any,
         items: items.map(i => ({
@@ -1073,10 +1074,29 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             console.warn('coupon counter update failed:', e);
           }
         }
-        // #21 — Anti-fraude (fire-and-forget; bloqueia pedido se score muito alto)
-        try {
-          supabase.functions.invoke('fraud-check', { body: { orderId: orderResult.id } }).catch(() => {});
-        } catch { /* noop */ }
+        // #21 — Aguardar a triagem antes de liberar pedidos presenciais para a fila.
+        // Em falha ou risco sinalizado o pedido permanece pending_review (fail closed).
+        if (!simulateApproved && !(tenant as any).dropshipping_review_mode) try {
+          const { data: fraudResult, error: fraudError } = await supabase.functions.invoke('fraud-check', {
+            body: { orderId: orderResult.id },
+          });
+          if (fraudError) {
+            console.error('fraud check unavailable; keeping order for manual review', fraudError);
+            toast({ title: 'Pedido recebido para análise', description: 'A loja revisará o pedido antes de confirmá-lo.' });
+            clearCart(); setStep('cart'); setOpen(false);
+            return;
+          }
+          if (fraudResult?.action === 'flagged' || fraudResult?.action === 'blocked') {
+            toast({ title: 'Pedido recebido para análise', description: 'A loja revisará o pedido antes de confirmá-lo.' });
+            clearCart(); setStep('cart'); setOpen(false);
+            return;
+          }
+        } catch (fraudError) {
+          console.error('fraud check failed; keeping order for manual review', fraudError);
+          toast({ title: 'Pedido recebido para análise', description: 'A loja revisará o pedido antes de confirmá-lo.' });
+          clearCart(); setStep('cart'); setOpen(false);
+          return;
+        }
       }
 
       if (simulateApproved && orderResult?.id) {
