@@ -59,6 +59,11 @@ jobs:
         run: supabase functions deploy abandoned-cart-cron --project-ref qbcplbcdxoyqpmcehnvu --yes
         env:
           SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy ghost-orders-detector
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
+        run: supabase functions deploy ghost-orders-detector --project-ref qbcplbcdxoyqpmcehnvu --yes
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ env.SUPABASE_ACCESS_TOKEN }}
       - name: Deploy marketing-unified
         if: ${{ env.SUPABASE_ACCESS_TOKEN != '' }}
         run: supabase functions deploy marketing-unified --project-ref qbcplbcdxoyqpmcehnvu --yes

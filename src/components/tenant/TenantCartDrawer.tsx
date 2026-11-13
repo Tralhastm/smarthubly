@@ -81,6 +81,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
   const [email, setEmail] = useState(() => {
     try { return JSON.parse(localStorage.getItem('lastCustomer:' + tenant.slug) || '{}')?.email || ''; } catch { return ''; }
   });
+  const [abandonedMarketingOptIn, setAbandonedMarketingOptIn] = useState(false);
   const [documentNumber, setDocumentNumber] = useState(() => {
     try { return JSON.parse(localStorage.getItem('lastCustomer:' + tenant.slug) || '{}')?.documentNumber || ''; } catch { return ''; }
   });
@@ -134,26 +135,33 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       try {
         const itemsSummary = items.map(i => ({ name: i.product.name, qty: i.quantity, price: getCartLineUnitPrice(i) }));
         if (cartSessionId) {
-          await supabase.from('cart_sessions').update({
+          const { error } = await supabase.from('cart_sessions').update({
+            customer_phone: phoneDigits,
             customer_name: name || '',
+            customer_email: email.trim() || null,
+            marketing_email_opt_in: abandonedMarketingOptIn,
             items: itemsSummary as any,
             total,
             last_activity_at: new Date().toISOString(),
           }).eq('id', cartSessionId);
+          if (error) console.warn('abandoned cart session update failed:', error.message);
         } else {
           const { data, error } = await supabase.from('cart_sessions').insert({
             tenant_id: tenant.id,
             customer_phone: phoneDigits,
             customer_name: name || '',
+            customer_email: email.trim() || null,
+            marketing_email_opt_in: abandonedMarketingOptIn,
             items: itemsSummary as any,
             total,
           }).select('id').single();
           if (!error && data?.id) setCartSessionId(data.id);
+          else if (error) console.warn('abandoned cart session insert failed:', error.message);
         }
       } catch (e) { /* tracking falha em silêncio, não bloqueia checkout */ }
     }, 4000);
     return () => clearTimeout(t);
-  }, [phone, name, items, total, tenant.id, cartSessionId]);
+  }, [phone, name, email, abandonedMarketingOptIn, items, total, tenant.id, cartSessionId]);
 
   // ===== Detecta itens agendáveis (serviços) e soma duração =====
   const serviceItems = useMemo(
@@ -1226,11 +1234,23 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
                     <input
                       type="email"
                       value={email}
-                      onChange={e => setEmail(e.target.value)}
+                      onChange={e => { setEmail(e.target.value); setAbandonedMarketingOptIn(false); }}
                       className="w-full mt-1 rounded-lg border border-border bg-secondary px-3 py-2 text-foreground text-sm"
                       placeholder="seu@email.com"
                     />
                   </div>
+                  {(tenant as any).auto_abandon_coupon && (tenant as any).marketing_emails_enabled && (tenant as any).abandoned_cart_email_enabled && (
+                    <label className="flex items-start gap-2 rounded-md border border-border p-3 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={abandonedMarketingOptIn}
+                        disabled={!email.trim()}
+                        onChange={e => setAbandonedMarketingOptIn(e.target.checked)}
+                      />
+                      <span>Quero receber ofertas e cupons promocionais desta loja por e-mail. É opcional; posso cancelar a qualquer momento pelo link de descadastro.</span>
+                    </label>
+                  )}
 
                   {/* ===== Agendamento de serviços ===== */}
                   {hasServices && !schedulingConfig.scheduling_enabled && (

@@ -4,7 +4,7 @@ import { parseAddress } from '@/lib/address-utils';
 import { useDrivers } from '@/hooks/useDrivers';
 import { useTenants } from '@/hooks/useTenants';
 import { supabase } from '@/integrations/supabase/client';
-import { Package, Clock, ChefHat, Truck, CheckCircle, MapPin, Trash2, User, Bell, History, MessageCircle, Printer, BellOff, BellRing } from 'lucide-react';
+import { Package, Clock, ChefHat, Truck, CheckCircle, MapPin, Trash2, User, Bell, History, MessageCircle, Printer, BellOff, BellRing, Ghost } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { logOrderEvent } from '@/lib/order-events';
@@ -64,6 +64,34 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
   const tenant = allTenants.find((t: any) => t.id === tenantId);
   const [filter, setFilter] = useState<string>('all');
   const [allSuppliers, setAllSuppliers] = useState<any[]>([]);
+  const [ghostOrderIds, setGhostOrderIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let active = true;
+    const loadGhostFlags = async () => {
+      const { data, error } = await supabase.from('ghost_order_flags')
+        .select('order_id')
+        .eq('tenant_id', tenantId)
+        .is('resolved_at', null)
+        .limit(1000);
+      if (error) {
+        console.error('ghost order flags load failed:', error.message);
+        return;
+      }
+      if (active) setGhostOrderIds(new Set((data || []).map(row => row.order_id)));
+    };
+    void loadGhostFlags();
+    const channel = supabase.channel(`ghost-order-flags-${tenantId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ghost_order_flags', filter: `tenant_id=eq.${tenantId}` }, () => {
+        void loadGhostFlags();
+      })
+      .subscribe();
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, [tenantId]);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -401,6 +429,11 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
                 <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.color}`}>
                   {cfg.icon} {cfg.label}
                 </span>
+                {ghostOrderIds.has(order.id) && (
+                  <span className="flex items-center gap-1 rounded-full bg-purple-500/15 px-2 py-0.5 text-xs font-medium text-purple-600 dark:text-purple-400">
+                    <Ghost className="h-3 w-3" /> Verificar entrega
+                  </span>
+                )}
                 {order.status === 'received' && (
                   <span className="flex items-center gap-1 text-xs text-primary animate-pulse">
                     <Bell className="h-3 w-3" /> Novo!

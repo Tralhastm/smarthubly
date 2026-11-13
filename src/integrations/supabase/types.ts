@@ -546,6 +546,7 @@ export type Database = {
       }
       cart_sessions: {
         Row: {
+          abandoned_email_sent_at: string | null
           abandoned_notified_at: string | null
           converted_order_id: string | null
           coupon_code: string | null
@@ -556,11 +557,13 @@ export type Database = {
           id: string
           items: Json
           last_activity_at: string
+          marketing_email_opt_in: boolean
           tenant_id: string
           total: number
           updated_at: string
         }
         Insert: {
+          abandoned_email_sent_at?: string | null
           abandoned_notified_at?: string | null
           converted_order_id?: string | null
           coupon_code?: string | null
@@ -571,11 +574,13 @@ export type Database = {
           id?: string
           items?: Json
           last_activity_at?: string
+          marketing_email_opt_in?: boolean
           tenant_id: string
           total?: number
           updated_at?: string
         }
         Update: {
+          abandoned_email_sent_at?: string | null
           abandoned_notified_at?: string | null
           converted_order_id?: string | null
           coupon_code?: string | null
@@ -586,6 +591,7 @@ export type Database = {
           id?: string
           items?: Json
           last_activity_at?: string
+          marketing_email_opt_in?: boolean
           tenant_id?: string
           total?: number
           updated_at?: string
