@@ -1095,13 +1095,23 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         navigate(`/loja/${tenant.slug}/pagar/${orderResult.id}`);
       } else if (viaWhatsApp) {
         // A conversa já foi aberta e o cliente confirmou o envio; aqui só registramos.
-        await decrementStock(); clearCart(); setStep('cart'); setOpen(false);
-        toast({ title: '✅ Pedido registrado!', description: 'Acompanhe o status em tempo real.' });
+        let stockSyncFailed = false;
+        try { await decrementStock(); } catch (stockError) {
+          console.error('stock decrement failed after order creation', stockError);
+          stockSyncFailed = true;
+        }
+        clearCart(); setStep('cart'); setOpen(false);
+        toast({ title: stockSyncFailed ? 'Pedido registrado; confira o estoque' : '✅ Pedido registrado!', description: stockSyncFailed ? 'A sincronização do estoque falhou. Confira os itens do pedido no painel.' : 'Acompanhe o status em tempo real.' });
         if (orderResult?.id) navigate(`/loja/${tenant.slug}/pedido/${orderResult.id}`);
       } else if (orderResult?.id) {
         // Pedido sem WhatsApp / sem pagamento online → vai direto pra página de status
-        await decrementStock(); clearCart(); setStep('cart'); setOpen(false);
-        toast({ title: '✅ Pedido realizado!', description: 'Acompanhe o status em tempo real.' });
+        let stockSyncFailed = false;
+        try { await decrementStock(); } catch (stockError) {
+          console.error('stock decrement failed after order creation', stockError);
+          stockSyncFailed = true;
+        }
+        clearCart(); setStep('cart'); setOpen(false);
+        toast({ title: stockSyncFailed ? 'Pedido registrado; confira o estoque' : '✅ Pedido realizado!', description: stockSyncFailed ? 'A sincronização do estoque falhou. Confira os itens do pedido no painel.' : 'Acompanhe o status em tempo real.' });
         navigate(`/loja/${tenant.slug}/pedido/${orderResult.id}`);
       }
     } catch (error: any) {

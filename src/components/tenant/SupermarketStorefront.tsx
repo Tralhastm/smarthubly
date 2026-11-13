@@ -109,7 +109,7 @@ const SupermarketStorefront = ({ tenant }: { tenant: any }) => {
   const cfg: StorefrontConfig = (tenant?.storefront_config as StorefrontConfig) || {};
   const c = { ...STOREFRONT_DEFAULTS, ...cfg };
   const showPrices = cfg.show_prices !== false;
-  const { data: products = [], isLoading } = useProducts(tenant?.id);
+  const { data: products = [], isLoading } = useProducts(tenant?.id, true);
   const { addToCart } = useCart();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('todas');

@@ -3078,6 +3078,8 @@ export type Database = {
           affiliate_url: string | null
           auto_categorize: boolean
           availability_mode: string
+          bundle_signature: string | null
+          bundle_source_suggestion_id: string | null
           category: string
           cest: string | null
           cfop: string | null
@@ -3104,6 +3106,7 @@ export type Database = {
           shipping_origin_override: string | null
           stock_quantity: number | null
           subcategory: string
+          storefront_rank: number | null
           supplier_id: string | null
           tenant_id: string
           unidade: string | null
@@ -3134,6 +3137,9 @@ export type Database = {
           kitchen_sector?: string | null
           max_concurrent?: number | null
           name: string
+          bundle_signature?: string | null
+          bundle_source_suggestion_id?: string | null
+          storefront_rank?: number | null
           ncm?: string | null
           origem?: string | null
           original_price?: number
@@ -3173,6 +3179,9 @@ export type Database = {
           kitchen_sector?: string | null
           max_concurrent?: number | null
           name?: string
+          bundle_signature?: string | null
+          bundle_source_suggestion_id?: string | null
+          storefront_rank?: number | null
           ncm?: string | null
           origem?: string | null
           original_price?: number

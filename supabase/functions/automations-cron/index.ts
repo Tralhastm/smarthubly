@@ -25,14 +25,18 @@ async function logRun(supa: any, tenant_id: string | null, type: string, status:
   } catch (e) { console.error("logRun fail", e); }
 }
 
-async function suggest(supa: any, tenant_id: string, type: string, title: string, description: string, payload: any) {
-  // evita duplicatas pendentes do mesmo type+payload nas últimas 24h
+async function suggest(supa: any, tenant_id: string, type: string, title: string, description: string, payload: any, dedupeKey?: string) {
+  // Evita duplicatas pendentes. Fluxos com chave própria deduplicam por item/par.
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const { data: dup } = await supa.from("automation_suggestions")
-    .select("id").eq("tenant_id", tenant_id).eq("type", type).eq("status", "pending")
-    .gte("created_at", since).limit(1);
+  let query = supa.from("automation_suggestions")
+    .select("id").eq("tenant_id", tenant_id).eq("type", type).eq("status", "pending");
+  if (dedupeKey) query = query.contains("payload", { dedupe_key: dedupeKey });
+  else query = query.gte("created_at", since);
+  const { data: dup, error: duplicateError } = await query.limit(1);
+  if (duplicateError) throw duplicateError;
   if (dup && dup.length > 0) return false;
-  await supa.from("automation_suggestions").insert({ tenant_id, type, title, description, payload, status: "pending" });
+  const { error: insertError } = await supa.from("automation_suggestions").insert({ tenant_id, type, title, description, payload, status: "pending" });
+  if (insertError) throw insertError;
   return true;
 }
 
@@ -56,28 +60,98 @@ async function runLowStockPromo(supa: any, tenant: any) {
   return { products_checked: products?.length || 0, suggestions_created: created };
 }
 
-// ============ #6 reorder_catalog (por vendas últimos 30 dias) ============
+const normalizeProductName = (value: unknown) => String(value ?? "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim();
+
+async function fetchAllPages(query: any, label: string, pageSize = 500) {
+  const rows: any[] = [];
+  const maxRows = 10_000;
+  for (let offset = 0; offset <= maxRows; offset += pageSize) {
+    const end = offset + pageSize - 1;
+    const { data, error } = await query.range(offset, end);
+    if (error) throw new Error(`${label}: ${error.message}`);
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) return rows;
+    if (offset >= maxRows) throw new Error(`${label}: excedeu o limite seguro de paginação; nenhum ranking foi gravado.`);
+  }
+  return rows;
+}
+
+// ============ #6 reorder_catalog (aplica ranking por vendas/cliques) ============
 async function runReorderCatalog(supa: any, tenant: any) {
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
-  const { data: orders } = await supa.from("orders")
-    .select("id, order_items(product_name, quantity)")
-    .eq("tenant_id", tenant.id)
-    .in("status", ["delivered", "out-for-delivery", "preparing"])
-    .gte("created_at", since)
-    .limit(1000);
-  const sales: Record<string, number> = {};
-  for (const o of orders || []) {
-    for (const it of (o.order_items || [])) {
-      sales[it.product_name] = (sales[it.product_name] || 0) + Number(it.quantity || 1);
+  const products = await fetchAllPages(
+    supa.from("products").select("id,name,storefront_rank,store_visible,manual_blocked,in_stock,stock_quantity,item_type")
+      .eq("tenant_id", tenant.id).order("name", { ascending: true }),
+    "products for storefront rank",
+  );
+  const eligible = products.filter((p: any) =>
+    p.store_visible !== false && !p.manual_blocked && p.item_type !== "service"
+    && p.in_stock !== false && (p.stock_quantity == null || Number(p.stock_quantity) > 0),
+  );
+  const counts = new Map<string, number>();
+  let source: "sales" | "affiliate_clicks" = "sales";
+
+  if (tenant.store_mode === "affiliate") {
+    source = "affiliate_clicks";
+    const clicks = await fetchAllPages(
+      supa.from("affiliate_clicks").select("product_id")
+        .eq("tenant_id", tenant.id).gte("clicked_at", since).not("product_id", "is", null)
+        .order("clicked_at", { ascending: false }),
+      "affiliate product clicks",
+    );
+    for (const click of clicks) {
+      const id = String(click.product_id || "");
+      if (id) counts.set(id, (counts.get(id) || 0) + 1);
+    }
+  } else {
+    const byName = new Map<string, string | null>();
+    for (const product of eligible) {
+      const key = normalizeProductName(product.name);
+      if (!key) continue;
+      if (byName.has(key)) byName.set(key, null);
+      else byName.set(key, product.id);
+    }
+    const orders = await fetchAllPages(
+      supa.from("orders").select("id, order_items(product_name,quantity)")
+        .eq("tenant_id", tenant.id).in("status", ["delivered", "out-for-delivery", "preparing"])
+        .gte("created_at", since).order("created_at", { ascending: false }),
+      "orders for storefront rank",
+    );
+    for (const order of orders) {
+      for (const item of order.order_items || []) {
+        const productId = byName.get(normalizeProductName(item.product_name));
+        if (!productId) continue;
+        const quantity = Math.max(1, Number(item.quantity) || 1);
+        counts.set(productId, (counts.get(productId) || 0) + quantity);
+      }
     }
   }
-  const top5 = Object.entries(sales).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  if (top5.length === 0) return { top: 0, suggestions_created: 0 };
-  const created = await suggest(supa, tenant.id, "reorder_catalog",
-    `Top 5 mais vendidos (últimos 30 dias)`,
-    `Coloque esses produtos no topo do cardápio pra acelerar conversão: ${top5.map(([n, q]) => `${n} (${q})`).join(", ")}`,
-    { top_products: top5.map(([name, qty]) => ({ name, qty })) });
-  return { top: top5.length, suggestions_created: created ? 1 : 0 };
+
+  const top = eligible
+    .map((product: any) => ({ product, count: counts.get(String(product.id)) || 0 }))
+    .filter((entry: any) => entry.count > 0)
+    .sort((a: any, b: any) => b.count - a.count || String(a.product.name).localeCompare(String(b.product.name), "pt-BR"))
+    .slice(0, 5);
+  const rankById = new Map(top.map((entry: any, index: number) => [String(entry.product.id), index + 1]));
+  let ranksUpdated = 0;
+  for (const product of products) {
+    const desiredRank = rankById.get(String(product.id)) ?? null;
+    const currentRank = product.storefront_rank == null ? null : Number(product.storefront_rank);
+    if (currentRank === desiredRank) continue;
+    const { error } = await supa.from("products").update({ storefront_rank: desiredRank })
+      .eq("tenant_id", tenant.id).eq("id", product.id);
+    if (error) throw new Error(`Não foi possível atualizar a ordem de ${product.name}: ${error.message}`);
+    ranksUpdated++;
+  }
+
+  return {
+    source,
+    window_days: 30,
+    products_ranked: top.length,
+    ranks_updated: ranksUpdated,
+    top: top.map((entry: any, index: number) => ({ rank: index + 1, product_id: entry.product.id, name: entry.product.name, sales_or_clicks: entry.count })),
+  };
 }
 
 // ============ #9 credit_reminders ============
@@ -360,30 +434,104 @@ async function runCategorizeNightly(supa: any, tenant: any) {
   } catch (e: any) { return { uncategorized: items.length, error: e.message }; }
 }
 
-// ============ #12 combo_suggestion (busca pares co-comprados) ============
+// ============ #12 combo_suggestion (pares co-comprados com preço seguro) ============
 async function runComboSuggestion(supa: any, tenant: any) {
   const since = new Date(Date.now() - 30 * 86400000).toISOString();
-  const { data: orders } = await supa.from("orders")
-    .select("id, order_items(product_name)")
-    .eq("tenant_id", tenant.id).in("status", ["delivered", "out-for-delivery", "preparing"])
-    .gte("created_at", since).limit(500);
-  const pairs: Record<string, number> = {};
-  for (const o of orders || []) {
-    const names = [...new Set((o.order_items || []).map((it: any) => it.product_name))].sort();
-    for (let i = 0; i < names.length; i++) {
-      for (let j = i + 1; j < names.length; j++) {
-        const k = `${names[i]} + ${names[j]}`;
-        pairs[k] = (pairs[k] || 0) + 1;
+  const products = await fetchAllPages(
+    supa.from("products")
+      .select("id,name,price,original_price,in_stock,store_visible,manual_blocked,stock_quantity,item_type,bundle_signature")
+      .eq("tenant_id", tenant.id).order("name", { ascending: true }),
+    "products for combo suggestions",
+  );
+  const eligible = products.filter((p: any) =>
+    p.store_visible !== false && !p.manual_blocked && p.item_type !== "service"
+    && !p.bundle_signature
+    && p.in_stock !== false && (p.stock_quantity == null || Number(p.stock_quantity) > 0),
+  );
+  const productByName = new Map<string, string | null>();
+  const productById = new Map<string, any>();
+  for (const product of eligible) {
+    const id = String(product.id);
+    productById.set(id, product);
+    const key = normalizeProductName(product.name);
+    if (!key) continue;
+    if (productByName.has(key)) productByName.set(key, null);
+    else productByName.set(key, id);
+  }
+
+  const orders = await fetchAllPages(
+    supa.from("orders").select("id,order_items(product_name)")
+      .eq("tenant_id", tenant.id).in("status", ["delivered", "out-for-delivery", "preparing"])
+      .gte("created_at", since).order("created_at", { ascending: false }),
+    "orders for combo suggestions",
+  );
+  const pairs = new Map<string, { product1Id: string; product2Id: string; ordersTogether: number }>();
+  for (const order of orders) {
+    const ids = [...new Set((order.order_items || [])
+      .map((item: any) => productByName.get(normalizeProductName(item.product_name)))
+      .filter((id: string | null | undefined): id is string => Boolean(id)))].sort();
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const key = `${ids[i]}|${ids[j]}`;
+        const pair = pairs.get(key) || { product1Id: ids[i], product2Id: ids[j], ordersTogether: 0 };
+        pair.ordersTogether++;
+        pairs.set(key, pair);
       }
     }
   }
-  const top3 = Object.entries(pairs).filter(([_, c]) => c >= 3).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  if (top3.length === 0) return { combos_found: 0 };
-  const created = await suggest(supa, tenant.id, "combo_suggestion",
-    `${top3.length} combo(s) sugerido(s)`,
-    `Clientes compram juntos: ${top3.map(([k, c]) => `${k} (${c}x)`).join(" • ")}. Crie como combo com 5-10% de desconto.`,
-    { pairs: top3.map(([combo, count]) => ({ combo, count })) });
-  return { combos_found: top3.length, suggestions_created: created ? 1 : 0 };
+
+  const candidates = [...pairs.entries()]
+    .filter(([, pair]) => pair.ordersTogether >= 3)
+    .sort((a, b) => b[1].ordersTogether - a[1].ordersTogether)
+    .slice(0, 50);
+  let created = 0;
+  let skippedUnpriced = 0;
+  const since90d = new Date(Date.now() - 90 * 86400000).toISOString();
+
+  for (const [dedupeKey, pair] of candidates) {
+    if (created >= 3) break;
+    const { data: quote, error: quoteError } = await supa.rpc("get_combo_price_quote", {
+      _tenant_id: tenant.id,
+      _product1_id: pair.product1Id,
+      _product2_id: pair.product2Id,
+    });
+    if (quoteError) throw new Error(`Não foi possível calcular o combo: ${quoteError.message}`);
+    if (!quote?.ok) { skippedUnpriced++; continue; }
+
+    const { data: existing, error: existingError } = await supa.from("automation_suggestions")
+      .select("id").eq("tenant_id", tenant.id).eq("type", "combo_suggestion")
+      .contains("payload", { dedupe_key: dedupeKey }).gte("created_at", since90d).limit(1);
+    if (existingError) throw new Error(`Não foi possível verificar sugestões anteriores: ${existingError.message}`);
+    if (existing?.length) continue;
+
+    const product1 = productById.get(pair.product1Id);
+    const product2 = productById.get(pair.product2Id);
+    if (!product1 || !product2) continue;
+    const money = (value: unknown) => Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const title = `Combo: ${product1.name} + ${product2.name}`;
+    const description = `Comprados juntos em ${pair.ordersTogether} pedidos distintos nos últimos 30 dias. Soma individual: ${money(quote.regular_total)}; combo sugerido: ${money(quote.suggested_price)}; custo total: ${money(quote.total_cost)}; lucro líquido previsto: ${money(quote.final_profit)}. O preço será recalculado com os custos e gastos atuais quando você aprovar; a aprovação cria o combo no catálogo.`;
+    const payload = {
+      product_ids: [pair.product1Id, pair.product2Id],
+      dedupe_key: dedupeKey,
+      product_names: [product1.name, product2.name],
+      orders_together: pair.ordersTogether,
+      regular_total: Number(quote.regular_total),
+      total_cost: Number(quote.total_cost),
+      suggested_price: Number(quote.suggested_price),
+      final_profit: Number(quote.final_profit),
+      margin_percent: Number(quote.margin_percent),
+      discount_percent: Number(quote.discount_percent),
+      pricing_window_days: 30,
+    };
+    if (await suggest(supa, tenant.id, "combo_suggestion", title, description, payload, dedupeKey)) created++;
+  }
+
+  return {
+    pairs_found: candidates.length,
+    suggestions_created: created,
+    skipped_without_safe_price: skippedUnpriced,
+    window_days: 30,
+  };
 }
 
 // ============ #14 peak_alert (compara última hora vs média) ============
@@ -411,7 +559,7 @@ async function runPeakAlert(supa: any, tenant: any) {
 
 // ============ Despacha por tenant ============
 // Automações compatíveis com modo afiliado (não dependem de venda própria/checkout/estoque/cozinha):
-//   - reorder_catalog (ranking de mais vendidos/clicados ainda faz sentido)
+//   - reorder_catalog (usa cliques rastreados na afiliada e vendas nas demais lojas)
 //   - weekly_report
 //   - categorize_nightly
 // Tudo o que envolve estoque, fiado, combos, picos de cozinha, low stock, é skipado em afiliado.
@@ -453,8 +601,10 @@ Deno.serve(async (req) => {
   try {
     let q = supa.from("tenants")
       .select("id, name, store_mode, billing_email, transactional_emails_enabled, auto_low_stock_promo, auto_reorder_catalog, auto_credit_reminders, auto_weekly_report, auto_categorize_nightly, auto_combo_suggestion, auto_peak_alert");
+    q = q.eq("active", true);
     if (forceTenant) q = q.eq("id", forceTenant);
-    const { data: tenants } = await q;
+    const { data: tenants, error: tenantsError } = await q;
+    if (tenantsError) throw tenantsError;
 
     const summary: any = { tenants_processed: 0, results: {} };
     for (const t of tenants || []) {
@@ -466,7 +616,10 @@ Deno.serve(async (req) => {
       }
       summary.results[t.id] = { name: t.name, ...r };
       summary.tenants_processed++;
-      await logRun(supa, t.id, onlyWeekly ? "weekly_report_manual" : "automations_cron_tick", "success", r);
+      const errors = Object.entries(r).filter(([, value]: [string, any]) => value && typeof value === "object" && value.error);
+      const runStatus = errors.length ? "error" : "success";
+      const errorText = errors.map(([key, value]: [string, any]) => `${key}: ${value.error}`).join("; ");
+      await logRun(supa, t.id, onlyWeekly ? "weekly_report_manual" : "automations_cron_tick", runStatus, r, errorText || undefined);
     }
     summary.duration_ms = Date.now() - startedAt;
 

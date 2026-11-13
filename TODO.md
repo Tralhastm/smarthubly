@@ -55,3 +55,27 @@
 - [ ] `pnpm build`, testes e `git diff --check` passam.
 - [ ] A migration e a Edge Function são aplicadas no projeto Supabase correto.
 - [ ] O deploy do Cloudflare Pages recebe a aba atualizada.
+
+
+# Automações de catálogo — combos e ranking
+
+## Combo por co-compra com aprovação real
+- [ ] Para cada loja ativa com checkout/pedidos próprios, detectar combinações de produtos que aparecem juntas em pelo menos 3 pedidos distintos nos últimos 30 dias; quantidade repetida no mesmo pedido conta como um pedido.
+- [ ] Consultar custos reais cadastrados por produto/variante e os gastos gerais e específicos ativos da loja; reutilizar o lucro mínimo e o percentual de repasse da aba de preço. Se faltar algum custo necessário, não inventar valor nem liberar aprovação de um combo precificado.
+- [ ] Sugerir 5% de desconto sobre a soma dos preços individuais, desde que o preço de combo ainda preserve o lucro mínimo configurado; se a conta não fechar, não apresentar preço como viável.
+- [ ] Só depois de o administrador aprovar, criar no catálogo um produto combo idempotente com os itens que compõem o combo e o preço recalculado usando os custos e despesas atuais; marcar a sugestão como aplicada somente após a criação confirmar sucesso.
+- [ ] Ativar `auto_combo_suggestion` em todas as lojas ativas que registram vendas próprias. Não ativar para lojas afiliadas que não têm pedidos próprios para detectar co-compras.
+
+## Produtos de maior saída no topo da vitrine
+- [ ] A cada execução horária da automação, ranquear os 5 produtos com maior quantidade vendida nos últimos 30 dias nas lojas de checkout próprio e colocá-los automaticamente no topo, sem criar pedido de aprovação.
+- [ ] Nas lojas afiliadas, usar os cliques rastreados de produto como sinal disponível, sem apresentá-los como vendas.
+- [ ] Limpar o rank anterior dos produtos que saírem do top 5, preservar a ordenação normal para os demais e fazer a vitrine pública respeitar o ranking em todas as páginas/filtros.
+- [ ] Ativar `auto_reorder_catalog` para todas as lojas ativas, inclusive afiliadas.
+
+## Reconciliação do Mercado Pago e honestidade da caixa de sugestões
+- [ ] Usar o campo existente `tenants.mercadopago_token` para obter o token da reconciliação MP; erro na consulta de lojas/pagamentos/gravação deve ser reportado como falha, nunca como execução bem-sucedida.
+- [ ] Se o operador clicar em aprovação e a ação não puder ser executada, manter a sugestão pendente e apresentar erro. Sugestões que só pedem reconhecimento não podem alegar que executaram uma alteração comercial.
+
+## Limites explícitos desta rodada
+- [ ] Manter os valores atuais de todas as automações diferentes de combos e ranking; não habilitar automações em massa fora das duas solicitadas.
+- [x] Deixar os webhooks de pagamento Pix/cartão fora da rodada: não mudar o comportamento que move pedidos entre `Recebido` e `Preparando`.

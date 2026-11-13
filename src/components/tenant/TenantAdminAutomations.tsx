@@ -17,7 +17,7 @@ const RESULT_LOCATIONS: Record<string, { where: string; tip?: string }> = {
   auto_log_platform_fee: { where: "Financeiro → Despesas, categoria 'taxa_plataforma'" },
   auto_low_stock_promo: { where: "Aqui mesmo, na Caixa de Sugestões abaixo ⬇️" },
   auto_abandon_coupon: { where: "Aqui mesmo, na Caixa de Sugestões abaixo ⬇️", tip: "Cupom também aparece em Marketing → Cupons" },
-  auto_reorder_catalog: { where: "Aqui mesmo, na Caixa de Sugestões abaixo ⬇️", tip: "Aplicar reordena os produtos no Catálogo" },
+  auto_reorder_catalog: { where: "Vitrine publicada — os cinco melhores ficam no topo automaticamente", tip: "Vendas dos últimos 30 dias; lojas afiliadas usam cliques rastreados." },
   auto_credit_reminders: { where: "Financeiro → Fiados (e e-mails enviados ao cliente)" },
   auto_weekly_report: { where: "Aqui mesmo, na Caixa de Sugestões abaixo ⬇️", tip: "Também é enviado por e-mail toda segunda às 8h" },
   auto_categorize_nightly: { where: "Catálogo → Produtos (categoria preenchida automaticamente)" },
@@ -35,7 +35,6 @@ const RESULT_LOCATIONS: Record<string, { where: string; tip?: string }> = {
 const SUGGESTION_TYPES: Record<string, string[]> = {
   auto_low_stock_promo: ["low_stock_promo", "low_stock"],
   auto_abandon_coupon: ["abandoned_cart"],
-  auto_reorder_catalog: ["reorder_catalog"],
   auto_weekly_report: ["weekly_report"],
   auto_combo_suggestion: ["combo_suggestion"],
   auto_peak_alert: ["peak_alert"],
@@ -86,9 +85,14 @@ const asRecord = (value: unknown): Record<string, unknown> => value && typeof va
 
 const statusLabel: Record<string, string> = {
   pending: "pendente",
-  applied: "aplicado/visto",
+  applied: "visto",
   dismissed: "descartado",
 };
+
+const suggestionStatusLabel = (s: AutomationSuggestion) =>
+  s.status === "applied" && ["combo_suggestion", "low_stock_promo"].includes(s.type)
+    ? "aplicado"
+    : statusLabel[s.status] || s.status;
 
 function formatSuggestionDetail(s: AutomationSuggestion) {
   const payload = asRecord(s.payload);
@@ -114,11 +118,11 @@ const ITEMS: Item[] = [
   { key: "auto_log_platform_fee", icon: <Receipt className="h-4 w-4" />, title: "Lançar taxa da plataforma no financeiro", description: "Cada pedido entregue vira automaticamente uma despesa categorizada como 'taxa_plataforma'.", badge: "Onda 1" },
   { key: "auto_low_stock_promo", icon: <Sparkles className="h-4 w-4" />, title: "Sugerir promoção quando estoque baixo", description: "Produto com estoque ≤ 5 vira sugestão na sua caixa de aprovação (15% off por padrão).", badge: "Onda 2" },
   { key: "auto_abandon_coupon", icon: <Tag className="h-4 w-4" />, title: "Cupom para carrinho abandonado", description: "Cliente preencheu telefone + carrinho mas não fechou? Gero cupom de 10% (válido 7d) e te aviso pra mandar no WhatsApp.", badge: "Onda 2" },
-  { key: "auto_reorder_catalog", icon: <ListOrdered className="h-4 w-4" />, title: "Top vendidos do mês", description: "A cada hora analiso vendas dos últimos 30 dias e sugiro destacar os campeões no topo do cardápio.", badge: "Onda 2" },
+  { key: "auto_reorder_catalog", icon: <ListOrdered className="h-4 w-4" />, title: "Top vendidos do mês", description: "A cada hora atualizo a ordem da vitrine: os 5 com mais vendas nos últimos 30 dias sobem ao topo; afiliadas usam os cliques rastreados.", badge: "Onda 2" },
   { key: "auto_credit_reminders", icon: <MessageSquare className="h-4 w-4" />, title: "Lembrete automático de fiado", description: "Mando emails progressivos: 3d antes do vencimento, no dia, +3d, +7d, +15d, +30d para clientes em atraso.", badge: "Onda 2" },
   { key: "auto_weekly_report", icon: <FileText className="h-4 w-4" />, title: "Relatório semanal", description: "Toda segunda às 8h, gero resumo dos últimos 7 dias (pedidos, faturamento, cancelamentos) na caixa de sugestões.", badge: "Onda 2" },
   { key: "auto_categorize_nightly", icon: <Bot className="h-4 w-4" />, title: "Auto-categorização noturna", description: "Toda madrugada (3h) a IA categoriza produtos sem categoria pra manter o catálogo organizado.", badge: "Onda 2" },
-  { key: "auto_combo_suggestion", icon: <Combine className="h-4 w-4" />, title: "Sugestão de combos", description: "Detecto pares de produtos vendidos juntos (≥3x no mês) e sugiro virar combo com 5-10% de desconto.", badge: "Onda 2" },
+  { key: "auto_combo_suggestion", icon: <Combine className="h-4 w-4" />, title: "Sugestão de combos", description: "Se dois itens aparecerem juntos em 3 ou mais pedidos no mês, calculo um preço usando custos e gastos cadastrados. Ao aprovar, o combo é criado no catálogo.", badge: "Onda 2" },
   { key: "auto_peak_alert", icon: <BarChart3 className="h-4 w-4" />, title: "Alerta de pico de demanda", description: "Quando a última hora bate 3x a média da loja, te aviso na caixa de sugestões pra reforçar a cozinha.", badge: "Onda 2" },
   { key: "auto_reconcile_mp", icon: <Link2 className="h-4 w-4" />, title: "Reconciliação Mercado Pago", description: "Todo dia cruzo pagamentos aprovados no MP com seus pedidos e te aviso de divergências (valor errado, pedido não encontrado, etc).", badge: "Onda 3" },
   { key: "auto_backup_catalog", icon: <DatabaseBackup className="h-4 w-4" />, title: "Backup automático do catálogo", description: "Snapshot diário de produtos, variantes e adicionais. Mantém últimos 30 dias para você restaurar se precisar.", badge: "Onda 3" },
@@ -133,6 +137,7 @@ export default function TenantAdminAutomations({ tenantId }: Props) {
   const [saving, setSaving] = useState<string | null>(null);
   const [runningAffiliateMatch, setRunningAffiliateMatch] = useState(false);
   const [runningWeeklyReport, setRunningWeeklyReport] = useState(false);
+  const [applyingSuggestionId, setApplyingSuggestionId] = useState<string | null>(null);
   const [data, setData] = useState<Record<string, unknown>>({});
   const [suggestions, setSuggestions] = useState<AutomationSuggestion[]>([]);
   const [history, setHistory] = useState<AutomationSuggestion[]>([]);
@@ -145,6 +150,7 @@ export default function TenantAdminAutomations({ tenantId }: Props) {
       "auto_cancel_pending_minutes",
       "auto_phantom_minutes",
       "billing_status",
+      "store_mode",
     ].join(",");
     const { data: t, error } = await supabase
       .from("tenants")
@@ -174,63 +180,55 @@ export default function TenantAdminAutomations({ tenantId }: Props) {
         .order("created_at", { ascending: false })
         .limit(200),
     ]);
-    setSuggestions(pending.data || []);
+    setSuggestions((pending.data || []).filter(s => s.type !== "reorder_catalog"));
     setHistory(all.data || []);
   }, [tenantId]);
 
   useEffect(() => { load(); loadSuggestions(); }, [load, loadSuggestions]);
 
-  async function applyLowStockPromo(s: AutomationSuggestion): Promise<string | null> {
-    const payload = asRecord(s.payload);
-    const productId = typeof payload.product_id === "string" ? payload.product_id : null;
-    const discountPct = Number(payload.suggested_discount_percent ?? 15);
-    if (!productId) return null;
-    // 1) Busca preço atual do produto
-    const { data: prod } = await supabase
-      .from("products").select("id, name, price").eq("id", productId).maybeSingle();
-    if (!prod) return null;
-    const oldPrice = Number(prod.price || 0);
-    if (oldPrice <= 0) return null;
-    const newPrice = Math.max(0.5, Math.round(oldPrice * (1 - discountPct / 100) * 100) / 100);
-    // 2) Aplica desconto no preço do produto
-    const { error: prodErr } = await supabase
-      .from("products").update({ price: newPrice }).eq("id", productId);
-    if (prodErr) return prodErr.message;
-    // 3) Liga banner de promoção da loja com o produto em destaque
-    const { error: tErr } = await supabase
-      .from("tenants").update({
-        promo_active: true,
-        promo_title: "🔥 Estoque baixo — Oferta!",
-        promo_text: `${discountPct}% off em ${prod.name}! Últimas unidades — corre 🏃‍♂️`,
-      } as TenantUpdate).eq("id", tenantId);
-    if (tErr) return tErr.message;
-    return `Preço de ${prod.name}: R$ ${oldPrice.toFixed(2)} → R$ ${newPrice.toFixed(2)} · banner ligado`;
-  }
-
   async function actSuggestion(id: string, status: "applied" | "dismissed") {
     const target = [...suggestions, ...history].find(x => x.id === id);
-    let extraMsg: string | null = null;
-    let applyError: string | null = null;
-    if (status === "applied" && target?.type === "low_stock_promo") {
-      try {
-        extraMsg = await applyLowStockPromo(target);
-      } catch (e) {
-        applyError = errorMessage(e);
-      }
-    }
-    if (applyError) { toast.error(`Não consegui aplicar: ${applyError}`); return; }
+    if (!target || applyingSuggestionId) return;
+    setApplyingSuggestionId(id);
+    try {
+      let extraMsg: string | null = null;
+      let changedByRpc = false;
+      const payload = asRecord(target.payload);
+      const productIds = Array.isArray(payload.product_ids) ? payload.product_ids : [];
 
-    const { error } = await supabase
-      .from("automation_suggestions")
-      .update({ status, acted_at: new Date().toISOString() })
-      .eq("id", id);
-    if (error) { toast.error("Erro"); return; }
-    setSuggestions(s => s.filter(x => x.id !== id));
-    setHistory(h => h.map(x => x.id === id ? { ...x, status, acted_at: new Date().toISOString() } : x));
-    if (status === "applied") {
-      toast.success(extraMsg ? `Aplicado! ${extraMsg}` : "Aplicado!");
-    } else {
-      toast.success("Descartado");
+      if (status === "applied" && target.type === "combo_suggestion" && productIds.length === 2) {
+        const { data: result, error } = await (supabase.rpc as any)("approve_combo_suggestion", { _suggestion_id: id });
+        if (error) throw error;
+        const combo = asRecord(result);
+        if (combo.ok !== true) throw new Error(String(combo.error || "Não foi possível criar o combo."));
+        const price = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(combo.price || 0));
+        extraMsg = `Combo criado: ${String(combo.name || "Combo")} · ${price}`;
+        changedByRpc = true;
+      } else if (status === "applied" && target.type === "low_stock_promo" && typeof payload.product_id === "string") {
+        const { data: result, error } = await (supabase.rpc as any)("approve_low_stock_promo", { _suggestion_id: id });
+        if (error) throw error;
+        const promo = asRecord(result);
+        if (promo.ok !== true) throw new Error(String(promo.error || "Não foi possível aplicar a promoção."));
+        const price = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(promo.final_price || 0));
+        extraMsg = `Promoção aplicada em ${String(promo.product_name || "produto")} · novo preço ${price}`;
+        changedByRpc = true;
+      }
+
+      if (!changedByRpc) {
+        const { error } = await supabase.from("automation_suggestions")
+          .update({ status, acted_at: new Date().toISOString() }).eq("id", id).eq("tenant_id", tenantId);
+        if (error) throw error;
+      }
+
+      const actedAt = new Date().toISOString();
+      setSuggestions(s => s.filter(x => x.id !== id));
+      setHistory(h => h.map(x => x.id === id ? { ...x, status, acted_at: actedAt } : x));
+      if (status === "applied") toast.success(extraMsg || "Marcado como visto.");
+      else toast.success("Descartado");
+    } catch (e) {
+      toast.error(`Não consegui concluir: ${errorMessage(e)}`);
+    } finally {
+      setApplyingSuggestionId(null);
     }
   }
 
@@ -381,8 +379,10 @@ export default function TenantAdminAutomations({ tenantId }: Props) {
                 </div>
                 <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">{s.description}</p>
                 <div className="flex gap-2 mt-2">
-                  <button onClick={() => actSuggestion(s.id, "applied")} className="text-xs px-3 py-1 rounded bg-primary text-primary-foreground hover:opacity-90">Aplicar / Visto</button>
-                  <button onClick={() => actSuggestion(s.id, "dismissed")} className="text-xs px-3 py-1 rounded border border-border text-muted-foreground hover:bg-muted">Descartar</button>
+                  <button disabled={applyingSuggestionId === s.id} onClick={() => actSuggestion(s.id, "applied")} className="text-xs px-3 py-1 rounded bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50">
+                    {applyingSuggestionId === s.id ? "Processando…" : s.type === "combo_suggestion" && Array.isArray(asRecord(s.payload).product_ids) && (asRecord(s.payload).product_ids as unknown[]).length === 2 ? "Criar combo" : s.type === "low_stock_promo" && typeof asRecord(s.payload).product_id === "string" ? "Aplicar promoção" : "Marcar como visto"}
+                  </button>
+                  <button disabled={applyingSuggestionId === s.id} onClick={() => actSuggestion(s.id, "dismissed")} className="text-xs px-3 py-1 rounded border border-border text-muted-foreground hover:bg-muted disabled:opacity-50">Descartar</button>
                 </div>
               </div>
             ))}
@@ -402,7 +402,7 @@ export default function TenantAdminAutomations({ tenantId }: Props) {
                     h.status === "pending" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" :
                     h.status === "applied" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" :
                     "bg-muted text-muted-foreground"
-                  }`}>{h.status}</span>
+                  }`}>{suggestionStatusLabel(h)}</span>
                   <div className="flex-1 min-w-0">
                     <p className="truncate font-medium">{h.title}</p>
                     <p className="text-[10px] text-muted-foreground">{h.type} · {new Date(h.created_at).toLocaleString("pt-BR")}</p>
@@ -434,6 +434,9 @@ export default function TenantAdminAutomations({ tenantId }: Props) {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">{item.description}</p>
+                  {item.key === "auto_combo_suggestion" && data.store_mode === "affiliate" && (
+                    <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">Não disponível em lojas afiliadas: elas não têm pedidos próprios para identificar combos.</p>
+                  )}
                   {RESULT_LOCATIONS[item.key] && (
                     <div className="mt-2 rounded-md bg-muted/50 border border-border/50 px-2 py-1.5">
                       <div className="flex items-start gap-1.5 text-[11px]">
@@ -458,7 +461,7 @@ export default function TenantAdminAutomations({ tenantId }: Props) {
                                     <div className="flex items-start justify-between gap-2">
                                       <p className="font-medium text-foreground line-clamp-2">{s.title}</p>
                                       <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                        {statusLabel[s.status] || s.status}
+                                        {suggestionStatusLabel(s)}
                                       </span>
                                     </div>
                                     <p className="mt-0.5 text-muted-foreground line-clamp-2">{s.description}</p>
@@ -491,7 +494,7 @@ export default function TenantAdminAutomations({ tenantId }: Props) {
               </div>
               <Switch
                 checked={!!data[item.key]}
-                disabled={saving === item.key}
+                disabled={saving === item.key || (item.key === "auto_combo_suggestion" && data.store_mode === "affiliate")}
                 onCheckedChange={(v) => toggle(item.key, v)}
               />
             </div>

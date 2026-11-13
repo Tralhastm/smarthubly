@@ -83,12 +83,48 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const clearCart = () => { setItems([]); try { localStorage.removeItem('cart'); } catch { /* ignore */ } };
   useEffect(() => { try { if (items.length === 0) localStorage.removeItem('cart'); else localStorage.setItem('cart', JSON.stringify(items)); } catch { /* storage unavailable */ } }, [items]);
   const decrementStock = async () => {
-    const byProduct = new Map<string, number>();
-    items.forEach(i => byProduct.set(i.product.id, (byProduct.get(i.product.id) || 0) + i.quantity));
-    for (const [productId, qty] of byProduct) {
-      const item = items.find(i => i.product.id === productId); if (!item) continue;
-      const stockQty = (item.product as any).stock_quantity;
-      if (stockQty != null) await supabase.from('products').update({ stock_quantity: Math.max(0, stockQty - qty), in_stock: Math.max(0, stockQty - qty) > 0 } as any).eq('id', productId);
+    const requiredStock = new Map<string, { tenantId: string; quantity: number }>();
+    const addRequirement = (productId: string, tenantId: string, quantity: number) => {
+      const previous = requiredStock.get(productId);
+      requiredStock.set(productId, { tenantId, quantity: (previous?.quantity || 0) + quantity });
+    };
+
+    for (const item of items) {
+      const product = item.product as any;
+      const tenantId = String(product.tenant_id || '');
+      const bundleSignature = String(product.bundle_signature || '');
+      if (!bundleSignature || !tenantId) {
+        addRequirement(item.product.id, tenantId, item.quantity);
+        continue;
+      }
+
+      const { data: components, error: componentsError } = await supabase
+        .from('product_bundle_items' as any)
+        .select('component_product_id, quantity')
+        .eq('tenant_id', tenantId)
+        .eq('bundle_product_id', item.product.id);
+      if (componentsError) throw componentsError;
+      if (!components?.length) {
+        addRequirement(item.product.id, tenantId, item.quantity);
+        continue;
+      }
+      for (const component of components as Array<{ component_product_id: string; quantity: number }>) {
+        addRequirement(component.component_product_id, tenantId, item.quantity * Number(component.quantity || 1));
+      }
+    }
+
+    for (const [productId, requirement] of requiredStock) {
+      const { tenantId, quantity } = requirement;
+      const { data: product, error: readError } = await supabase
+        .from('products').select('stock_quantity').eq('id', productId).eq('tenant_id', tenantId).maybeSingle();
+      if (readError) throw readError;
+      const stockQty = product?.stock_quantity;
+      if (stockQty == null) continue;
+      const nextQty = Math.max(0, Number(stockQty) - quantity);
+      const { error: updateError } = await supabase
+        .from('products').update({ stock_quantity: nextQty, in_stock: nextQty > 0 } as any)
+        .eq('id', productId).eq('tenant_id', tenantId);
+      if (updateError) throw updateError;
     }
   };
   const total = items.reduce((sum, i) => sum + lineUnitPrice(i) * i.quantity, 0);

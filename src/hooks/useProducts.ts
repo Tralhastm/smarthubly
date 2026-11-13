@@ -20,12 +20,16 @@ const sameCatalogIdentity = (left: any, right: any) =>
 
 const PAGE_SIZE = 200;
 
-export const useProducts = (tenantId?: string) => {
+export const useProducts = (tenantId?: string, prioritizeStorefrontRank = false) => {
   return useQuery({
-    queryKey: ['products', tenantId],
+    queryKey: ['products', tenantId, prioritizeStorefrontRank],
     queryFn: async () => {
       if (!tenantId) return [];
-      const { data, error } = await supabase.from('products').select('*').eq('tenant_id', tenantId).order('created_at');
+      let query = supabase.from('products').select('*').eq('tenant_id', tenantId);
+      query = prioritizeStorefrontRank
+        ? query.order('storefront_rank', { ascending: true, nullsFirst: false }).order('created_at')
+        : query.order('created_at');
+      const { data, error } = await query;
       if (error) throw error;
       // Defensive: if any image is a giant base64 (> 100KB), drop it from the payload to keep UI fast.
       // The real fix is migrating to storage, but this prevents repeated download of multi-MB rows.
@@ -63,6 +67,7 @@ export const useInfiniteProducts = (tenantId?: string) => {
         .from('products')
         .select('*')
         .eq('tenant_id', tenantId)
+        .order('storefront_rank', { ascending: true, nullsFirst: false })
         .order('created_at')
         .range(from, to);
       if (error) throw error;
