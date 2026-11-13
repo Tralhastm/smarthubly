@@ -407,6 +407,23 @@ html.splash-open .splash-add-btn {
   isolation: isolate;
 }
 
+.christmas-storefront::before {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, hsl(0 0% 100% / 0.95) 0 1.3px, transparent 2px),
+    radial-gradient(circle, hsl(43 91% 70% / 0.8) 0 1.5px, transparent 2.4px),
+    radial-gradient(circle, hsl(151 30% 35% / 0.34) 0 1px, transparent 1.8px);
+  background-position: 0 -120px, 40px -150px, 120px -300px;
+  background-repeat: repeat;
+  background-size: 120px 120px, 180px 150px, 300px 300px;
+  animation: christmas-snowfall 12s linear infinite;
+  content: '';
+  opacity: 0.42;
+  pointer-events: none;
+}
+
 .christmas-announcement {
   position: relative;
   z-index: 31;
@@ -434,7 +451,7 @@ html.splash-open .splash-add-btn {
     radial-gradient(circle at 32% 20%, #fff 0 1px, transparent 2px),
     radial-gradient(circle at 72% 65%, #fff 0 1px, transparent 2px);
   background-size: auto, auto, 94px 48px, 127px 66px;
-  animation: christmas-snow-shift 12s linear infinite;
+  animation: christmas-snow-shift 8s linear infinite;
   content: '';
   pointer-events: none;
 }
@@ -450,6 +467,7 @@ html.splash-open .splash-add-btn {
     radial-gradient(circle at 39px 4px, #f17b72 0 2px, transparent 3px) 0 0 / 72px 8px repeat-x,
     radial-gradient(circle at 62px 4px, #83d6a4 0 2px, transparent 3px) 0 0 / 72px 8px repeat-x;
   filter: drop-shadow(0 0 5px hsl(43 100% 75% / 0.62));
+  animation: christmas-light-glow 2.2s ease-in-out infinite;
   content: '';
   pointer-events: none;
 }
@@ -489,11 +507,11 @@ html.splash-open .splash-add-btn {
 
 .christmas-hero-ornaments { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .christmas-ornament { position: absolute; display: block; filter: drop-shadow(0 4px 12px hsl(43 80% 45% / 0.2)); }
-.christmas-tree-left { left: max(4%, calc((100% - 1180px) / 2)); bottom: 10%; animation: christmas-float 5s ease-in-out infinite; font-size: clamp(27px, 4vw, 44px); opacity: 0.78; }
-.christmas-star-one { top: 16%; left: 25%; animation: christmas-twinkle 2.5s ease-in-out infinite; color: hsl(43 92% 54%); font-size: 27px; }
-.christmas-snow-one { top: 63%; right: 27%; animation: christmas-snow-drift 8s ease-in-out infinite; color: hsl(153 34% 42% / 0.7); font-size: 23px; }
-.christmas-star-two { top: 21%; right: 22%; animation: christmas-twinkle 3.3s ease-in-out -1s infinite; color: hsl(351 70% 52%); font-size: 22px; }
-.christmas-bell-right { right: max(5%, calc((100% - 1180px) / 2)); bottom: 14%; animation: christmas-float 4.4s ease-in-out -1.2s infinite; font-size: clamp(25px, 3.6vw, 39px); opacity: 0.72; }
+.christmas-tree-left { left: max(4%, calc((100% - 1180px) / 2)); bottom: 10%; animation: christmas-float 3.8s ease-in-out infinite; font-size: clamp(27px, 4vw, 44px); opacity: 0.78; }
+.christmas-star-one { top: 16%; left: 25%; animation: christmas-twinkle 1.8s ease-in-out infinite; color: hsl(43 92% 54%); font-size: 27px; }
+.christmas-snow-one { top: 63%; right: 27%; animation: christmas-snow-drift 3.8s ease-in-out infinite; color: hsl(153 34% 42% / 0.7); font-size: 23px; }
+.christmas-star-two { top: 21%; right: 22%; animation: christmas-twinkle 2.2s ease-in-out -1s infinite; color: hsl(351 70% 52%); font-size: 22px; }
+.christmas-bell-right { right: max(5%, calc((100% - 1180px) / 2)); bottom: 14%; animation: christmas-float 3.6s ease-in-out -1.2s infinite; font-size: clamp(25px, 3.6vw, 39px); opacity: 0.72; }
 
 .christmas-storefront main .bg-card {
   border-color: hsl(151 34% 34% / 0.25);
@@ -507,21 +525,29 @@ html.splash-open .splash-add-btn {
   transform: translateY(-2px);
 }
 
+@keyframes christmas-snowfall {
+  from { background-position: 0 -120px, 40px -150px, 120px -300px; }
+  to { background-position: 0 480px, 40px 450px, 120px 300px; }
+}
 @keyframes christmas-snow-shift {
   from { background-position: center, center, 0 -48px, 30px -66px; }
   to { background-position: center, center, 0 48px, 30px 66px; }
 }
 @keyframes christmas-float {
-  0%, 100% { transform: translateY(0) rotate(-3deg); }
-  50% { transform: translateY(-7px) rotate(3deg); }
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-11px) rotate(4deg); }
+}
+@keyframes christmas-light-glow {
+  0%, 100% { opacity: 0.72; filter: drop-shadow(0 0 3px hsl(43 100% 75% / 0.42)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 12px hsl(43 100% 75% / 0.9)); }
 }
 @keyframes christmas-twinkle {
-  0%, 100% { opacity: 0.72; transform: scale(0.92); }
-  50% { opacity: 1; transform: scale(1.1); }
+  0%, 100% { opacity: 0.62; transform: scale(0.82); }
+  50% { opacity: 1; transform: scale(1.18); filter: drop-shadow(0 0 9px hsl(43 100% 68% / 0.75)); }
 }
 @keyframes christmas-snow-drift {
   0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  50% { transform: translate(8px, -9px) rotate(12deg); }
+  50% { transform: translate(14px, -18px) rotate(18deg); }
 }
 
 @media (max-width: 520px) {
@@ -533,7 +559,9 @@ html.splash-open .splash-add-btn {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .christmas-storefront::before,
   .christmas-announcement::before,
+  .christmas-announcement::after,
   .christmas-announcement-emblem,
   .christmas-announcement-tree,
   .christmas-ornament {
