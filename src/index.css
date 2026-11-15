@@ -483,7 +483,7 @@ html.splash-open .splash-add-btn {
 .christmas-announcement-copy strong { color: #ffe4a0; font-size: 12px; font-weight: 800; letter-spacing: 0.13em; text-transform: uppercase; }
 .christmas-announcement-copy small { color: hsl(42 40% 93%); font-size: 10px; letter-spacing: 0.025em; }
 .christmas-announcement-emblem { color: #ffe4a0; animation: christmas-twinkle 2.8s ease-in-out infinite; font-size: 22px; text-shadow: 0 0 14px hsl(43 100% 70% / 0.72); }
-.christmas-announcement-tree { animation: christmas-float 4s ease-in-out infinite; filter: drop-shadow(0 0 9px hsl(43 100% 70% / 0.35)); font-size: 23px; }
+.christmas-announcement-tree { animation: christmas-tree-pulse 2.4s ease-in-out infinite; filter: drop-shadow(0 0 9px hsl(43 100% 70% / 0.35)); font-size: 23px; transform-origin: center bottom; }
 
 .christmas-storefront .storefront-header {
   border-bottom-color: hsl(43 70% 50% / 0.3);
@@ -507,11 +507,11 @@ html.splash-open .splash-add-btn {
 
 .christmas-hero-ornaments { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .christmas-ornament { position: absolute; display: block; filter: drop-shadow(0 4px 12px hsl(43 80% 45% / 0.2)); }
-.christmas-tree-left { left: max(4%, calc((100% - 1180px) / 2)); bottom: 10%; animation: christmas-float 3.8s ease-in-out infinite; font-size: clamp(27px, 4vw, 44px); opacity: 0.78; }
+.christmas-tree-left { left: max(4%, calc((100% - 1180px) / 2)); bottom: 10%; animation: christmas-tree-pulse 2.4s ease-in-out infinite; font-size: clamp(27px, 4vw, 44px); opacity: 0.78; transform-origin: center bottom; }
 .christmas-star-one { top: 16%; left: 25%; animation: christmas-twinkle 1.8s ease-in-out infinite; color: hsl(43 92% 54%); font-size: 27px; }
 .christmas-snow-one { top: 63%; right: 27%; animation: christmas-snow-drift 3.8s ease-in-out infinite; color: hsl(153 34% 42% / 0.7); font-size: 23px; }
 .christmas-star-two { top: 21%; right: 22%; animation: christmas-twinkle 2.2s ease-in-out -1s infinite; color: hsl(351 70% 52%); font-size: 22px; }
-.christmas-bell-right { right: max(5%, calc((100% - 1180px) / 2)); bottom: 14%; animation: christmas-float 3.6s ease-in-out -1.2s infinite; font-size: clamp(25px, 3.6vw, 39px); opacity: 0.72; }
+.christmas-bell-right { right: max(5%, calc((100% - 1180px) / 2)); bottom: 14%; animation: christmas-bell-swing 1.7s ease-in-out infinite; font-size: clamp(25px, 3.6vw, 39px); opacity: 0.72; transform-origin: 50% 10%; }
 
 .christmas-storefront main .bg-card {
   border-color: hsl(151 34% 34% / 0.25);
@@ -548,6 +548,18 @@ html.splash-open .splash-add-btn {
 @keyframes christmas-snow-drift {
   0%, 100% { transform: translate(0, 0) rotate(0deg); }
   50% { transform: translate(14px, -18px) rotate(18deg); }
+}
+@keyframes christmas-tree-pulse {
+  0%, 100% { transform: scale(0.84); }
+  50% { transform: scale(1.18); }
+}
+@keyframes christmas-bell-swing {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(16deg); }
+  30% { transform: rotate(-13deg); }
+  45% { transform: rotate(10deg); }
+  60% { transform: rotate(-7deg); }
+  75% { transform: rotate(4deg); }
 }
 
 @media (max-width: 520px) {
