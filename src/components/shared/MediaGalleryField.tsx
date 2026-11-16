@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react';
 import { uploadProductImage } from '@/hooks/useProductImageUpload';
+import { useImageDrop } from '@/hooks/useImageDrop';
+import DropOverlay from '@/components/shared/DropOverlay';
 import { supabase } from '@/integrations/supabase/client';
 import { Upload, Loader2, Link, Video, Image as ImageIcon, Trash2, MoveUp, MoveDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -40,7 +42,7 @@ const MediaGalleryField = ({ value, onChange, tenantId, label }: Props) => {
     onChange([...value, ...limited]);
   };
 
-  const handleFiles = async (files: FileList) => {
+  const handleFiles = async (files: FileList | File[]) => {
     setUploading(true);
     const added: MediaItem[] = [];
     try {
@@ -62,14 +64,28 @@ const MediaGalleryField = ({ value, onChange, tenantId, label }: Props) => {
     }
   };
 
-  const handleUrl = async () => {
-    const u = urlInput.trim();
-    if (!u) return;
-    if (!/^https?:\/\//.test(u)) { toast.error('Cole um link válido (https://...)'); return; }
-    addItems([{ type: isVideo(u) ? 'video' : 'image', url: u }]);
+  const addUrl = (u: string) => {
+    const link = (u || '').trim();
+    if (!link) return;
+    if (!/^https?:\/\//.test(link)) { toast.error('Cole um link válido (https://...)'); return; }
+    addItems([{ type: isVideo(link) ? 'video' : 'image', url: link }]);
     setUrlInput('');
     toast.success('Mídia adicionada!');
   };
+
+  const handleUrl = () => addUrl(urlInput);
+
+  // Arrastar e soltar: aceita várias fotos/vídeos de uma vez, em qualquer parte do campo
+  const { dragging, dropProps } = useImageDrop({
+    multiple: true,
+    enabled: value.length < MAX,
+    accept: isAcceptedFile,
+    onDropPayload: ({ files, url }) => {
+      if (files.length) { handleFiles(files); return; }
+      if (url) addUrl(url);
+    },
+    onReject: () => toast.error('Arraste imagens (JPG, PNG, WEBP...) ou vídeos (MP4, WEBM...).'),
+  });
 
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir;
@@ -84,7 +100,8 @@ const MediaGalleryField = ({ value, onChange, tenantId, label }: Props) => {
   const accept = value.filter((m) => m.type === 'image').length >= MAX ? undefined : 'image/*,video/*';
 
   return (
-    <div className="space-y-2">
+    <div className="relative space-y-2" data-testid="gallery-dropzone" {...dropProps}>
+      <DropOverlay show={dragging} text={value.length >= MAX ? 'Galeria cheia (máx. 10)' : 'Solte as fotos aqui para a galeria'} />
       {label && (
         <div className="flex items-center gap-1.5">
           <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" />
@@ -106,11 +123,18 @@ const MediaGalleryField = ({ value, onChange, tenantId, label }: Props) => {
       </div>
 
       {uploadMode === 'file' && (
-        <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading || value.length >= MAX}
-          className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-3 py-2 text-sm hover:bg-secondary/80 disabled:opacity-50">
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          {uploading ? 'Enviando...' : 'Adicionar fotos/vídeo à galeria'}
-        </button>
+        <div className="rounded-xl border border-dashed border-border bg-secondary/30 px-3 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading || value.length >= MAX}
+              className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-3 py-2 text-sm hover:bg-secondary/80 disabled:opacity-50">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {uploading ? 'Enviando...' : 'Adicionar fotos/vídeo à galeria'}
+            </button>
+            <span className="text-[11px] leading-tight text-muted-foreground">
+              ou <span className="font-medium text-foreground">arraste várias fotos</span> para cá
+            </span>
+          </div>
+        </div>
       )}
 
       {uploadMode === 'url' && (
@@ -161,3 +185,6 @@ const MediaGalleryField = ({ value, onChange, tenantId, label }: Props) => {
 };
 
 export default MediaGalleryField;
+  const isAcceptedFile = (file: File) =>
+    file.type.startsWith('image/') || file.type.startsWith('video/') ||
+    /\.(jpe?g|png|gif|webp|bmp|svg|avif|heic|heif|mp4|webm|mov|m4v)$/i.test(file.name || '');

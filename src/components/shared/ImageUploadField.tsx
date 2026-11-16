@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { uploadProductImage } from '@/hooks/useProductImageUpload';
+import { useImageDrop, isImageFile } from '@/hooks/useImageDrop';
+import DropOverlay from '@/components/shared/DropOverlay';
 import { removeSolidBackground } from '@/lib/remove-image-bg';
 import { supabase } from '@/integrations/supabase/client';
 import { Upload, Loader2, Link, ImageIcon, Search, X, Plus, Wand2, Eraser } from 'lucide-react';
@@ -101,7 +103,7 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, allow
   };
 
 
-  const handleRefFiles = async (files: FileList) => {
+  const handleRefFiles = async (files: FileList | File[]) => {
     setRefUploading(true);
     const added: string[] = [];
     try {
@@ -167,6 +169,49 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, allow
     }
   };
 
+  // Aplica uma imagem vinda por link digitado ou arrastado de outra aba
+  const applyUrl = async (raw: string) => {
+    const u = (raw || '').trim();
+    if (!u) return;
+    if (!/^https?:\/\//i.test(u)) { toast.error('Cole um link válido (https://...)'); return; }
+    setUploading(true);
+    try {
+      onChange(await applyTransparency(u));
+      setUrlInput('');
+      toast.success('Imagem aplicada!');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Arrastar e soltar: vale para o campo inteiro, esteja na aba de arquivo, link ou busca
+  const { dragging, dropProps } = useImageDrop({
+    onDropPayload: ({ files, url, total }) => {
+      if (files.length) {
+        if (total > 1) {
+          toast.info(
+            'Você soltou várias imagens: usando a primeira como foto principal. Para a galeria, arraste todas no campo “Galeria do produto”.',
+          );
+        }
+        setMode('upload');
+        handleFile(files[0]);
+        return;
+      }
+      if (url) applyUrl(url);
+    },
+    onReject: () => toast.error('Arraste um arquivo de imagem (JPG, PNG, WEBP, GIF, HEIC, SVG...)'),
+  });
+
+  // Área das referências aceita várias imagens de uma vez
+  const refsDrop = useImageDrop({
+    multiple: true,
+    accept: isImageFile,
+    onDropPayload: ({ files, url }) => {
+      if (files.length) { handleRefFiles(files); return; }
+      if (url) { persistRefs([...refs, url]); toast.success('Referência adicionada!'); }
+    },
+  });
+
   const handlePickGoogle = async (url: string) => {
     setUploading(true);
     try {
@@ -221,7 +266,8 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, allow
 
 
   return (
-    <div className="space-y-2">
+    <div className="relative space-y-2" data-testid="image-dropzone" {...dropProps}>
+      <DropOverlay show={dragging && !refsDrop.dragging} text="Solte a imagem para usar como foto" />
       {label && <label className="text-xs text-muted-foreground">{label}</label>}
       <div className="flex gap-1 mb-1 flex-wrap">
         <button type="button" onClick={() => setMode('upload')}
@@ -249,23 +295,33 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, allow
       )}
 
       {mode === 'upload' && (
-        <div className="flex gap-2">
-          <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
-            className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-3 py-2 text-sm hover:bg-secondary/80 disabled:opacity-50">
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            {uploading ? 'Enviando...' : 'Escolher imagem'}
-          </button>
-          <input ref={inputRef} type="file" accept="image/*" className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
+        <div className="rounded-xl border border-dashed border-border bg-secondary/30 px-3 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading}
+              className="flex items-center gap-2 rounded-lg bg-secondary text-foreground px-3 py-2 text-sm hover:bg-secondary/80 disabled:opacity-50">
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {uploading ? 'Enviando...' : 'Escolher imagem'}
+            </button>
+            <input ref={inputRef} type="file" accept="image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }} />
+            <span className="text-[11px] leading-tight text-muted-foreground">
+              ou <span className="font-medium text-foreground">arraste a imagem</span> para qualquer ponto deste campo
+            </span>
+          </div>
         </div>
       )}
 
       {mode === 'url' && (
-        <div className="flex gap-2">
-          <input value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="https://exemplo.com/imagem.jpg"
-            className="flex-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
-          <button type="button" onClick={async () => { const u = urlInput.trim(); if (!u) return; setUploading(true); try { onChange(await applyTransparency(u)); setUrlInput(''); } finally { setUploading(false); } }}
-            className="rounded-lg gradient-primary text-primary-foreground px-3 py-2 text-sm">OK</button>
+        <div className="space-y-1">
+          <div className="flex gap-2">
+            <input value={urlInput} onChange={e => setUrlInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyUrl(urlInput); } }}
+              placeholder="https://exemplo.com/imagem.jpg"
+              className="flex-1 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+            <button type="button" onClick={() => applyUrl(urlInput)}
+              className="rounded-lg gradient-primary text-primary-foreground px-3 py-2 text-sm">OK</button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Você também pode arrastar uma imagem de outra aba para cá.</p>
         </div>
       )}
 
@@ -286,7 +342,8 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, allow
           </div>
 
           {/* Referências de imagem (opcional, ilimitadas) */}
-          <div className="rounded-lg border border-border p-2 space-y-2">
+          <div className="relative rounded-lg border border-border p-2 space-y-2" data-testid="refs-dropzone" {...refsDrop.dropProps}>
+            <DropOverlay show={refsDrop.dragging} text="Solte as imagens de referência" />
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-foreground">Referências de imagem ({refs.length})</span>
               <label className="flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground">
@@ -332,6 +389,9 @@ const ImageUploadField = ({ value, onChange, tenantId, label, searchQuery, allow
             <p className="text-[10px] text-muted-foreground">
               Com referências, a IA compara os resultados e descarta o que não parece com elas
               {refOnly && refs.length > 0 ? ' — busca guiada apenas pelas referências.' : '.'}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Pode <span className="font-medium text-foreground">arrastar as imagens</span> direto para esta caixa, sem precisar abrir a galeria do aparelho.
             </p>
           </div>
 

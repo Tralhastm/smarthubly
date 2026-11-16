@@ -7,6 +7,9 @@ import { toast } from 'sonner';
 import { generateSlug } from '@/lib/store';
 import { Plus, Edit, Trash2, Check, X, Store, ExternalLink, Package, Sparkles, Eraser, Loader2, Bot } from 'lucide-react';
 import ImageUploadField from '@/components/shared/ImageUploadField';
+import { useImageDrop } from '@/hooks/useImageDrop';
+import { uploadProductImage } from '@/hooks/useProductImageUpload';
+import DropOverlay from '@/components/shared/DropOverlay';
 import { ADMIN_SUBTABS, normalizeAdminTabsConfig, subTabKey } from '@/lib/admin-subtabs';
 import { BotEditor, type BotRow as WABoTRow } from './SuperAdminWhatsAppBots';
 
@@ -353,6 +356,26 @@ const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCan
   const updateTenantMutation = useUpdateTenant();
   const storeUrl = `/loja/${tenant.slug}`;
 
+  // Produto rápido do super admin: arrastar a foto envia para o storage e preenche o link
+  const [sendingDrop, setSendingDrop] = useState(false);
+  const { dragging: dropDragging, dropProps: dropZoneProps } = useImageDrop({
+    onDropPayload: async ({ files, url }) => {
+      if (url) { setProductForm((p: any) => ({ ...p, image: url })); return; }
+      if (!files.length) return;
+      setSendingDrop(true);
+      try {
+        const link = await uploadProductImage(files[0], tenant.id);
+        setProductForm((p: any) => ({ ...p, image: link }));
+        toast.success('Foto enviada para o produto!');
+      } catch (e: any) {
+        toast.error('Falha ao enviar a imagem: ' + (e?.message || ''));
+      } finally {
+        setSendingDrop(false);
+      }
+    },
+    onReject: () => toast.error('Arraste um arquivo de imagem (JPG, PNG, WEBP...)'),
+  });
+
   if (isEditing) {
     return (
       <div className="rounded-lg border border-primary/30 bg-card p-4 space-y-3">
@@ -590,7 +613,12 @@ const TenantCard = ({ tenant, isEditing, isAddingProducts, onEdit, onSave, onCan
           </div>
           <div className="grid grid-cols-2 gap-2">
             <input value={productForm.category} onChange={(e: any) => setProductForm({ ...productForm, category: e.target.value })} placeholder="Categoria" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
-            <input value={productForm.image} onChange={(e: any) => setProductForm({ ...productForm, image: e.target.value })} placeholder="URL da imagem" className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+            <div className="relative" {...dropZoneProps}>
+              <DropOverlay show={dropDragging} text="Solte para enviar a foto" />
+              <input value={productForm.image} onChange={(e: any) => setProductForm({ ...productForm, image: e.target.value })}
+                placeholder={sendingDrop ? 'Enviando imagem...' : 'URL da imagem (ou arraste a foto)'}
+                className="w-full rounded-lg border border-dashed border-border bg-secondary px-3 py-2 text-sm text-foreground" />
+            </div>
           </div>
           <input value={productForm.description} onChange={(e: any) => setProductForm({ ...productForm, description: e.target.value })} placeholder="Descrição" className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground" />
           <button onClick={onAddProduct} className="flex items-center gap-1 rounded-lg gradient-primary text-primary-foreground px-3 py-1.5 text-sm"><Plus className="h-3 w-3" /> Adicionar</button>
