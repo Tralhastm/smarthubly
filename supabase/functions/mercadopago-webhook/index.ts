@@ -74,6 +74,7 @@ Deno.serve(async (request) => {
 
     let payment: any = null;
     let resolvedTenant: any = null;
+    let order: any = null;
     for (const tenant of tenants || []) {
       try {
         const token = tenant.mercadopago_environment === "production"
@@ -86,34 +87,32 @@ Deno.serve(async (request) => {
         const found = await api(endpoint, token);
         if (!found.result.ok) continue;
         const candidate = found.data;
+        const candidates: any[] = [];
         if (isMerchantOrder) {
           const providerPayments = Array.isArray(candidate?.payments) ? candidate.payments : [];
           for (const item of providerPayments) {
             if (!item?.id) continue;
             const paymentResult = await api(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(String(item.id))}`, token);
-            if (paymentResult.result.ok && paymentResult.data?.external_reference) {
-              payment = paymentResult.data;
-              break;
-            }
+            if (paymentResult.result.ok && paymentResult.data?.external_reference) candidates.push(paymentResult.data);
           }
-        } else if (candidate?.external_reference) {
-          payment = candidate;
+        } else if (candidate?.external_reference) candidates.push(candidate);
+        for (const candidatePayment of candidates) {
+          const orderLookup = await db.from("orders")
+            .select("id,tenant_id,status,total,payment_method,payment_provider,payment_external_id,metadata")
+            .eq("id", candidatePayment.external_reference)
+            .eq("tenant_id", tenant.id)
+            .maybeSingle();
+          if (orderLookup.error) return response({ received: false, code: "ORDER_LOOKUP_FAILED" }, 500);
+          if (!orderLookup.data) continue;
+          payment = candidatePayment;
+          resolvedTenant = tenant;
+          order = orderLookup.data;
+          break;
         }
-        if (!payment?.external_reference) continue;
-        resolvedTenant = tenant;
-        break;
+        if (payment && resolvedTenant && order) break;
       } catch (error) { console.error("[mercadopago-webhook] provider verification error", error); }
     }
-    if (!payment || !resolvedTenant) return response({ received: true, ignored: true, reason: "provider_resource_not_verified" });
-
-    const orderResult = await db.from("orders")
-      .select("id,tenant_id,status,total,payment_method,payment_provider,payment_external_id,metadata")
-      .eq("id", payment.external_reference)
-      .eq("tenant_id", resolvedTenant.id)
-      .maybeSingle();
-    if (orderResult.error) return response({ received: false, code: "ORDER_LOOKUP_FAILED" }, 500);
-    const order = orderResult.data;
-    if (!order) return response({ received: true, ignored: true, reason: "order_not_found_for_verified_tenant" });
+    if (!payment || !resolvedTenant || !order) return response({ received: true, ignored: true, reason: "provider_resource_or_tenant_not_verified" });
 
     const paymentStatus = String(payment.status || payment.order_status || "pending").toLowerCase();
     const paymentId = String(payment.id || resourceId);
