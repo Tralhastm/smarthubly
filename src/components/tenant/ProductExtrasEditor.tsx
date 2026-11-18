@@ -13,11 +13,13 @@ interface Props {
 // Editor inline de variantes e adicionais. Use embaixo do produto no admin.
 const parseMoney = (value: string | number) => { const text = String(value ?? '').trim().replace(/R\$\s?/gi, ''); if (!text) return 0; const normalized = text.includes(',') ? text.replace(/\./g, '').replace(',', '.') : text; const parsed = Number(normalized); return Number.isFinite(parsed) ? parsed : 0; };
 
-const normalizeVariantCost = (cost: number | null | undefined, sale: number | null | undefined) => {
-  const value = Number(cost || 0);
-  const resale = Number(sale || 0);
-  return value > 0 && value < 100 && resale > 100 ? value * 1000 : value;
+const normalizeVariantCost = (cost: number | null | undefined) => {
+  const value = Number(cost ?? 0);
+  return Number.isFinite(value) ? value : 0;
 };
+
+const formatVariantPrice = (value: number) =>
+  value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
   const [open, setOpen] = useState(false);
@@ -52,7 +54,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
       name: vName.trim(),
       supplier_id: vSupplierId || null,
       price_delta: parseFloat(vDelta) || 0,
-      cost_price: vCost.trim() ? normalizeVariantCost(parseMoney(vCost), parseMoney(vSale)) : null,
+      cost_price: vCost.trim() ? normalizeVariantCost(parseMoney(vCost)) : null,
       suggested_price: vSale.trim() ? parseMoney(vSale) : null,
       price_source: vSale.trim() ? 'manual' : null,
       sort_order: variants.length,
@@ -64,24 +66,33 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
   const startVariantEdit = (variant: typeof variants[number]) => {
     setEditingVariantId(variant.id);
     setEditingVariantPrice(String(Number(variant.suggested_price ?? (basePrice + variant.price_delta)).toFixed(2)));
-    setVCost(variant.cost_price == null ? '' : String(normalizeVariantCost(variant.cost_price, variant.suggested_price ?? (basePrice + variant.price_delta)).toFixed(2)));
+    setVCost(variant.cost_price == null ? '' : String(normalizeVariantCost(variant.cost_price).toFixed(2)));
     setVSupplierId(variant.supplier_id || '');
   };
 
   const saveVariantPrice = async (variant: typeof variants[number]) => {
     const price = parseMoney(editingVariantPrice);
     if (!Number.isFinite(price) || price < 0) return;
-    await saveVariant.mutateAsync({
-      ...variant,
-      price_delta: price - basePrice,
-      suggested_price: price,
-      cost_price: vCost.trim() ? normalizeVariantCost(parseMoney(vCost), price) : null,
-      supplier_id: vSupplierId || null,
-      needs_price_review: false,
-      price_source: 'manual',
-    });
-    setEditingVariantId(null);
-    toast.success('Preço da variação atualizado');
+    try {
+      const saved = await saveVariant.mutateAsync({
+        ...variant,
+        price_delta: price - basePrice,
+        suggested_price: price,
+        cost_price: vCost.trim() ? normalizeVariantCost(parseMoney(vCost)) : null,
+        supplier_id: vSupplierId || null,
+        needs_price_review: false,
+        price_source: 'manual',
+      });
+      setEditingVariantId(null);
+      const savedPrice = Number(saved?.suggested_price ?? 0);
+      if (savedPrice > 0 && Math.abs(savedPrice - price) >= 0.005) {
+        toast.warning(`A regra de margem ajustou a revenda para ${formatVariantPrice(savedPrice)} para evitar venda com prejuízo.`);
+      } else {
+        toast.success('Preço da variação atualizado');
+      }
+    } catch (error: any) {
+      toast.error(`Não foi possível salvar a variação: ${error?.message || 'tente novamente.'}`);
+    }
   };
 
   const addAddon = async () => {
@@ -129,7 +140,7 @@ const ProductExtrasEditor = ({ productId, tenantId, basePrice = 0 }: Props) => {
                     </>
                   ) : (
                     <>
-                      <span className="text-primary text-[11px]">{Number(v.suggested_price ?? 0) > 0 ? `Revenda: R$${Number(v.suggested_price).toFixed(2)}` : 'Revenda pendente'}{v.cost_price != null && <span className="text-muted-foreground"> · Custo: R${normalizeVariantCost(v.cost_price, v.suggested_price ?? 0).toFixed(2)}</span>}</span>
+                      <span className="text-primary text-[11px]">{Number(v.suggested_price ?? 0) > 0 ? `Revenda: R$${Number(v.suggested_price).toFixed(2)}` : 'Revenda pendente'}{v.cost_price != null && <span className="text-muted-foreground"> · Custo: R${normalizeVariantCost(v.cost_price).toFixed(2)}</span>}</span>
                       {!v.in_stock && <span className="text-[10px] text-amber-500 font-bold" title="Esta cor não apareceu na última lista do fornecedor">⚠ não está na lista</span>}
                       {v.in_stock && Number(v.suggested_price ?? 0) <= 0 && <span className="text-[10px] text-amber-500 font-bold" title="Defina o preço de revenda desta cor para remover esta pendência">⚠ definir revenda</span>}
                       <button onClick={() => startVariantEdit(v)} className="text-muted-foreground hover:text-primary p-0.5" title="Editar preço"><Pencil className="h-3 w-3" /></button>

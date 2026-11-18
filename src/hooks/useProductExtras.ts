@@ -71,35 +71,36 @@ export const useSaveVariant = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (v: Partial<ProductVariant> & { product_id: string; tenant_id: string; name: string }) => {
+      const payload = {
+        name: v.name,
+        supplier_id: v.supplier_id ?? null,
+        price_delta: v.price_delta ?? 0,
+        cost_price: v.cost_price ?? null,
+        suggested_price: v.suggested_price ?? null,
+        needs_price_review: v.needs_price_review ?? false,
+        price_source: v.price_source ?? null,
+        in_stock: v.in_stock ?? true,
+        sort_order: v.sort_order ?? 0,
+      };
+      let variantId = v.id;
       if (v.id) {
-        const { error } = await supabase.from('product_variants' as any).update({
-          name: v.name,
-          supplier_id: v.supplier_id ?? null,
-          price_delta: v.price_delta ?? 0,
-          cost_price: v.cost_price ?? null,
-          suggested_price: v.suggested_price ?? null,
-          needs_price_review: v.needs_price_review ?? false,
-          price_source: v.price_source ?? null,
-          in_stock: v.in_stock ?? true,
-          sort_order: v.sort_order ?? 0,
-        }).eq('id', v.id);
+        const { error } = await supabase.from('product_variants' as any).update(payload)
+          .eq('id', v.id).eq('tenant_id', v.tenant_id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('product_variants' as any).insert({
+        const { data, error } = await supabase.from('product_variants' as any).insert({
           product_id: v.product_id,
           tenant_id: v.tenant_id,
-          name: v.name,
-          supplier_id: v.supplier_id ?? null,
-          price_delta: v.price_delta ?? 0,
-          cost_price: v.cost_price ?? null,
-          suggested_price: v.suggested_price ?? null,
-          needs_price_review: v.needs_price_review ?? false,
-          price_source: v.price_source ?? null,
-          in_stock: v.in_stock ?? true,
-          sort_order: v.sort_order ?? 0,
-        });
+          ...payload,
+        }).select('id').single();
         if (error) throw error;
+        variantId = data.id;
       }
+      const { data: saved, error: savedError } = await supabase.from('product_variants' as any)
+        .select('suggested_price,cost_price,price_delta')
+        .eq('id', variantId).eq('tenant_id', v.tenant_id).single();
+      if (savedError) throw savedError;
+      return saved as Pick<ProductVariant, 'suggested_price' | 'cost_price' | 'price_delta'>;
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['product-variants', vars.product_id] });
