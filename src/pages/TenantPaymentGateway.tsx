@@ -126,7 +126,7 @@ export default function TenantPaymentGateway() {
               <p className="text-muted-foreground">No Pix, permanece o valor à vista indicado acima. No cartão, escolha as parcelas na página segura do Mercado Pago; o provedor mostrará o total e eventuais juros antes da confirmação.</p>
               <div className="mt-3 space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
                 <p className="flex items-start gap-2 font-medium text-amber-700 dark:text-amber-400"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> Se escolher Pix, pague pelo aplicativo do seu banco. A tela de instruções do Mercado Pago pode continuar aberta sem redirecionar.</p>
-                <p className="text-muted-foreground">Depois de pagar, volte manualmente para a aba da SmartHubly. A loja consulta a confirmação automaticamente; aguarde alguns segundos e não pague novamente enquanto o pedido estiver atualizando. Para conferir, use “Já paguei — ver status do pedido” no fim desta página.</p>
+                <p className="text-muted-foreground">Depois de pagar, volte manualmente para a aba da SmartHubly e acompanhe a confirmação do pagamento e o andamento do pedido pela aba Pedidos. A loja consulta a confirmação automaticamente; aguarde alguns segundos e não pague novamente enquanto atualiza. Para conferir agora, use “Já paguei — ver status do pedido” no fim desta página.</p>
               </div>
             </>
           ) : (
