@@ -216,10 +216,10 @@ const TenantOrders = () => {
           return (
             <div key={order.id} className="rounded-lg border border-border bg-card p-4 space-y-3 mb-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Package className="h-4 w-4 text-primary" />
-                  <span className="font-medium text-foreground text-sm">#{order.id.slice(0, 6)}</span>
-                  <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.color}`}>
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-primary" />
+                <span className="font-medium text-foreground text-sm">#{order.id.slice(0, 8).toUpperCase()}</span>
+                <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.color}`}>
                     {cfg.icon} {cfg.label}
                   </span>
                 </div>
