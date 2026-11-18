@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json" };
+const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Content-Type": "application/json" };
 const response = (body: Record<string, unknown>, status = 200) => new Response(JSON.stringify(body), { status, headers });
 const approved = new Set(["approved"]);
 const reversed = new Set(["refunded", "charged_back", "chargeback"]);
@@ -34,22 +34,36 @@ async function validMercadoPagoSignature(request: Request, body: any, secret: st
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers });
-  if (request.method !== "POST") return response({ received: false, code: "METHOD_NOT_ALLOWED" }, 405);
+  if (request.method !== "POST" && request.method !== "GET") return response({ received: false, code: "METHOD_NOT_ALLOWED" }, 405);
   try {
-    const body = await request.json();
+    const requestUrl = new URL(request.url);
+    let body: any = {};
+    if (request.method === "POST") {
+      try { body = await request.json(); } catch { body = {}; }
+    }
     const webhookSecret = Deno.env.get("MERCADOPAGO_WEBHOOK_SECRET");
     if (webhookSecret && !(await validMercadoPagoSignature(request, body, webhookSecret))) {
       return response({ received: false, code: "INVALID_SIGNATURE" }, 401);
     }
-    const isMerchantOrder = body?.topic === "merchant_order" || String(body?.resource || "").includes("merchant_orders");
-    const isPayment = body?.type === "payment" || String(body?.action || "").startsWith("payment.");
-    if (!isPayment && !isMerchantOrder) return response({ received: true, ignored: true });
+    const eventType = String(body?.type || body?.topic || requestUrl.searchParams.get("type") || requestUrl.searchParams.get("topic") || "").toLowerCase();
+    const eventAction = String(body?.action || "").toLowerCase();
+    const resource = String(body?.resource || requestUrl.searchParams.get("resource") || "");
+    const isMerchantOrder = eventType === "merchant_order" || resource.toLowerCase().includes("merchant_orders") || eventAction.startsWith("merchant_order.");
+    const isPayment = eventType === "payment" || eventAction.startsWith("payment.");
+    if (!isPayment && !isMerchantOrder) {
+      console.info("[mercadopago-webhook] ignored event", { method: request.method, event_type: eventType || "missing", action: eventAction || "missing" });
+      return response({ received: true, ignored: true, reason: "unsupported_event_type" });
+    }
     const url = Deno.env.get("SUPABASE_URL");
     const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!url || !key) return response({ received: false, code: "SERVER_MISCONFIGURED" }, 500);
     const db = createClient(url, key);
-    const resourceId = String(body?.data?.id || body?.id || "");
-    if (!resourceId) return response({ received: true, ignored: true, reason: "resource_id_missing" });
+    const resourcePathId = resource.match(/\/(?:payments|merchant_orders)\/([^/?]+)/i)?.[1] || "";
+    const resourceId = String(body?.data?.id || requestUrl.searchParams.get("data.id") || requestUrl.searchParams.get("data_id") || body?.id || requestUrl.searchParams.get("id") || resourcePathId || "");
+    if (!resourceId) {
+      console.warn("[mercadopago-webhook] ignored event without resource id", { method: request.method, event_type: eventType });
+      return response({ received: true, ignored: true, reason: "resource_id_missing" });
+    }
 
     // Resolve the event by fetching canonical data from Mercado Pago using each
     // tenant's credential. Never trust payment status, amount, or reference in POST body.

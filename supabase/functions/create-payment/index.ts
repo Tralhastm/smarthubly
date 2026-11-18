@@ -166,12 +166,23 @@ async function createMercadoPago(supabase: any, tenant: any, order: any, items: 
   if (tenant.mercadopago_enabled === false || !token) return reply({ provider: "mercadopago", code: "PROVIDER_NOT_CONFIGURED", error: "Mercado Pago está desativado ou sem token configurado." }, 400);
   const storeUrl = `${origin}/loja/${clean(tenant.slug)}`;
   const selectedMethod = order.metadata?.online_payment_method === 'pix' ? 'pix' : 'card';
+  const isAuthorizedA07TestCheckout =
+    order.metadata?.test_stock_override_payment === true &&
+    money(order.total) === 10 &&
+    items.length === 1 &&
+    Number(items[0]?.quantity) === 1 &&
+    money(items[0]?.product_price) === 10 &&
+    clean(items[0]?.product_name, 120).toLowerCase() === 'galaxy a07 256gb/8gb' &&
+    clean(items[0]?.variant_name, 80).toLowerCase() === 'verde';
+  const paymentMethods = isAuthorizedA07TestCheckout
+    ? { excluded_payment_types: [{ id: 'ticket' }], installments: 12 }
+    : selectedMethod === 'pix'
+      ? { excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }], installments: 1 }
+      : { excluded_payment_types: [{ id: 'bank_transfer' }, { id: 'ticket' }], installments: 12 };
   const body = {
     items: reconcileItems(items, order), external_reference: orderId,
     notification_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1/mercadopago-webhook`,
-    payment_methods: selectedMethod === 'pix'
-      ? { excluded_payment_types: [{ id: 'credit_card' }, { id: 'debit_card' }, { id: 'ticket' }], installments: 1 }
-      : { excluded_payment_types: [{ id: 'bank_transfer' }, { id: 'ticket' }], installments: 12 },
+    payment_methods: paymentMethods,
     statement_descriptor: clean(tenant.name || "Loja", 22),
     auto_return: "approved", back_urls: { success: `${storeUrl}/pedido/${orderId}`, failure: storeUrl, pending: `${storeUrl}/pedido/${orderId}` },
   };
