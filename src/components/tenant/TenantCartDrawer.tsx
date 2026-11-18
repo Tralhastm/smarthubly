@@ -743,6 +743,22 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       }
     }
 
+    const demoOverrideVariantIds = new Set<string>();
+    const cartVariantIds = Array.from(new Set(items.map(item => item.variantId).filter((id): id is string => Boolean(id))));
+    if ((tenant as any).demo_payment_enabled && cartVariantIds.length > 0) {
+      const { data: demoOverrides, error: demoOverrideError } = await (supabase as any)
+        .from('product_variants')
+        .select('id')
+        .eq('tenant_id', tenant.id)
+        .eq('demo_stock_override', true)
+        .in('id', cartVariantIds);
+      if (demoOverrideError) {
+        console.error('Falha ao validar variantes DEMO:', demoOverrideError);
+      } else {
+        (demoOverrides || []).forEach((variant: any) => demoOverrideVariantIds.add(variant.id));
+      }
+    }
+
     // Bloqueia delivery fora do raio máximo configurado pela loja ou pelos fornecedores
     if (deliveryType === 'delivery' && distance != null) {
       const tenantMaxRadius = Number((tenant as any).delivery_max_radius_km ?? 0);
@@ -756,6 +772,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       }
       // Valida raio de cada fornecedor envolvido
       for (const it of items) {
+        if (it.variantId && demoOverrideVariantIds.has(it.variantId)) continue;
         const supId = it.variantSupplierId || (it.product as any).supplier_id || resolvedSupplierIds[productMatchKey(it.product.name)];
         if (!supId) continue;
         const sup = supplierShippings[supId];
@@ -906,6 +923,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
 
       const fragments = new Map<string, typeof items>();
       items.forEach(item => {
+        // Itens com estoque de demonstração nunca devem ser atribuídos a um fornecedor.
+        if (item.variantId && demoOverrideVariantIds.has(item.variantId)) return;
         const bestByNameAndVariant = bestSuppliers.get(`${productMatchKey(item.product.name)}::${normalizeVariant(item.variantName)}`);
         const bestVariant = item.variantId ? bestVariantSuppliers.get(item.variantId) : null;
         const bestVariantByIdentity = bestVariantSuppliersByIdentity.get(`${productMatchKey(item.product.name)}::${normalizeVariant(item.variantName)}`);
@@ -988,6 +1007,8 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
           }
         } as any,
         items: items.map(i => ({
+          product_id: i.product.id,
+          variant_id: i.variantId || null,
           product_name: i.product.name,
           product_price: getCartLineUnitPrice(i),
           quantity: i.quantity,
