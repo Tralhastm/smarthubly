@@ -766,18 +766,18 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
       || !soleTestItem.variantId
       || !demoOverrideVariantIds.has(soleTestItem.variantId)
       || soleTestItem.quantity !== 1
-      || Math.round(getCartLineUnitPrice(soleTestItem) * 100) !== 300
-      || Math.round(onlineTotal * 100) !== 300
+      || Math.round(getCartLineUnitPrice(soleTestItem) * 100) !== 1000
+      || Math.round(onlineTotal * 100) !== 1000
     )) {
       toast({
         title: 'Teste limitado a uma unidade',
-        description: 'Para este item, o checkout real de teste aceita somente uma unidade por R$ 3,00, sem outros produtos no carrinho.',
+        description: 'Para este item, o checkout real de teste aceita somente uma unidade por R$ 10,00, sem outros produtos no carrinho.',
         variant: 'destructive',
       });
       return;
     }
     if (isRealTestStockPayment && !window.confirm(
-      'ATENÇÃO: este item está liberado somente para teste do checkout por R$ 3,00. Não há fornecedor nem entrega garantida. O Mercado Pago poderá cobrar R$ 3,00 se você concluir o pagamento. Continuar para gerar o checkout?'
+      'ATENÇÃO: este item está liberado somente para teste do checkout por R$ 10,00. Não há fornecedor nem entrega garantida. O Mercado Pago poderá cobrar R$ 10,00 se você concluir o pagamento. Continuar para gerar o checkout?'
     )) return;
 
     // Bloqueia delivery fora do raio máximo configurado pela loja ou pelos fornecedores
