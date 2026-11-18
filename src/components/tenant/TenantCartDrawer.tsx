@@ -758,6 +758,27 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
         (demoOverrides || []).forEach((variant: any) => demoOverrideVariantIds.add(variant.id));
       }
     }
+    const hasStockOverrideItem = items.some(item => item.variantId && demoOverrideVariantIds.has(item.variantId));
+    const isRealTestStockPayment = payOnline && !simulateApproved && hasStockOverrideItem;
+    const soleTestItem = items.length === 1 ? items[0] : null;
+    if (isRealTestStockPayment && (
+      !soleTestItem
+      || !soleTestItem.variantId
+      || !demoOverrideVariantIds.has(soleTestItem.variantId)
+      || soleTestItem.quantity !== 1
+      || Math.round(getCartLineUnitPrice(soleTestItem) * 100) !== 300
+      || Math.round(onlineTotal * 100) !== 300
+    )) {
+      toast({
+        title: 'Teste limitado a uma unidade',
+        description: 'Para este item, o checkout real de teste aceita somente uma unidade por R$ 3,00, sem outros produtos no carrinho.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (isRealTestStockPayment && !window.confirm(
+      'ATENÇÃO: este item está liberado somente para teste do checkout por R$ 3,00. Não há fornecedor nem entrega garantida. O Mercado Pago poderá cobrar R$ 3,00 se você concluir o pagamento. Continuar para gerar o checkout?'
+    )) return;
 
     // Bloqueia delivery fora do raio máximo configurado pela loja ou pelos fornecedores
     if (deliveryType === 'delivery' && distance != null) {
@@ -997,6 +1018,7 @@ const TenantCartDrawer = ({ tenant }: { tenant: Tenant }) => {
             payment_provider: isInfinitePay ? 'infinitepay' : isAsaasActive ? 'asaas' : ((tenant as any).payment_provider || 'mercadopago'),
             payment_flow: simulateApproved ? 'online_demo' : (infinitePayTap ? 'delivery_tap' : (payOnline ? 'online' : 'delivery')),
             demo_payment: simulateApproved,
+            test_stock_override_payment: isRealTestStockPayment,
             base_total_before_online_fee: finalTotal,
             online_fee_pass_through_enabled: payOnline && paymentFeePassThroughEnabled,
             online_fee_pass_through_percent: 0,

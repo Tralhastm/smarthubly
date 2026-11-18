@@ -119,6 +119,8 @@ export const useAddOrder = () => {
     mutationFn: async (params: {
       order: Omit<Order, 'id' | 'created_at' | 'updated_at'>;
       items: {
+        product_id?: string;
+        variant_id?: string | null;
         product_name: string;
         product_price: number;
         quantity: number;
