@@ -10,6 +10,7 @@ import { DriverRouteMap } from '@/components/shared/DriverRouteMap';
 import HelpButton from '@/components/tenant/HelpButton';
 import SofiaChat from '@/components/SofiaChat';
 import { useStoreManifest } from '@/hooks/useStoreManifest';
+import { useTenantBySlug } from '@/hooks/useTenants';
 import { parseAddress } from '@/lib/address-utils';
 import { getCourierCode } from '@/lib/delivery-code';
 
@@ -60,6 +61,8 @@ const DriverPanel = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const slug = window.location.pathname.split('/')[2] || '';
+  const { data: tenant } = useTenantBySlug(slug);
+  const storeAddress = tenant?.address?.trim() || '';
   useStoreManifest({
     slug,
     startPath: `/loja/${slug}/motoboy/${token}`,
@@ -381,7 +384,7 @@ const DriverPanel = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Package className="h-4 w-4 text-primary" />
-                  <span className="font-medium text-foreground text-sm">#{order.id.slice(0, 6)}</span>
+                  <span className="font-medium text-foreground text-sm">#{order.id.slice(0, 8).toUpperCase()}</span>
                   <span className={`flex items-center gap-1 text-xs ${order.status === 'out-for-delivery' ? 'text-blue-400' : 'text-amber-400'}`}>
                     <Bell className="h-3 w-3" />
                     {order.status === 'out-for-delivery' ? 'Em rota' : 'Aguardando saída'}
@@ -419,7 +422,15 @@ const DriverPanel = () => {
                   const { main, reference } = parseAddress(order.customer_address);
                   return (
                     <>
-                      <p className="flex items-start gap-1 mt-1"><MapPin className="h-3 w-3 mt-0.5 shrink-0" /> <span>{main}</span></p>
+                      {storeAddress && (
+                        <div className="mt-2 rounded-md border-2 border-blue-500/50 bg-blue-500/10 p-2 space-y-1">
+                          <p className="text-xs font-bold uppercase tracking-wide text-blue-400">📍 RETIRADA NA LOJA — ORIGEM</p>
+                          <p className="text-xs text-foreground">{storeAddress}</p>
+                          <button type="button" onClick={() => setNavAddress(storeAddress)} className="text-xs font-medium text-blue-300 underline">Abrir mapa até a loja</button>
+                        </div>
+                      )}
+                      <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">📍 Endereço do cliente — destino</p>
+                      <p className="flex items-start gap-1"><MapPin className="h-3 w-3 mt-0.5 shrink-0" /> <span>{main}</span></p>
                       {reference && (
                         <div className="mt-1 rounded-md border-2 border-amber-500/60 bg-amber-500/15 p-2">
                           <p className="text-xs font-bold text-amber-400">📍 PONTO DE REFERÊNCIA</p>
@@ -540,7 +551,7 @@ const DriverPanel = () => {
             {delivered.map(o => (
               <div key={o.id} className="rounded-lg border border-border bg-card p-3 text-sm mb-2 space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-foreground font-medium">#{o.id.slice(0, 6)} · {o.customer_name}</span>
+                  <span className="text-foreground font-medium">#{o.id.slice(0, 8).toUpperCase()} · {o.customer_name}</span>
                   <span className="text-green-400 text-xs">Entregue</span>
                 </div>
                 <p className="text-xs text-muted-foreground">{o.customer_phone}</p>

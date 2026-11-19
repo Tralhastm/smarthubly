@@ -302,16 +302,17 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
   };
 
   const assignDriverAndDispatch = async (orderId: string, driverId: string) => {
-    const { error } = await supabase.from('orders').update({ status: 'out-for-delivery', driver_id: driverId, kds_status: 'done' } as any).eq('id', orderId);
+    // Atribuir ao motoboy não inicia a rota; isso só acontece no painel do motoboy.
+    const { error } = await supabase.from('orders').update({ driver_id: driverId } as any).eq('id', orderId);
     if (error) {
       toast.error(`Erro ao despachar: ${error.message}`);
       return;
     }
     queryClient.setQueryData<OrderWithItems[]>(['orders', tenantId], (old) =>
-      old?.map(o => o.id === orderId ? { ...o, status: 'out-for-delivery', driver_id: driverId } : o)
+      old?.map(o => o.id === orderId ? { ...o, driver_id: driverId } : o)
     );
     setSelectingDriver(null);
-    toast.success('Pedido despachado com motoboy!');
+    toast.success('Pedido atribuído ao motoboy — aguardando início da rota.');
     queryClient.invalidateQueries({ queryKey: ['orders', tenantId] });
 
     // Send push notification to driver
