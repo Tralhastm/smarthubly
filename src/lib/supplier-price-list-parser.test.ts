@@ -89,4 +89,44 @@ Preto e branco`;
     const [entry] = parseSupplierPriceList('Galaxy A07 128GB\nCusto: R$ 750\nPreto');
     expect(entry).toMatchObject({ name: 'Galaxy A07 128GB', cost: 750, colors: ['Preto'] });
   });
+
+  it('usa a palavra de cor e ignora o emoji decorativo', () => {
+    const [entry] = parseSupplierPriceList('*17 pro max 256gb…R$8.100*\nSilver ⚪️');
+    expect(entry.colors).toEqual(['Prata']);
+    const [cobre] = parseSupplierPriceList('*17 256gb…R$5.700*\nCobre 🟠');
+    expect(cobre.colors).toEqual(['Cobre']);
+    expect(cobre.unknownColors).toEqual([]);
+  });
+
+  it('lê nomes de cor em inglês compostos sem perder a linha', () => {
+    const [entry] = parseSupplierPriceList('*18 pro max 256gb…R$9.300*\nSpace Black / Starlight');
+    expect(entry.colors).toEqual(['Preto', 'Starlight']);
+    const [deep] = parseSupplierPriceList('*18 pro max 256gb…R$9.300*\nDeep Blue 🩵');
+    expect(deep.colors).toEqual(['Azul']);
+  });
+
+  it('registra cor desconhecida para bloquear em vez de aplicar preço no produto todo', () => {
+    const [entry] = parseSupplierPriceList('*17 256gb…R$5.700*\nTangerina 🍊');
+    expect(entry.colors).toEqual([]);
+    expect(entry.unknownColors).toEqual(['Tangerina']);
+  });
+
+  it('não trata linha de aviso como cor', () => {
+    const entries = parseSupplierPriceList('*17 256gb…R$5.700*\nAzul 🩵\nGaleria de fotos 📸\nConfira as novidades');
+    expect(entries).toHaveLength(1);
+    expect(entries[0].colors).toEqual(['Azul']);
+    expect(entries[0].unknownColors).toEqual([]);
+  });
+
+  it('não herda a marca da seção em produto de outra marca', () => {
+    const [duo] = parseSupplierPriceList('🍏REPOSIÇÃO APPLE🍏\n\n*DUO 512gb…17.700*\nPreto e branco');
+    expect(duo.colors).toEqual(['Preto', 'Branco']);
+    expect(duo.aliases).not.toContain('Apple DUO 512gb');
+  });
+
+  it('limpa reticências do nome no formato com custo e venda rotulados', () => {
+    const [entry] = parseSupplierPriceList('*17 256gb…CUSTO: R$5.700 - VENDA: R$6.400*\nPreto 🖤');
+    expect(entry).toMatchObject({ name: '17 256gb', cost: 5700, resale: 6400, colors: ['Preto'] });
+    expect(entry.aliases).toContain('iphone 17 256gb');
+  });
 });

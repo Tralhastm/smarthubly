@@ -1,4 +1,6 @@
-import { extractSupplierImportColors, isSupplierImportColorLine } from './supplier-catalog-matching';
+import {
+  extractSupplierImportColors, isSupplierImportColorLine, looksLikeSupplierColorOnlyLine,
+} from './supplier-catalog-matching';
 
 export type SupplierPriceListEntry = {
   name: string;
@@ -6,6 +8,8 @@ export type SupplierPriceListEntry = {
   resale: number | null;
   colors: string[];
   unavailableColors: string[];
+  // Texto de linha que tem cara de cor, mas cujo nome não foi reconhecido.
+  unknownColors: string[];
   aliases: string[];
 };
 
@@ -14,7 +18,17 @@ type PendingEntry = SupplierPriceListEntry & { generic: number | null };
 const cleanImportedName = (value: string) => value
   .replace(/\*/g, '').replace(/[_~`]/g, '').replace(/[\p{Extended_Pictographic}\uFE0F]/gu, '')
   .replace(/^[^A-Za-zÀ-ÿ0-9]+/, '')
-  .replace(/\(\s*R?\$?.*$/i, '').replace(/\s*[-–—,:;]+\s*$/, '').replace(/[：:]+$/, '').trim();
+  .replace(/\(\s*R?\$?.*$/i, '').replace(/\s*[-–—,:;….•·\u00B7]+\s*$/, '').replace(/[：:]+$/, '').trim();
+
+// Nomes de marca que nunca devem herdar o prefixo da seção. Um cabeçalho
+// “REPOSIÇÃO APPLE” não transforma “DUO 256gb” em produto Apple.
+const FOREIGN_BRAND_NAME = /^(?:samsung|galaxy|duo|fold|flip|z\s*(?:fold|flip))\b/i;
+const brandAliases = (name: string, brand: string): string[] => {
+  if (!name || !brand) return [];
+  if (FOREIGN_BRAND_NAME.test(name)) return [];
+  if (new RegExp(`^${brand}\\b`, 'i').test(name)) return [];
+  return [`${brand} ${name}`];
+};
 
 const normalizeAppleShortName = (value: string) => {
   const normalized = value.trim().replace(/\b(azul|silver|prata|preto|branco|bordô|bordo)\b/giu, '').replace(/\s+/g, ' ').trim();
@@ -74,7 +88,7 @@ export function parseSupplierPriceList(text: string): SupplierPriceListEntry[] {
     if (pending.name && (pending.cost != null || pending.resale != null || pending.generic != null)) {
       const { generic, ...entry } = pending;
       const aliases = [entry.name];
-      if (brand && !new RegExp(`^${brand}\\b`, 'i').test(entry.name)) aliases.push(`${brand} ${entry.name}`);
+      aliases.push(...brandAliases(entry.name, brand));
       const savedEntry = {
         ...entry,
         cost: entry.cost ?? generic,
@@ -162,6 +176,20 @@ export function parseSupplierPriceList(text: string): SupplierPriceListEntry[] {
       continue;
     }
 
+    // Cor escrita com um nome fora do dicionário. Sem este registro a linha
+    // cairia como “produto sem cor” e o painel aplicaria o custo em todas as
+    // variações. Aqui o texto fica marcado para bloquear e avisar.
+    if (!current && !isSupplierImportColorLine(line)) {
+      const target = lastPricedEntry;
+      const hasEmoji = /[\p{Extended_Pictographic}\uFE0F]/u.test(line);
+      if (target && looksLikeSupplierColorOnlyLine(line) && (hasEmoji || target.colors.length > 0)) {
+        const label = cleanImportedName(line);
+        if (label) target.unknownColors = [...new Set([...target.unknownColors, label])];
+        nextUnavailable = false;
+        continue;
+      }
+    }
+
     const vendorPrice = line.match(/\(\s*R?\$\s*([^)]*)\)/i);
     if (vendorPrice) {
       const name = normalizeAppleShortName(cleanImportedName(line.slice(0, vendorPrice.index ?? 0)));
@@ -169,7 +197,7 @@ export function parseSupplierPriceList(text: string): SupplierPriceListEntry[] {
       const remainder = line.slice((vendorPrice.index ?? 0) + vendorPrice[0].length);
       const vendorResale = numberFromLine(remainder, ['venda sugerida', 'venda', 'revenda', 'resale', 'preço de venda', 'preco de venda']);
       const aliases = [name];
-      if (brand && name && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
+      aliases.push(...brandAliases(name, brand));
       if (!name && current && vendorCost != null) {
         current.cost = current.cost ?? vendorCost;
         current.colors = [...new Set([...current.colors, ...extractSupplierImportColors(remainder)])];
@@ -181,7 +209,7 @@ export function parseSupplierPriceList(text: string): SupplierPriceListEntry[] {
       if (name && vendorCost != null) {
         const colors = extractSupplierImportColors(remainder);
         if (!colors.length && nextSpecialVariant) colors.push(nextSpecialVariant);
-        const entry = { name, cost: vendorCost, resale: vendorResale, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], aliases };
+        const entry = { name, cost: vendorCost, resale: vendorResale, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], unknownColors: [], aliases };
         entries.push(entry);
         lastPricedEntry = entry;
         nextUnavailable = false;
@@ -203,9 +231,9 @@ export function parseSupplierPriceList(text: string): SupplierPriceListEntry[] {
       const name = normalizeAppleShortName(cleanImportedName(line.split(/\b(?:custo|venda sugerida|venda|revenda|resale|preço de custo|preco de custo|preço de venda|preco de venda)\b/i)[0].replace(/[-–—:]+\s*$/, '')));
       if (name && !/^(?:custo|venda|revenda|resale|preço|preco)$/i.test(name)) {
         const aliases = [name];
-        if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
+        aliases.push(...brandAliases(name, brand));
         const colors = extractSupplierImportColors(line);
-        const entry = { name, cost, resale, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], aliases };
+        const entry = { name, cost, resale, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], unknownColors: [], aliases };
         entries.push(entry);
         lastPricedEntry = entry;
         nextUnavailable = false;
@@ -225,11 +253,11 @@ export function parseSupplierPriceList(text: string): SupplierPriceListEntry[] {
       const price = parsePrice(oneLine[2]);
       if (name && price > 0) {
         const aliases = [name];
-        if (brand && !new RegExp(`^${brand}\\b`, 'i').test(name)) aliases.push(`${brand} ${name}`);
+        aliases.push(...brandAliases(name, brand));
         const colors = extractSupplierImportColors(line);
         // Listas “Produto - R$ preço” tratam o valor como custo; revenda só
         // muda quando vier explicitamente identificada como tal.
-        const entry = { name, cost: price, resale: null, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], aliases };
+        const entry = { name, cost: price, resale: null, colors, unavailableColors: nextUnavailable ? (colors.length ? colors : ['__all__']) : [], unknownColors: [], aliases };
         entries.push(entry);
         lastPricedEntry = entry;
         nextUnavailable = false;
@@ -240,7 +268,7 @@ export function parseSupplierPriceList(text: string): SupplierPriceListEntry[] {
     if (/^(?:custo|venda|revenda|resale|preço|preco)\b/i.test(line)) continue;
     flush();
     lastPricedEntry = null;
-    current = { name: cleanImportedName(line), cost: null, resale: null, colors: extractSupplierImportColors(line), unavailableColors: nextUnavailable ? ['__all__'] : [], generic: null };
+    current = { name: cleanImportedName(line), cost: null, resale: null, colors: extractSupplierImportColors(line), unavailableColors: nextUnavailable ? ['__all__'] : [], unknownColors: [], generic: null };
     nextUnavailable = false;
   }
   flush();

@@ -706,12 +706,25 @@ const SupplierPanel = () => {
     .replace(/^apple\s+/g, '')
     .replace(/\s*[-–—]\s*/g, '-')
     .replace(/\s*\+\s*/g, '+')
+    // O fornecedor separa modelo e preço com reticências (“17 256gb…R$5.700”).
+    // Quando o preço vem rotulado, essa pontuação decorativa pode sobrar no
+    // nome e impedir o casamento com o cadastro.
+    .replace(/[…•·]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   const variantMatchKey = (value: string) => {
     const aliases: Record<string, string> = { black: 'preto', white: 'branco', blue: 'azul', green: 'verde', purple: 'roxo', violet: 'roxo', pink: 'rosa', gold: 'dourado', silver: 'prata', gray: 'cinza', grey: 'cinza', orange: 'laranja', yellow: 'amarelo', brown: 'marrom', titanium: 'titanio' };
     return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR')
       .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).map(token => aliases[token] || token).filter(Boolean).sort().join(' ');
+  };
+  // Capacidade declarada no nome (“256gb”, “256/8gb”). Impede que o custo de
+  // um 17E 128GB seja aplicado num cadastro que é 256GB (ou vice-versa).
+  const capacityOf = (value: string) => {
+    const normalized = String(value || '').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ');
+    const combo = normalized.match(/(\d{2,4})\s*\/\s*\d{1,2}\s*gb/);
+    if (combo) return Number(combo[1]);
+    const single = normalized.match(/(\d{2,4})\s*gb/);
+    return single ? Number(single[1]) : null;
   };
   const importPrices = async () => {
     if (!supplier || importingPrices) return;
@@ -720,7 +733,7 @@ const SupplierPanel = () => {
       toast.error('Nenhuma linha válida encontrada. Use: produto - CUSTO: R$ 990,00 - cores');
       return;
     }
-    if (priceUpdateMode !== 'color' && entries.some(entry => entry.colors.length > 0 || entry.unavailableColors.length > 0)) {
+    if (priceUpdateMode !== 'color' && entries.some(entry => entry.colors.length > 0 || entry.unavailableColors.length > 0 || entry.unknownColors.length > 0)) {
       toast.error('Esta lista contém cores. Selecione “Seletor por cor — custo e disponibilidade”; nenhum dado foi alterado.');
       return;
     }
@@ -730,6 +743,7 @@ const SupplierPanel = () => {
     const invalid: string[] = [];
     const warnings: string[] = [];
     const conflicts: string[] = [];
+    const duplicateCosts = new Set<string>();
     const conflictIds = new Set<string>();
     const markConflict = async (product: Product, reason: string) => {
       if (conflictIds.has(product.id)) return;
@@ -775,6 +789,24 @@ const SupplierPanel = () => {
           continue;
         }
         const product = candidates[0];
+        const listCapacity = capacityOf(entry.name);
+        const catalogCapacity = capacityOf(product.name);
+        if (listCapacity && catalogCapacity && listCapacity !== catalogCapacity) {
+          await markConflict(product, `Capacidade divergente: lista ${listCapacity}GB x cadastro ${catalogCapacity}GB (“${entry.name}”); nenhum custo foi aplicado`);
+          continue;
+        }
+        if (listCapacity && !catalogCapacity) {
+          warnings.push(`${product.name}: a lista informa ${listCapacity}GB, mas o cadastro não traz capacidade; confira se é o mesmo aparelho`);
+        }
+        if (entry.unknownColors.length) {
+          if (entry.colors.length === 0) {
+            // Nenhuma cor foi reconhecida: bloquear o item é mais seguro do que
+            // aplicar o custo em todas as variações do produto.
+            await markConflict(product, `Cor não reconhecida: ${entry.unknownColors.join(', ')}; nenhum custo foi aplicado`);
+            continue;
+          }
+          warnings.push(`${product.name}: cor não reconhecida (${entry.unknownColors.join(', ')}); as cores identificadas foram atualizadas`);
+        }
         let group = grouped.get(product.id);
         if (!group) {
           group = { product_id: product.id, product_name: product.name, cost: entry.colors.length ? null : Number(entry.cost), productAvailable: !entry.unavailableColors.includes('__all__'), variants: new Map() };
@@ -797,6 +829,9 @@ const SupplierPanel = () => {
           if (!key) { await markConflict(product, `Cor inválida: ${color}`); continue; }
           const available = !entry.unavailableColors.some(item => item === '__all__' || variantMatchKey(item) === key);
           const previous = group.variants.get(key);
+          if (previous && previous.cost !== Number(entry.cost)) {
+            duplicateCosts.add(`${product.name} ${color} (R$ ${previous.cost} x R$ ${entry.cost})`);
+          }
           if (previous && previous.available !== available) {
             // A mesma cor pode aparecer em linhas distintas com condições/preços
             // diferentes. Uma oferta disponível vence uma indisponível; em caso
@@ -811,6 +846,8 @@ const SupplierPanel = () => {
           }
         }
       }
+
+      duplicateCosts.forEach(item => warnings.push(`Custos diferentes para a mesma cor na mesma lista: ${item} — o menor foi aplicado`));
 
       const payload = [...grouped.values()].filter(group => !conflictIds.has(group.product_id)).map(group => ({
         product_id: group.product_id,
@@ -854,7 +891,11 @@ const SupplierPanel = () => {
       const exhausted = payload.length - available;
       await fetchProducts();
       setUnlockIds([]);
-      setImportResult({ updated, notFound, invalid, warnings: data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : [], available, exhausted, conflicts, manualBlocked });
+      const resultWarnings = [...new Set([
+        ...warnings,
+        ...(data?.created_variants ? [`${data.created_variants} variação(ões) nova(s) ficaram pendentes de preço de revenda manual.`] : []),
+      ])];
+      setImportResult({ updated, notFound, invalid, warnings: resultWarnings, available, exhausted, conflicts, manualBlocked });
       toast.success(`Importação concluída: ${updated.length} atualizados, ${available} disponíveis e ${exhausted} esgotados`);
     } finally {
       setImportingPrices(false);
