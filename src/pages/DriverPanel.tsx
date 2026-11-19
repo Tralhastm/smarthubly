@@ -10,7 +10,6 @@ import { DriverRouteMap } from '@/components/shared/DriverRouteMap';
 import HelpButton from '@/components/tenant/HelpButton';
 import SofiaChat from '@/components/SofiaChat';
 import { useStoreManifest } from '@/hooks/useStoreManifest';
-import { useTenantBySlug } from '@/hooks/useTenants';
 import { parseAddress } from '@/lib/address-utils';
 import { getCourierCode } from '@/lib/delivery-code';
 
@@ -61,8 +60,6 @@ const DriverPanel = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const slug = window.location.pathname.split('/')[2] || '';
-  const { data: tenant } = useTenantBySlug(slug);
-  const storeAddress = tenant?.address?.trim() || '';
   useStoreManifest({
     slug,
     startPath: `/loja/${slug}/motoboy/${token}`,
@@ -409,6 +406,9 @@ const DriverPanel = () => {
                             </p>
                           ))}
                         </div>
+                        {pickup.supplier_address !== 'Endereço do fornecedor não cadastrado' && (
+                          <button type="button" onClick={() => setNavAddress(pickup.supplier_address)} className="text-xs font-medium text-orange-300 underline">Abrir mapa até a retirada</button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -422,13 +422,6 @@ const DriverPanel = () => {
                   const { main, reference } = parseAddress(order.customer_address);
                   return (
                     <>
-                      {storeAddress && (
-                        <div className="mt-2 rounded-md border-2 border-blue-500/50 bg-blue-500/10 p-2 space-y-1">
-                          <p className="text-xs font-bold uppercase tracking-wide text-blue-400">📍 RETIRADA NA LOJA — ORIGEM</p>
-                          <p className="text-xs text-foreground">{storeAddress}</p>
-                          <button type="button" onClick={() => setNavAddress(storeAddress)} className="text-xs font-medium text-blue-300 underline">Abrir mapa até a loja</button>
-                        </div>
-                      )}
                       <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">📍 Endereço do cliente — destino</p>
                       <p className="flex items-start gap-1"><MapPin className="h-3 w-3 mt-0.5 shrink-0" /> <span>{main}</span></p>
                       {reference && (
