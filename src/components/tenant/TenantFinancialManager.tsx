@@ -65,9 +65,10 @@ const entrySubcategory = (e: { category?: string | null; subcategory?: string | 
 const TenantFinancialManager = ({ tenantId, isDropshipping }: { tenantId: string; isDropshipping?: boolean }) => {
   const embedded = isEmbedMode();
   const [tab, setTab] = useState<'overview' | 'cashflow' | 'entries' | 'card' | 'debts' | 'fiado' | 'recurring' | 'suppliers' | 'projection' | 'fee_config' | 'clara' | 'calculator'>('overview');
+  const [includeTestOrdersInMovement, setIncludeTestOrdersInMovement] = useState(false);
   const { data: entries = [], isLoading: le } = useFinancialEntries(tenantId);
   const { data: debts = [], isLoading: ld } = useDebts(tenantId);
-  const { data: orders = [] } = useOrders(tenantId);
+  const { data: orders = [] } = useOrders(tenantId, includeTestOrdersInMovement);
   const { data: products = [] } = useProducts(tenantId);
   const { data: suppliers = [] } = useSuppliers(tenantId);
   const { data: integration } = useIntegrationSettings(tenantId);
@@ -464,8 +465,17 @@ const TenantFinancialManager = ({ tenantId, isDropshipping }: { tenantId: string
             </button>
           ))}
         </div>
-        <div className="flex justify-end">
-          <FinancialReportPDFButton tenantId={tenantId} />
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={includeTestOrdersInMovement}
+              onChange={event => setIncludeTestOrdersInMovement(event.target.checked)}
+              className="accent-primary"
+            />
+            Incluir pedidos de teste nas métricas e no PDF
+          </label>
+          <FinancialReportPDFButton tenantId={tenantId} includeTestOrders={includeTestOrdersInMovement} />
         </div>
       </div>
 
@@ -1466,7 +1476,7 @@ const TenantFinancialManager = ({ tenantId, isDropshipping }: { tenantId: string
 
       {/* ====== CLARA — Painel empresarial nativo (visualização + IA) ====== */}
       {tab === 'clara' && (
-        <TenantBusinessPanel tenantId={tenantId} tenantName={''} />
+        <TenantBusinessPanel tenantId={tenantId} tenantName={''} includeTestOrders={includeTestOrdersInMovement} />
       )}
     </div>
   );

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { DollarSign, Download, Loader2, TrendingUp } from 'lucide-react';
+import { isTestOrder } from '@/lib/order-status';
 
 type Row = { tenant_id: string; tenant_name: string; tenant_slug: string; orders: number; gross: number; platform_fee: number };
 
@@ -20,14 +21,14 @@ const useFinancialReport = (month: string) => {
 
       const [tenantsRes, ordersRes] = await Promise.all([
         supabase.from('tenants').select('id, name, slug'),
-        supabase.from('orders').select('tenant_id, total, platform_fee, status, created_at')
+        supabase.from('orders').select('tenant_id, total, platform_fee, status, created_at, metadata')
           .gte('created_at', start).lt('created_at', end),
       ]);
       if (tenantsRes.error) throw tenantsRes.error;
       if (ordersRes.error) throw ordersRes.error;
 
       const tenants = tenantsRes.data || [];
-      const orders = (ordersRes.data || []).filter(o => o.status !== 'cancelled');
+      const orders = (ordersRes.data || []).filter(o => o.status !== 'cancelled' && !isTestOrder(o));
 
       return tenants.map(t => {
         const tOrders = orders.filter(o => o.tenant_id === t.id);

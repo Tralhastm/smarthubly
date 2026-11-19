@@ -3,9 +3,21 @@ export const CANCELLED_ORDER_STATUS = 'cancelled';
 
 type OrderStatusLike = {
   status: string;
+  metadata?: unknown;
 };
 
-export const isVisibleOrder = (order: OrderStatusLike) => {
+export const isTestOrder = (order: { metadata?: unknown }) => {
+  const metadata = order.metadata && typeof order.metadata === 'object'
+    ? order.metadata as Record<string, unknown>
+    : {};
+  const isTrue = (value: unknown) => value === true || value === 'true';
+  // Só o marcador administrativo explícito classifica um pedido como teste.
+  // Flags de checkout/estoque não anulam uma cobrança real do Mercado Pago.
+  return isTrue(metadata.is_test_order);
+};
+
+export const isVisibleOrder = (order: OrderStatusLike, includeTestOrders = false) => {
+  if (isTestOrder(order)) return includeTestOrders;
   return order.status !== PENDING_PAYMENT_STATUS && order.status !== CANCELLED_ORDER_STATUS;
 };
 

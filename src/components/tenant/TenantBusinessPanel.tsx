@@ -53,10 +53,12 @@ const TenantBusinessPanel = ({
   tenantId,
   tenantName,
   onOpenClara,
+  includeTestOrders = false,
 }: {
   tenantId: string;
   tenantName?: string;
   onOpenClara?: () => void;
+  includeTestOrders?: boolean;
 }) => {
   const [tab, setTab] = useState<SubTab>('resumo');
   const [finTab, setFinTab] = useState<FinSubTab>('completo');
@@ -71,7 +73,7 @@ const TenantBusinessPanel = ({
     return () => window.removeEventListener('clara:open-request', handler);
   }, []);
 
-  const { data: orders = [] } = useOrders(tenantId);
+  const { data: orders = [] } = useOrders(tenantId, includeTestOrders);
   const { data: entries = [] } = useFinancialEntries(tenantId);
   const { data: products = [] } = useProducts(tenantId);
   const { data: credits = [] } = useCreditAccounts(tenantId);

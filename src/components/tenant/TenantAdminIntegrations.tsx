@@ -106,7 +106,7 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
         if (settings.sync_orders) {
           const { data: orders } = await supabase
             .from("orders")
-            .select("id,total,delivery_fee,discount_amount,payment_method,customer_name,customer_phone,delivery_type,status,created_at,updated_at,coupon_code")
+            .select("id,total,delivery_fee,discount_amount,payment_method,customer_name,customer_phone,delivery_type,status,created_at,updated_at,coupon_code,metadata")
             .eq("tenant_id", tenantId)
             .eq("status", "delivered")
             .gte("updated_at", lastTick)
@@ -118,7 +118,7 @@ const TenantAdminIntegrations = ({ tenantId }: Props) => {
           // Cancelamentos recentes — pra FinanceFlow estornar receita fantasma
           const { data: cancelled } = await supabase
             .from("orders")
-            .select("id,total,payment_method,updated_at,cancel_reason,customer_name,customer_phone")
+            .select("id,total,payment_method,updated_at,cancel_reason,customer_name,customer_phone,metadata")
             .eq("tenant_id", tenantId)
             .eq("status", "cancelled")
             .gte("updated_at", lastTick)

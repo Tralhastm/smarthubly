@@ -68,5 +68,8 @@ verify_jwt = false
 [functions.store-agent]
 verify_jwt = false
 
+[functions.finance-unified]
+verify_jwt = true
+
 [functions.cindy-actions]
 verify_jwt = false

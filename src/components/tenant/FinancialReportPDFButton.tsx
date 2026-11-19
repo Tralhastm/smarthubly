@@ -4,11 +4,13 @@ import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from '@/integrations/supabase/client';
+import { isTestOrder } from '@/lib/order-status';
 
 interface Props {
   tenantId: string;
   /** Nome amigável da loja (cabeçalho do PDF). */
   tenantName?: string;
+  includeTestOrders?: boolean;
 }
 
 type EntryRow = {
@@ -24,6 +26,7 @@ type EntryRow = {
 
 type OrderRow = {
   id: string;
+  metadata?: unknown;
   created_at: string;
   status: string;
   payment_method: string | null;
@@ -42,7 +45,7 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('pt-BR');
  * Inclui: resumo (receita, despesa, lucro), pedidos entregues, lançamentos
  * manuais (entradas e saídas), taxa da plataforma. Tudo do mês corrente.
  */
-const FinancialReportPDFButton = ({ tenantId, tenantName }: Props) => {
+const FinancialReportPDFButton = ({ tenantId, tenantName, includeTestOrders = false }: Props) => {
   const [loading, setLoading] = useState(false);
 
   const generate = async () => {
@@ -71,7 +74,7 @@ const FinancialReportPDFButton = ({ tenantId, tenantName }: Props) => {
           .order('date', { ascending: true }),
         supabase
           .from('orders')
-          .select('id, created_at, status, payment_method, total, platform_fee, delivery_fee')
+          .select('id, metadata, created_at, status, payment_method, total, platform_fee, delivery_fee')
           .eq('tenant_id', tenantId)
           .gte('created_at', start)
           .lt('created_at', end)
@@ -90,7 +93,7 @@ const FinancialReportPDFButton = ({ tenantId, tenantName }: Props) => {
         !!(e.description && e.description.includes('#ORDER_REVENUE:'));
       const manualEntries = entries.filter(e => !isOrderRevenueEntry(e));
 
-      const deliveredOrders = orders.filter(o => o.status === 'delivered');
+      const deliveredOrders = orders.filter(o => o.status === 'delivered' && (includeTestOrders || !isTestOrder(o)));
       const isFiado = (pm: string | null) => (pm || '').toLowerCase() === 'fiado';
       const realizedOrders = deliveredOrders.filter(o => !isFiado(o.payment_method));
 

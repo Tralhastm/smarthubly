@@ -7,6 +7,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const isTestOrder = (order: any) => {
+  const metadata = order?.metadata && typeof order.metadata === "object" ? order.metadata : {};
+  return metadata.is_test_order === true || metadata.is_test_order === "true";
+};
+
 export async function stats(req: Request, body?: unknown): Promise<Response> {
   try {
     const ct = req.headers.get("content-type") || "";
@@ -61,11 +66,12 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
       // Faturamento últimos 30 dias
       const since = new Date(Date.now() - 30 * 86400_000).toISOString();
       const { data: orders30 } = await admin
-        .from("orders").select("total, platform_fee, created_at, status")
+        .from("orders").select("total, platform_fee, created_at, status, metadata")
         .eq("tenant_id", t.id).gte("created_at", since);
-      const orders30Count = orders30?.length ?? 0;
-      const revenue30 = (orders30 ?? []).reduce((s, o) => s + Number(o.total ?? 0), 0);
-      const platformFees30 = (orders30 ?? []).reduce((s, o) => s + Number(o.platform_fee ?? 0), 0);
+      const validOrders30 = (orders30 ?? []).filter(o => !isTestOrder(o));
+      const orders30Count = validOrders30.length;
+      const revenue30 = validOrders30.reduce((s, o) => s + Number(o.total ?? 0), 0);
+      const platformFees30 = validOrders30.reduce((s, o) => s + Number(o.platform_fee ?? 0), 0);
 
       // Custo estimado: ~R$ 0,002 por row + R$ 0,01 por pedido (edge functions / realtime)
       const estimatedCostBRL = totalRows * 0.002 + orders30Count * 0.01 + 0.50; // 0.50 base

@@ -1,5 +1,19 @@
 # Entregas
 
+## Pedidos de teste da Mobiletec — ocultar e excluir da movimentação por padrão
+- [x] Marcar os 20 pedidos existentes como pedidos de teste sem apagar pedidos, itens, eventos, conversas ou transações financeiras.
+- [x] Ocultar pedidos de teste dos painéis e relatórios de movimentação por padrão.
+- [x] Permitir que o administrador mostre pedidos de teste somente por ação explícita.
+- [x] Não criar receita financeira nem enviar eventos de venda/cancelamento ao FinanceFlow para pedidos marcados como teste.
+- [x] Preservar catálogo, fornecedores e todos os registros financeiros do Mercado Pago.
+
+## Importação TXT do fornecedor — lista Apple com cores em linhas separadas
+- [x] Reconhecer o cabeçalho decorado `🍏REPOSIÇÃO APPLE🍏` sem tratá-lo como produto.
+- [x] Interpretar linha de modelo/preço seguida por linhas com uma ou várias cores, texto e emojis.
+- [x] Preservar os formatos anteriores de preço entre parênteses e lista em bloco.
+- [x] Cobrir preços, aliases, cores compostas e o mapa 🩵→Azul com testes unitários.
+- [x] Exigir “Seletor por cor — custo e disponibilidade” para listas com cores e não limpar overrides antes de um lote válido.
+
 ## Carrossel IA — curadoria de imagens por produto
 - [x] Permitir selecionar produtos no catálogo ou detectar automaticamente produtos com galeria incompleta.
 - [x] Buscar imagens adicionais específicas do modelo na web, evitando duplicatas das imagens já cadastradas.

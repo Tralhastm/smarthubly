@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
+import { isTestOrder } from "@/lib/order-status";
 
 export type IntegrationSettings = Tables<"integration_settings">;
 
@@ -70,6 +71,23 @@ export const useRotateIntegrationKey = () => {
 
 export async function triggerSync(tenantId: string, event: string, data: any) {
   try {
+    if (event === "order_delivered" || event === "order_cancelled") {
+      const stripOrderMetadata = (order: any) => {
+        if (!order || typeof order !== "object") return order;
+        const cleanOrder = { ...order };
+        delete cleanOrder.metadata;
+        return cleanOrder;
+      };
+      if (Array.isArray(data?.orders)) {
+        const orders = data.orders.filter((order: any) => !isTestOrder(order)).map(stripOrderMetadata);
+        if (orders.length === 0) return;
+        data = { ...data, orders };
+      } else if (isTestOrder(data)) {
+        return;
+      } else {
+        data = stripOrderMetadata(data);
+      }
+    }
     await unifiedInvoke("finance-unified", "sync-financeflow", { tenantId, event, data });
   } catch (e) {
     console.warn("sync-to-financeflow falhou (não-bloqueante):", e);

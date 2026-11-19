@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables } from '@/integrations/supabase/types';
-import { isVisibleOrder } from '@/lib/order-status';
+import { isTestOrder, isVisibleOrder } from '@/lib/order-status';
 import { triggerSync } from '@/hooks/useIntegration';
 import { recordOrderRevenue } from '@/lib/order-finance';
 
@@ -10,11 +10,11 @@ export type Order = Tables<'orders'>;
 export type OrderItem = Tables<'order_items'>;
 export type OrderWithItems = Order & { order_items: OrderItem[] };
 
-export const useOrders = (tenantId?: string) => {
+export const useOrders = (tenantId?: string, includeTestOrders = false) => {
   const qc = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['orders', tenantId],
+    queryKey: ['orders', tenantId, includeTestOrders],
     queryFn: async () => {
       if (!tenantId) return [];
       const { data, error } = await supabase
@@ -23,7 +23,7 @@ export const useOrders = (tenantId?: string) => {
         .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return ((data as OrderWithItems[]) || []).filter(isVisibleOrder).map(o => ({
+      return ((data as OrderWithItems[]) || []).filter(o => isVisibleOrder(o, includeTestOrders)).map(o => ({
         ...o,
         delivery_fee: Number(o.delivery_fee) || 0,
         platform_fee: Number(o.platform_fee) || 0,
@@ -90,16 +90,16 @@ export const useOrders = (tenantId?: string) => {
   return query;
 };
 
-export const useAllOrders = ({ includeItems = false, refetchInterval = 30000 }: { includeItems?: boolean; refetchInterval?: number } = {}) => {
+export const useAllOrders = ({ includeItems = false, includeTestOrders = false, refetchInterval = 30000 }: { includeItems?: boolean; includeTestOrders?: boolean; refetchInterval?: number } = {}) => {
   return useQuery({
-    queryKey: ['all-orders', includeItems],
+    queryKey: ['all-orders', includeItems, includeTestOrders],
     queryFn: async () => {
       const query = includeItems
         ? supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false })
         : supabase.from('orders').select('*').order('created_at', { ascending: false });
       const { data, error } = await query;
       if (error) throw error;
-      return ((data as unknown as OrderWithItems[]) || []).filter(isVisibleOrder).map(o => ({
+      return ((data as unknown as OrderWithItems[]) || []).filter(o => isVisibleOrder(o, includeTestOrders)).map(o => ({
         ...o,
         delivery_fee: Number(o.delivery_fee) || 0,
         platform_fee: Number(o.platform_fee) || 0,
@@ -144,7 +144,7 @@ export const useAddOrder = () => {
       qc.invalidateQueries({ queryKey: ['all-orders'] });
       // Se o pedido já nasce entregue (venda balcão modo "instant"), registra
       // receita e dispara sync — esses fluxos não passam por updateStatus.
-      if (data?.status === 'delivered') {
+      if (data?.status === 'delivered' && !isTestOrder(data)) {
         try {
           await recordOrderRevenue(data as any);
           triggerSync(data.tenant_id, 'order_delivered', data);
@@ -198,7 +198,7 @@ export const useUpdateOrderStatus = () => {
       // e dispara sincronização pra FinanceFlow.
       if (status === 'delivered') {
         const { data: order } = await supabase.from('orders').select('*, order_items(*)').eq('id', id).maybeSingle();
-        if (order?.tenant_id) {
+        if (order?.tenant_id && !isTestOrder(order)) {
           try { await recordOrderRevenue(order as any); } catch (e) { console.warn('record revenue failed', e); }
           triggerSync(order.tenant_id, 'order_delivered', order);
         }
@@ -209,7 +209,7 @@ export const useUpdateOrderStatus = () => {
       // mesmo com o pedido cancelado).
       if (status === 'cancelled') {
         const { data: order } = await supabase.from('orders').select('*, order_items(*)').eq('id', id).maybeSingle();
-        if (order?.tenant_id) {
+        if (order?.tenant_id && !isTestOrder(order)) {
           triggerSync(order.tenant_id, 'order_cancelled', order);
         }
         const items = (order as any)?.order_items as any[] | undefined;

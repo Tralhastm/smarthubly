@@ -10,6 +10,11 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
+const isTestOrder = (order: any) => {
+  const metadata = order?.metadata && typeof order.metadata === "object" ? order.metadata : {};
+  return metadata.is_test_order === true || metadata.is_test_order === "true";
+};
+
 export async function pull_financeflow(req: Request, body?: unknown): Promise<Response> {
   try {
     const ct = req.headers.get("content-type") || "";
@@ -67,11 +72,11 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
     let sales: any[] = [];
     if (settings.sync_orders) {
       const q = supabase.from("orders")
-        .select("id,total,delivery_fee,discount_amount,payment_method,customer_name,customer_phone,delivery_type,status,created_at,updated_at,coupon_code")
+        .select("id,total,delivery_fee,discount_amount,payment_method,customer_name,customer_phone,delivery_type,status,created_at,updated_at,coupon_code,metadata")
         .eq("tenant_id", settings.tenant_id)
         .eq("status", "delivered");
       const { data } = since ? await q.gte("updated_at", since) : await q;
-      sales = data || [];
+      sales = (data || []).filter(order => !isTestOrder(order)).map(({ metadata: _metadata, ...order }) => order);
 
       // Itens das vendas (uma chamada só)
       if (sales.length > 0) {
@@ -92,11 +97,22 @@ if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders }
       : [];
 
     // Financeiro completo (entradas manuais, previsões, formas de pagto)
+    const { data: testOrderRows } = await supabase.from("orders")
+      .select("id")
+      .eq("tenant_id", settings.tenant_id)
+      .filter("metadata->>is_test_order", "eq", "true")
+      .limit(1000);
+    const testOrderIds = new Set((testOrderRows || []).map(order => String(order.id).toLowerCase()));
+
     let financialEntriesQ = supabase.from("financial_entries")
       .select("id,type,category,description,amount,date,payment_method,is_forecast,forecast_date,received_at,created_at")
       .eq("tenant_id", settings.tenant_id);
     if (since) financialEntriesQ = financialEntriesQ.gte("created_at", since);
-    const { data: financial_entries } = await financialEntriesQ;
+    const { data: rawFinancialEntries } = await financialEntriesQ;
+    const financial_entries = (rawFinancialEntries || []).filter(entry => {
+      const orderId = String(entry.description || '').match(/#ORDER_REVENUE:([0-9a-f-]+)/i)?.[1]?.toLowerCase();
+      return !orderId || !testOrderIds.has(orderId);
+    });
 
     // Investimentos
     let investmentsQ = supabase.from("investments")

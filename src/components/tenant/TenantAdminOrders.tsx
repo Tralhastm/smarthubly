@@ -18,6 +18,7 @@ import { registerTenantAdminPush, getNotificationPermission, isPushSupported } f
 import OrderEmitNFCeButton from './OrderEmitNFCeButton';
 import { unifiedInvoke } from "@/lib/unifiedInvoke";
 import { getCourierCode } from '@/lib/delivery-code';
+import { isTestOrder } from '@/lib/order-status';
 
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   pending_review: { label: 'Aguardando Aprovação', icon: <Clock className="h-4 w-4" />, color: 'bg-purple-500/20 text-purple-400' },
@@ -53,7 +54,8 @@ const getNext = (current: string, deliveryType: string): string | null => {
 };
 
 const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: string; tenantName?: string }) => {
-  const { data: orders = [], isLoading } = useOrders(tenantId);
+  const [showTestOrders, setShowTestOrders] = useState(false);
+  const { data: orders = [], isLoading } = useOrders(tenantId, showTestOrders);
   const { data: drivers = [] } = useDrivers(tenantId);
   const updateStatus = useUpdateOrderStatus();
   const deleteOrder = useDeleteOrder();
@@ -156,6 +158,10 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` },
         (payload) => {
           const newOrder = payload.new as any;
+          if (isTestOrder(newOrder)) {
+            queryClient.invalidateQueries({ queryKey: ['orders', tenantId] });
+            return;
+          }
           if (printerCfg?.soundOn) {
             if (printerCfg.soundLoud) { startLoudAlert(); setAlertActive(true); }
             else playShortBeep();
@@ -274,7 +280,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
     }
 
     setAdvancingOrder(id);
-    queryClient.setQueryData<OrderWithItems[]>(['orders', tenantId], (old) =>
+    queryClient.setQueryData<OrderWithItems[]>(['orders', tenantId, showTestOrders], (old) =>
       old?.map(o => o.id === id ? { ...o, status: next } : o)
     );
     updateStatus.mutate({ id, status: next }, {
@@ -308,7 +314,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
       toast.error(`Erro ao despachar: ${error.message}`);
       return;
     }
-    queryClient.setQueryData<OrderWithItems[]>(['orders', tenantId], (old) =>
+    queryClient.setQueryData<OrderWithItems[]>(['orders', tenantId, showTestOrders], (old) =>
       old?.map(o => o.id === orderId ? { ...o, driver_id: driverId } : o)
     );
     setSelectingDriver(null);
@@ -360,7 +366,7 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
 
   const handleDelete = (id: string) => {
     if (!confirm('Apagar este pedido?')) return;
-    queryClient.setQueryData<OrderWithItems[]>(['orders', tenantId], (old) =>
+    queryClient.setQueryData<OrderWithItems[]>(['orders', tenantId, showTestOrders], (old) =>
       old?.filter(o => o.id !== id)
     );
     deleteOrder.mutate(id);
@@ -397,6 +403,18 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
         </button>
       )}
 
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs text-muted-foreground">Pedidos de teste ficam fora das métricas e ocultos por padrão.</p>
+        <button
+          type="button"
+          aria-pressed={showTestOrders}
+          onClick={() => setShowTestOrders(value => !value)}
+          className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${showTestOrders ? 'border-amber-500/50 bg-amber-500/10 text-amber-600' : 'border-border bg-secondary text-muted-foreground hover:text-foreground'}`}
+        >
+          {showTestOrders ? 'Ocultar pedidos de teste' : 'Mostrar pedidos de teste'}
+        </button>
+      </div>
+
       <div className="flex items-center gap-2 overflow-x-auto pb-2">
         {['all', 'pending_review', 'received', 'preparing', 'out-for-delivery', 'ready-for-pickup', 'delivered', 'cancelled'].map(s => (
           <button key={s} onClick={() => setFilter(s)}
@@ -427,6 +445,11 @@ const TenantAdminOrders = ({ tenantId, tenantName = 'nossa loja' }: { tenantId: 
               <div className="flex items-center gap-2">
                 <Package className="h-4 w-4 text-primary" />
                 <span className="font-medium text-foreground text-sm">#{order.id.slice(0, 8).toUpperCase()}</span>
+                {isTestOrder(order) && (
+                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+                    TESTE · FORA DAS MÉTRICAS
+                  </span>
+                )}
                 <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.color}`}>
                   {cfg.icon} {cfg.label}
                 </span>

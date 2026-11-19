@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { isTestOrder } from '@/lib/order-status';
 
 /**
  * Garante UMA E APENAS UMA financial_entry por pedido entregue.
@@ -12,8 +13,9 @@ export const recordOrderRevenue = async (order: {
   total: number | string;
   payment_method?: string | null;
   status?: string | null;
+  metadata?: unknown;
 }): Promise<void> => {
-  if (!order?.id || !order?.tenant_id) return;
+  if (!order?.id || !order?.tenant_id || isTestOrder(order)) return;
 
   const marker = `#ORDER_REVENUE:${order.id}`;
   // Procura entry existente pra esse pedido (idempotência)

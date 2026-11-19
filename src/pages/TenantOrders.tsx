@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenantBySlug } from '@/hooks/useTenants';
 import { Search, Package, Clock, ChefHat, Truck, CheckCircle, ArrowLeft, Store, CreditCard, XCircle, Hash, Phone, MapPin } from 'lucide-react';
-import { CANCELLED_ORDER_STATUS } from '@/lib/order-status';
+import { CANCELLED_ORDER_STATUS, isTestOrder } from '@/lib/order-status';
 import CustomerOrderChat from '@/components/tenant/CustomerOrderChat';
 import { deriveBrandTokens, applyBrandTokens, clearBrandTokens } from '@/lib/color-utils';
 import { formatBRL } from '@/lib/format-money';
@@ -32,6 +32,7 @@ const statusConfig: Record<string, { label: string; icon: React.ReactNode; color
 
 type OrderWithItems = {
   id: string; status: string; total: number; delivery_type: string; payment_method: string; created_at: string; customer_name: string;
+  metadata?: unknown;
   customer_phone?: string | null;
   tenant_id?: string;
   delivery_status_note: string | null;
@@ -77,7 +78,7 @@ const TenantOrders = () => {
       const byOrder: Record<string, any[]> = {};
       (items || []).forEach((it: any) => { (byOrder[it.order_id] ||= []).push(it); });
       const merged = list.map((o) => ({ ...o, order_items: byOrder[o.id] || [] }));
-      setOrders((merged as OrderWithItems[]).filter(o => o.status !== CANCELLED_ORDER_STATUS));
+      setOrders((merged as OrderWithItems[]).filter(o => o.status !== CANCELLED_ORDER_STATUS && !isTestOrder(o)));
     } else {
       // Busca por prefixo do código → view pública (sem customer_phone)
       const clean = value.toLowerCase().replace(/[^0-9a-f]/g, '');
@@ -97,7 +98,7 @@ const TenantOrders = () => {
       const byOrder: Record<string, any[]> = {};
       (items || []).forEach((it: any) => { (byOrder[it.order_id] ||= []).push(it); });
       const merged = list.map((o) => ({ ...o, order_items: byOrder[o.id] || [] }));
-      setOrders((merged as OrderWithItems[]).filter(o => o.status !== CANCELLED_ORDER_STATUS));
+      setOrders((merged as OrderWithItems[]).filter(o => o.status !== CANCELLED_ORDER_STATUS && !isTestOrder(o)));
     }
   }, [tenant]);
 
